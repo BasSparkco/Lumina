@@ -1,0 +1,110 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+
+@Injectable()
+export class PlaylistsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
+
+  async create(orgId: string, name: string) {
+    return this.prisma.playlist.create({ data: { name, organizationId: orgId } });
+  }
+
+  async list(orgId: string) {
+    return this.prisma.playlist.findMany({
+      where: { organizationId: orgId },
+      orderBy: { updatedAt: 'desc' },
+      include: { _count: { select: { items: true } } },
+    });
+  }
+
+  async findOne(orgId: string, id: string) {
+    const playlist = await this.prisma.playlist.findFirst({
+      where: { id, organizationId: orgId },
+      include: {
+        items: {
+          orderBy: { position: 'asc' },
+          include: { asset: true },
+        },
+      },
+    });
+    if (!playlist) throw new NotFoundException('Playlist not found');
+
+    const itemsWithUrls = await Promise.all(
+      playlist.items.map(async (item) => ({
+        ...item,
+        asset: {
+          ...item.asset,
+          sizeBytes: Number(item.asset.sizeBytes),
+          url: await this.storage.signedUrl(item.asset.storageKey),
+          thumbnailUrl: item.asset.thumbnailKey
+            ? await this.storage.signedUrl(item.asset.thumbnailKey)
+            : null,
+        },
+      })),
+    );
+
+    return { ...playlist, items: itemsWithUrls };
+  }
+
+  async rename(orgId: string, id: string, name: string) {
+    await this.assertOwns(orgId, id);
+    return this.prisma.playlist.update({ where: { id }, data: { name } });
+  }
+
+  async remove(orgId: string, id: string) {
+    await this.assertOwns(orgId, id);
+    await this.prisma.playlist.delete({ where: { id } });
+  }
+
+  async addItem(orgId: string, playlistId: string, assetId: string, durationSecs: number) {
+    await this.assertOwns(orgId, playlistId);
+    const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
+    if (!asset) throw new NotFoundException('Asset not found');
+
+    const last = await this.prisma.playlistItem.findFirst({
+      where: { playlistId },
+      orderBy: { position: 'desc' },
+    });
+    const position = (last?.position ?? -1) + 1;
+
+    return this.prisma.playlistItem.create({ data: { playlistId, assetId, position, durationSecs } });
+  }
+
+  async updateItem(orgId: string, playlistId: string, itemId: string, durationSecs: number) {
+    await this.assertOwns(orgId, playlistId);
+    return this.prisma.playlistItem.update({ where: { id: itemId }, data: { durationSecs } });
+  }
+
+  async removeItem(orgId: string, playlistId: string, itemId: string) {
+    await this.assertOwns(orgId, playlistId);
+    await this.prisma.playlistItem.delete({ where: { id: itemId } });
+    // Re-sequence positions
+    const remaining = await this.prisma.playlistItem.findMany({
+      where: { playlistId },
+      orderBy: { position: 'asc' },
+    });
+    await Promise.all(
+      remaining.map((item, i) =>
+        this.prisma.playlistItem.update({ where: { id: item.id }, data: { position: i } }),
+      ),
+    );
+  }
+
+  async reorderItems(orgId: string, playlistId: string, orderedIds: string[]) {
+    await this.assertOwns(orgId, playlistId);
+    await Promise.all(
+      orderedIds.map((id, i) =>
+        this.prisma.playlistItem.update({ where: { id }, data: { position: i } }),
+      ),
+    );
+  }
+
+  private async assertOwns(orgId: string, id: string) {
+    const p = await this.prisma.playlist.findFirst({ where: { id, organizationId: orgId } });
+    if (!p) throw new NotFoundException('Playlist not found');
+  }
+}

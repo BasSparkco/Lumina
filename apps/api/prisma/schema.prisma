@@ -1,0 +1,226 @@
+// Lumina Signage — Prisma Schema
+// Rule: every tenant-scoped table has organizationId; never expose raw media paths.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Tenant ──────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  screens   Screen[]
+  assets    Asset[]
+  playlists Playlist[]
+  layouts   Layout[]
+  schedules Schedule[]
+}
+
+// ─── Users & Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  role           UserRole @default(EDITOR)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+// ─── Screens ─────────────────────────────────────────────────────────────────
+
+model Screen {
+  id                  String       @id @default(cuid())
+  name                String
+  pairingCode         String?      @unique
+  paired              Boolean      @default(false)
+  playerToken         String?      @unique
+  lastSeenAt          DateTime?
+  status              ScreenStatus @default(OFFLINE)
+  timezone            String       @default("UTC")
+  latitude            Float?
+  longitude           Float?
+  prayerMethod        String       @default("UmmAlQura")
+  athanEnabled        Boolean      @default(false)
+  emergencyActive     Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  playlistId String?
+  playlist   Playlist? @relation("DefaultPlaylist", fields: [playlistId], references: [id])
+
+  emergencyPlaylistId String?
+  emergencyPlaylist   Playlist? @relation("EmergencyPlaylist", fields: [emergencyPlaylistId], references: [id])
+
+  layoutId String?
+  layout   Layout? @relation(fields: [layoutId], references: [id])
+
+  schedules Schedule[]
+}
+
+enum ScreenStatus {
+  ONLINE
+  OFFLINE
+}
+
+// ─── Assets ──────────────────────────────────────────────────────────────────
+
+model Asset {
+  id           String    @id @default(cuid())
+  name         String
+  type         AssetType
+  mimeType     String
+  storageKey   String    // S3/R2 object key — never the full URL
+  thumbnailKey String?
+  sizeBytes    BigInt
+  durationSecs Float?    // for video/audio
+  width        Int?
+  height       Int?
+  status       AssetStatus @default(PROCESSING)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  playlistItems PlaylistItem[]
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  AUDIO
+}
+
+enum AssetStatus {
+  PROCESSING
+  READY
+  ERROR
+}
+
+// ─── Playlists ────────────────────────────────────────────────────────────────
+
+model Playlist {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  items             PlaylistItem[]
+  screens           Screen[]     @relation("DefaultPlaylist")
+  emergencyScreens  Screen[]     @relation("EmergencyPlaylist")
+  zones             Zone[]
+  schedules         Schedule[]
+}
+
+model PlaylistItem {
+  id           String   @id @default(cuid())
+  position     Int
+  durationSecs Int      @default(10)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  assetId String
+  asset   Asset @relation(fields: [assetId], references: [id])
+
+  @@unique([playlistId, position])
+}
+
+// ─── Layouts & Zones ─────────────────────────────────────────────────────────
+
+model Layout {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  zones   Zone[]
+  screens Screen[]
+}
+
+enum ZoneType {
+  MEDIA
+  PRAYER
+  WEATHER
+  CURRENCY
+  TICKER
+}
+
+model Zone {
+  id           String   @id @default(cuid())
+  name         String
+  x            Float    // percentage 0–100 from left
+  y            Float    // percentage 0–100 from top
+  width        Float    // percentage 0–100
+  height       Float    // percentage 0–100
+  zIndex       Int      @default(0)
+  zoneType     ZoneType @default(MEDIA)
+  widgetConfig Json?    // type-specific config (prayer method override, RSS URL, etc.)
+
+  layoutId String
+  layout   Layout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+
+  playlistId String?
+  playlist   Playlist? @relation(fields: [playlistId], references: [id])
+}
+
+// ─── Scheduling ───────────────────────────────────────────────────────────────
+
+model Schedule {
+  id       String @id @default(cuid())
+  name     String
+  priority Int    @default(0)
+
+  // Temporal constraints (all optional — omit means "always")
+  startTime  String?   // "HH:MM" 24h local time; null = midnight
+  endTime    String?   // "HH:MM" 24h local time; null = midnight
+  daysOfWeek Int[]     // empty = every day; 0=Sun 1=Mon … 6=Sat
+  startDate  DateTime?
+  endDate    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id])
+
+  screenId String
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}

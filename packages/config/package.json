@@ -1,0 +1,9 @@
+{
+  "name": "@lumina/config",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./eslint": "./eslint.cjs",
+    "./tailwind": "./tailwind.ts"
+  }
+}
