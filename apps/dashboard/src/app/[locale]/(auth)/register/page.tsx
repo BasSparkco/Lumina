@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -78,7 +79,7 @@ export default function RegisterPage() {
         </div>
         <p className="mt-4 text-sm text-center text-gray-500 dark:text-gray-400">
           {t('haveAccount')}{' '}
-          <a href={`/${locale}/login`} className="text-indigo-600 hover:underline">{t('signIn')}</a>
+          <Link href={`/${locale}/login`} className="text-indigo-600 hover:underline">{t('signIn')}</Link>
         </p>
       </div>
     </div>

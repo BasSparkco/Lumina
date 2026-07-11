@@ -1,5 +1,6 @@
 'use client';
 import { Suspense, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -54,10 +55,10 @@ function AcceptInviteForm() {
           <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-3" />
           <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">{t('welcomeTitle')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{t('welcomeBody')}</p>
-          <a href={`/${locale}/login`}
+          <Link href={`/${locale}/login`}
             className="block w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
             {t('goToSignIn')}
-          </a>
+          </Link>
         </div>
       </Card>
     );

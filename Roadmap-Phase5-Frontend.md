@@ -72,5 +72,5 @@ manageable from the dashboard without needing direct API calls.
 ---
 
 ## Notes for coordinating with the backend track
-
+fix reloading full page on menu switch
 - If a mocked shape turns out to differ from what shiz

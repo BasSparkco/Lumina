@@ -935,6 +935,47 @@ previous entry.
 > is browser-verified. Same two open items as before: backend integration (swapping the ~6 mocked
 > features over) and the branch-merge situation, both still waiting on the user's timing.
 
+### 2026-07-12 — Fixed full-page reload on every navigation (root cause: raw `<a>` tags)
+
+**Finished steps:**
+- User reported the whole site "fully reloads" (a brief full-screen loading flash covering the
+  sidebar too) every time they switched pages, and asked for the sidebar to stay mounted with only
+  the content area showing a loading state — while picking whichever of "old content stays visible
+  during the swap" vs. "a small in-place loading indicator" was less performance-heavy.
+- **Root cause**: the sidebar's nav links (`(app)/layout.tsx`) were plain `<a href={...}>` tags
+  instead of `next/link`'s `<Link>`. A plain anchor to an internal route forces the browser to do a
+  full document navigation — reparsing and re-executing all JS, remounting the entire React tree
+  including the sidebar itself — instead of Next.js's client-side route transition. Since the
+  sidebar is the single most-clicked navigation surface in the app, this was firing on nearly every
+  interaction.
+- Fixed by swapping to `<Link>` in `(app)/layout.tsx`'s nav rendering, plus three other internal
+  links that had the same bug (found via a repo-wide grep for `<a href=`): the playlist detail
+  page's "Back to playlists" link, and the login/register/accept-invite pages' cross-links to each
+  other. Left the genuinely-external `<a>` tags alone (asset/lightbox download links point at
+  S3/MinIO URLs, not Next.js routes — `Link` doesn't apply there and would be wrong).
+- **No extra transition/skeleton machinery was added** — this alone gives the effect the user asked
+  for "for free": with `Link`, the sidebar (part of the shared layout) never unmounts between page
+  navigations, and since none of these routes have a `loading.tsx`, Next.js swaps to the new page's
+  shell as soon as it's ready (nearly instant, since every page is a `'use client'` component whose
+  data fetching happens after mount via react-query) — which then shows *that page's own* existing
+  inline "Loading X…" text within the content area only, exactly the "brief loading screen on only
+  part of the page" option the user described as one of the two choices. This is also the
+  least-performance-heavy option of the two on offer: no held-onto stale page state, no added
+  caching/transition layer, just correct use of Next.js's built-in client routing plus its automatic
+  link prefetching (which should make repeat visits to an already-prefetched route feel closer to
+  instant).
+- Verified with a real Playwright + Brave browser using a definitive test for "did a full reload
+  happen": set a marker on `window` after login, then clicked through Assets → Playlists → Layouts →
+  Schedules → Reports → Settings → Screens via the sidebar, asserting the marker survived every
+  single transition (a full reload would wipe `window` state; client-side routing doesn't). All
+  seven survived, the sidebar never disappeared, and the URL updated correctly each time. Also
+  confirmed the playlist detail page's "Back to playlists" link behaves the same way.
+- `tsc --noEmit` clean.
+
+**Start here next session:**
+> Full-page-reload bug is fixed and browser-verified across the sidebar and the other internal links
+> that had it. Same two open items as before: backend integration and the branch-merge situation.
+
 ---
 
 ## Key URLs (local dev)

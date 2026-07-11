@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -75,7 +76,7 @@ export default function LoginPage() {
         </div>
         <p className="mt-4 text-sm text-center text-gray-500 dark:text-gray-400">
           {t('noAccount')}{' '}
-          <a href={`/${locale}/register`} className="text-indigo-600 hover:underline">{t('createOne')}</a>
+          <Link href={`/${locale}/register`} className="text-indigo-600 hover:underline">{t('createOne')}</Link>
         </p>
       </div>
     </div>
