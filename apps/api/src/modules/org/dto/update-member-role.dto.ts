@@ -1,5 +1,5 @@
 import { IsEnum } from 'class-validator';
-import { UserRole } from '@prisma/client';
+import { UserRole } from '@lumina/db';
 
 export class UpdateMemberRoleDto {
   @IsEnum(UserRole)

@@ -44,7 +44,7 @@ function AcceptInviteForm() {
   }
 
   if (inviteQuery.isError) {
-    return <Card><p className="text-sm text-red-600">{(inviteQuery.error as Error).message}</p></Card>;
+    return <Card><p className="text-sm text-red-600">{inviteQuery.error.message}</p></Card>;
   }
 
   if (acceptMut.isSuccess) {
@@ -100,7 +100,7 @@ function AcceptInviteForm() {
             </button>
           </div>
         </div>
-        {acceptMut.isError && <p className="text-sm text-red-600">{(acceptMut.error as Error).message}</p>}
+        {acceptMut.isError && <p className="text-sm text-red-600">{acceptMut.error.message}</p>}
         <button type="button" onClick={handleSubmit} disabled={acceptMut.isPending || !name.trim() || password.length < 8}
           className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
           {acceptMut.isPending ? t('joining') : t('acceptInvite')}

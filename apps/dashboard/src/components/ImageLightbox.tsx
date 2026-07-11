@@ -129,14 +129,14 @@ export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, o
           )}
         </div>
 
-        {(typeLabel || sizeLabel) && (
+        {(typeLabel ?? sizeLabel) && (
           <div className="p-5 space-y-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
             {typeLabel && <p><span className="text-gray-400 dark:text-gray-500">{tc('type')}: </span>{typeLabel}</p>}
             {sizeLabel && <p><span className="text-gray-400 dark:text-gray-500">{tc('size')}: </span>{sizeLabel}</p>}
           </div>
         )}
 
-        {(downloadUrl || canEdit) && (
+        {(downloadUrl ?? canEdit) && (
         <div className="p-5 mt-auto space-y-2">
           {downloadUrl && (
             <a href={downloadUrl}

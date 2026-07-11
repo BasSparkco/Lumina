@@ -58,7 +58,10 @@
       "signingIn": "Signing in…",
       "noAccount": "No account?",
       "createOne": "Create one",
-      "loginFailed": "Login failed"
+      "loginFailed": "Login failed",
+      "demoAccounts": "Demo accounts (click to fill)",
+      "demoOwner": "Owner",
+      "demoViewer": "Viewer"
     },
     "register": {
       "title": "Create your account",

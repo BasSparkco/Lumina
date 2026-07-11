@@ -58,7 +58,10 @@
       "signingIn": "جارٍ تسجيل الدخول…",
       "noAccount": "ليس لديك حساب؟",
       "createOne": "أنشئ حسابًا",
-      "loginFailed": "فشل تسجيل الدخول"
+      "loginFailed": "فشل تسجيل الدخول",
+      "demoAccounts": "حسابات تجريبية (اضغط للتعبئة)",
+      "demoOwner": "مالك",
+      "demoViewer": "مشاهد"
     },
     "register": {
       "title": "أنشئ حسابك",

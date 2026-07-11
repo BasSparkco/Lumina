@@ -1,5 +1,5 @@
 import { IsEmail, IsEnum } from 'class-validator';
-import { UserRole } from '@prisma/client';
+import { UserRole } from '@lumina/db';
 
 export class InviteMemberDto {
   @IsEmail()

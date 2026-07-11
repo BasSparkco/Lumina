@@ -53,15 +53,12 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
   useEffect(() => {
     const el = videoRef.current;
     if (!el || item?.asset.type !== 'VIDEO') return;
-    const playAttempt = el.play();
-    if (playAttempt) {
-      playAttempt.catch(() => {
-        if (!el.muted) {
-          el.muted = true;
-          void el.play();
-        }
-      });
-    }
+    el.play().catch(() => {
+      if (!el.muted) {
+        el.muted = true;
+        void el.play();
+      }
+    });
   }, [item]);
 
   if (!item) return null;

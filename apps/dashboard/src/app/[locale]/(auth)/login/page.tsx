@@ -5,6 +5,11 @@ import { useAuth } from '@/context/AuthContext';
 import { useLocale, useTranslations } from 'next-intl';
 import { Eye, EyeOff } from 'lucide-react';
 
+const DEMO_ACCOUNTS = [
+  { labelKey: 'demoOwner' as const, email: 'admin@demo.com', password: 'changeme' },
+  { labelKey: 'demoViewer' as const, email: 'viewer@demo.com', password: 'changeme' },
+];
+
 export default function LoginPage() {
   const { login, user, loading } = useAuth();
   const router = useRouter();
@@ -43,6 +48,12 @@ export default function LoginPage() {
     if (e.key === 'Enter') void handleSubmit();
   }
 
+  function fillDemo(demoEmail: string, demoPassword: string) {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setError('');
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
       <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-xl shadow p-8">
@@ -77,6 +88,18 @@ export default function LoginPage() {
           {t('noAccount')}{' '}
           <a href={`/${locale}/register`} className="text-indigo-600 hover:underline">{t('createOne')}</a>
         </p>
+        <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2">{t('demoAccounts')}</p>
+          <div className="space-y-1.5">
+            {DEMO_ACCOUNTS.map(acc => (
+              <button key={acc.email} type="button" onClick={() => fillDemo(acc.email, acc.password)}
+                className="w-full flex items-center justify-between gap-2 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <span className="font-medium text-gray-600 dark:text-gray-300">{t(acc.labelKey)}</span>
+                <span className="text-gray-400 dark:text-gray-500 truncate">{acc.email}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

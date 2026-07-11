@@ -2,12 +2,13 @@
 // Rule: every tenant-scoped table has organizationId; never expose raw media paths.
 
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../../../packages/db/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─── Tenant ──────────────────────────────────────────────────────────────────

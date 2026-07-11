@@ -9,6 +9,6 @@
     "build": "tsc"
   },
   "dependencies": {
-    "adhan": "^4.4.3"
+    "adhan": "^4.4.4"
   }
 }

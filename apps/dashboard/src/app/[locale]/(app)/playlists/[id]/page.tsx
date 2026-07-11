@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { use, useState } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ImageIcon, Film, Music, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw, Send } from 'lucide-react';
 import { playlistsApi, assetsApi, type Playlist, type PlaylistItem, type Asset } from '@/lib/api';
@@ -17,8 +18,8 @@ function formatBytes(b: number) {
   return `${(b / 1024 ** 2).toFixed(1)} MB`;
 }
 
-export default function PlaylistPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function PlaylistPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const qc = useQueryClient();
   const locale = useLocale();
   const { user } = useAuth();
@@ -125,9 +126,9 @@ export default function PlaylistPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
-      <a href={`/${locale}/playlists`} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mb-6">
+      <Link href={`/${locale}/playlists`} className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mb-6">
         <ArrowLeft className="w-3.5 h-3.5" /> {t('backToPlaylists')}
-      </a>
+      </Link>
 
       <div className="flex items-center justify-between mb-6">
         <div>

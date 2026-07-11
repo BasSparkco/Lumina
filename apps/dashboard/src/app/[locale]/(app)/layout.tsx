@@ -1,5 +1,6 @@
 'use client';
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
@@ -69,7 +70,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             const label = t(key);
             const badgeCount = key === 'playlists' ? pendingApprovalsCount : 0;
             return (
-              <a key={href} href={`/${locale}${href}`} title={collapsed ? label : undefined}
+              <Link key={href} href={`/${locale}${href}`} title={collapsed ? label : undefined}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${collapsed ? 'justify-center' : ''} ${
                   active ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}>
@@ -85,7 +86,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     {badgeCount}
                   </span>
                 )}
-              </a>
+              </Link>
             );
           })}
         </nav>

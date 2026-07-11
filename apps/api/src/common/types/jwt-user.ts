@@ -1,4 +1,4 @@
-import type { UserRole } from '@prisma/client';
+import type { UserRole } from '@lumina/db';
 
 export interface JwtUser {
   sub: string;

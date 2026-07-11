@@ -14,10 +14,10 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(getToken()));
 
   useEffect(() => {
-    if (!getToken()) { setLoading(false); return; }
+    if (!getToken()) return;
     authApi.me()
       .then(setUser)
       .catch(() => clearToken())

@@ -23,14 +23,16 @@ const empty = (): CreateScheduleInput => ({
  * only skips validation for undefined/null, not ''. The form always carries '' for
  * these fields until the user fills them in, so every save must strip empties down
  * to undefined before the request leaves the browser, or it 400s every time. */
+const emptyToUndefined = (v?: string) => (v === '' ? undefined : v);
+
 function toPayload(f: CreateScheduleInput, screenId: string): CreateScheduleInput {
   return {
     ...f,
     screenId,
-    startTime: f.startTime || undefined,
-    endTime: f.endTime || undefined,
-    startDate: f.startDate || undefined,
-    endDate: f.endDate || undefined,
+    startTime: emptyToUndefined(f.startTime),
+    endTime: emptyToUndefined(f.endTime),
+    startDate: emptyToUndefined(f.startDate),
+    endDate: emptyToUndefined(f.endDate),
   };
 }
 

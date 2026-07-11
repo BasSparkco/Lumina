@@ -4,9 +4,11 @@ node_modules
 
 # Build outputs
 dist
+tsc-out
 .next
 .turbo
 build
+*.tsbuildinfo
 
 # Env files
 .env
@@ -33,3 +35,4 @@ coverage
 
 # Prisma
 apps/api/prisma/migrations/*.sql.bak
+packages/db/generated

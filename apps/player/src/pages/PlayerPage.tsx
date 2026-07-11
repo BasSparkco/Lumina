@@ -65,7 +65,7 @@ export default function PlayerPage() {
   }, [resolvePlaylist]);
 
   useEffect(() => {
-    if (!token) { navigate('/'); return; }
+    if (!token) { void navigate('/'); return; }
 
     void loadState().then(s => {
       if (s) {

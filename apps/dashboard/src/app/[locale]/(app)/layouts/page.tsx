@@ -55,7 +55,7 @@ function toZoneInputs(layout: Layout): ZoneInput[] {
   return layout.zones.map(z => ({
     name: z.name, x: z.x, y: z.y, width: z.width, height: z.height,
     zIndex: z.zIndex,
-    zoneType: (z.zoneType as ZoneType | undefined) ?? 'MEDIA',
+    zoneType: z.zoneType ?? 'MEDIA',
     widgetConfig: z.widgetConfig,
     playlistId: z.playlist?.id,
   }));
@@ -72,7 +72,7 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
         <div className="col-span-7 grid grid-cols-3 gap-2 bg-amber-50 dark:bg-amber-950/40 rounded p-2 text-xs mt-1">
           <div>
             <label className="text-gray-500 block mb-0.5">{t('methodOverride')}</label>
-            <select value={(cfg['method'] as string) ?? ''} onChange={e => onChange({ ...cfg, method: e.target.value || undefined })}
+            <select value={(cfg.method as string) ?? ''} onChange={e => onChange({ ...cfg, method: e.target.value || undefined })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="">{t('inheritFromScreen')}</option>
               {['UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague', 'NorthAmerica'].map(m =>
@@ -82,14 +82,14 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
           </div>
           <div>
             <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg['lang'] as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
+            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="en">{t('english')}</option>
               <option value="ar">{t('arabicNative')}</option>
             </select>
           </div>
           <label className="flex items-center gap-1.5 cursor-pointer self-end">
-            <input type="checkbox" checked={!!(cfg['athanEnabled'])} onChange={e => onChange({ ...cfg, athanEnabled: e.target.checked })} />
+            <input type="checkbox" checked={!!(cfg.athanEnabled)} onChange={e => onChange({ ...cfg, athanEnabled: e.target.checked })} />
             <span className="text-gray-600">{t('athanAudio')}</span>
           </label>
         </div>
@@ -99,7 +99,7 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
         <div className="col-span-7 grid grid-cols-2 gap-2 bg-sky-50 dark:bg-sky-950/40 rounded p-2 text-xs mt-1">
           <div>
             <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg['lang'] as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
+            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="en">{t('english')}</option>
               <option value="ar">{t('arabic')}</option>
@@ -113,14 +113,14 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
         <div className="col-span-7 grid grid-cols-2 gap-2 bg-emerald-50 dark:bg-emerald-950/40 rounded p-2 text-xs mt-1">
           <div>
             <label className="text-gray-500 block mb-0.5">{t('baseCurrency')}</label>
-            <select value={(cfg['base'] as string) ?? 'USD'} onChange={e => onChange({ ...cfg, base: e.target.value })}
+            <select value={(cfg.base as string) ?? 'USD'} onChange={e => onChange({ ...cfg, base: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               {['USD', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg['lang'] as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
+            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="en">{t('english')}</option>
               <option value="ar">{t('arabic')}</option>
@@ -132,7 +132,7 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
       return (
         <div className="col-span-7 bg-orange-50 dark:bg-orange-950/40 rounded p-2 text-xs mt-1">
           <label className="text-gray-500 block mb-0.5">{t('rssFeedUrl')}</label>
-          <input type="url" value={(cfg['feedUrl'] as string) ?? ''} onChange={e => onChange({ ...cfg, feedUrl: e.target.value })}
+          <input type="url" value={(cfg.feedUrl as string) ?? ''} onChange={e => onChange({ ...cfg, feedUrl: e.target.value })}
             placeholder="https://feeds.bbcnews.com/world/rss.xml"
             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-orange-400" />
         </div>
@@ -467,7 +467,7 @@ export default function LayoutsPage() {
 
             <div className="space-y-1">
               {layout.zones.map((z, i) => {
-                const zt = (z.zoneType as ZoneType | undefined) ?? 'MEDIA';
+                const zt = z.zoneType ?? 'MEDIA';
                 return (
                   <div key={z.id} className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ZONE_COLORS[i % ZONE_COLORS.length] }} />

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash } from 'bcryptjs';
-import type { UserRole } from '@prisma/client';
+import type { UserRole } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -49,7 +49,7 @@ export class OrgService {
 
   async acceptInvite(token: string, name: string, password: string) {
     const invite = await this.prisma.orgInvite.findUnique({ where: { token } });
-    if (!invite || invite.acceptedAt !== null || invite.expiresAt < new Date()) {
+    if (invite?.acceptedAt !== null || invite.expiresAt < new Date()) {
       throw new UnauthorizedException('Invite is invalid or has expired');
     }
 

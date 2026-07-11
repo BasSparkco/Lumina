@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateLayoutDto } from './dto/create-layout.dto';
 
@@ -20,7 +21,7 @@ export class LayoutsService {
             height: z.height,
             zIndex: z.zIndex ?? 0,
             zoneType: z.zoneType ?? 'MEDIA',
-            ...(z.widgetConfig ? { widgetConfig: z.widgetConfig as object } : {}),
+            ...(z.widgetConfig ? { widgetConfig: z.widgetConfig as Prisma.InputJsonValue } : {}),
             playlistId: z.playlistId,
           })),
         },
@@ -68,7 +69,7 @@ export class LayoutsService {
             height: z.height,
             zIndex: z.zIndex ?? 0,
             zoneType: z.zoneType ?? 'MEDIA',
-            ...(z.widgetConfig ? { widgetConfig: z.widgetConfig as object } : {}),
+            ...(z.widgetConfig ? { widgetConfig: z.widgetConfig as Prisma.InputJsonValue } : {}),
             playlistId: z.playlistId,
           })),
         },

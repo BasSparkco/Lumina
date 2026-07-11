@@ -37,7 +37,7 @@ export default function TickerWidget({ feedUrl, scrollSpeedPx = 80, lang = 'en' 
     lastTsRef.current = null;
 
     const tick = (ts: number) => {
-      if (!lastTsRef.current) lastTsRef.current = ts;
+      lastTsRef.current ??= ts;
       const dt = (ts - lastTsRef.current) / 1000;
       lastTsRef.current = ts;
 

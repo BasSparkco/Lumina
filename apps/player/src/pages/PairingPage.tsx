@@ -12,7 +12,7 @@ export default function PairingPage() {
 
   // If already paired, go straight to player
   useEffect(() => {
-    if (token && screenId) { navigate('/play'); return; }
+    if (token && screenId) { void navigate('/play'); return; }
 
     async function start() {
       try {
@@ -38,7 +38,7 @@ export default function PairingPage() {
         if (res.paired) {
           clearInterval(pollRef.current!);
           setToken(res.token);
-          navigate('/play');
+          void navigate('/play');
         }
       } catch { /* network hiccup, keep polling */ }
     }, 3000);

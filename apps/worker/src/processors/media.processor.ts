@@ -151,7 +151,7 @@ export class MediaProcessor extends WorkerHost {
   private probeVideo(file: string): Promise<{ width: number; height: number; durationSecs: number }> {
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(file, (err, meta) => {
-        if (err) { reject(err); return; }
+        if (err) { reject(err instanceof Error ? err : new Error(String(err))); return; }
         const stream = meta.streams.find(s => s.codec_type === 'video');
         resolve({
           width: stream?.width ?? 0,
