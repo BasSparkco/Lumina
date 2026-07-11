@@ -38,10 +38,16 @@ export class StorageService {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  async signedUrl(key: string, expiresIn = 3600): Promise<string> {
+  async signedUrl(key: string, expiresIn = 3600, downloadFilename?: string): Promise<string> {
     return getSignedUrl(
       this.client,
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ...(downloadFilename && {
+          ResponseContentDisposition: `attachment; filename="${downloadFilename.replace(/[\r\n"]/g, '')}"`,
+        }),
+      }),
       { expiresIn },
     );
   }

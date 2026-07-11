@@ -25,7 +25,7 @@ export class SchedulesService {
         screenId: dto.screenId,
         organizationId: orgId,
       },
-      include: { playlist: { select: { id: true, name: true } } },
+      include: { playlist: { select: { id: true, name: true } }, screen: { select: { id: true, name: true } } },
     });
   }
 
@@ -33,14 +33,14 @@ export class SchedulesService {
     return this.prisma.schedule.findMany({
       where: { organizationId: orgId, ...(screenId ? { screenId } : {}) },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-      include: { playlist: { select: { id: true, name: true } } },
+      include: { playlist: { select: { id: true, name: true } }, screen: { select: { id: true, name: true } } },
     });
   }
 
   async findOne(orgId: string, id: string) {
     const s = await this.prisma.schedule.findFirst({
       where: { id, organizationId: orgId },
-      include: { playlist: { select: { id: true, name: true } } },
+      include: { playlist: { select: { id: true, name: true } }, screen: { select: { id: true, name: true } } },
     });
     if (!s) throw new NotFoundException('Schedule not found');
     return s;
@@ -49,6 +49,7 @@ export class SchedulesService {
   async update(orgId: string, id: string, dto: CreateScheduleDto) {
     await this.findOne(orgId, id);
     if (dto.playlistId) await this.assertPlaylistOwned(orgId, dto.playlistId);
+    if (dto.screenId) await this.assertScreenOwned(orgId, dto.screenId);
 
     return this.prisma.schedule.update({
       where: { id },
@@ -61,8 +62,9 @@ export class SchedulesService {
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         endDate: dto.endDate ? new Date(dto.endDate) : null,
         playlistId: dto.playlistId,
+        screenId: dto.screenId,
       },
-      include: { playlist: { select: { id: true, name: true } } },
+      include: { playlist: { select: { id: true, name: true } }, screen: { select: { id: true, name: true } } },
     });
   }
 
@@ -71,10 +73,23 @@ export class SchedulesService {
     await this.prisma.schedule.delete({ where: { id } });
   }
 
-  /** Returns the playlistId that should play right now for a given screen, or null. */
-  resolveNow(rules: Schedule[], now: Date): string | null {
-    const day = now.getDay();
-    const hhmm = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  /** Returns the playlistId that should play right now for a given screen, or null.
+   * `timezone` must be the *screen's* IANA timezone (e.g. "Africa/Cairo") — schedule times are
+   * always the screen's local wall-clock time, never the server's or the dashboard viewer's. */
+  resolveNow(rules: Schedule[], now: Date, timezone = 'UTC'): string | null {
+    const DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(now);
+    const weekday = parts.find(p => p.type === 'weekday')?.value ?? 'Sun';
+    const hour = parts.find(p => p.type === 'hour')?.value ?? '00';
+    const minute = parts.find(p => p.type === 'minute')?.value ?? '00';
+    const day = DAY_INDEX[weekday] ?? 0;
+    const hhmm = `${hour}:${minute}`;
 
     const matching = rules
       .filter(r => {

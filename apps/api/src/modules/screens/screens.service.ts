@@ -48,6 +48,11 @@ export class ScreensService {
     await this.prisma.screen.delete({ where: { id } });
   }
 
+  async rename(orgId: string, id: string, name: string) {
+    await this.findOne(orgId, id);
+    return this.prisma.screen.update({ where: { id }, data: { name } });
+  }
+
   async assignPlaylist(orgId: string, screenId: string, playlistId: string) {
     const screen = await this.findOne(orgId, screenId);
     const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
@@ -86,7 +91,7 @@ export class ScreensService {
   async updatePrayerConfig(
     orgId: string,
     screenId: string,
-    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean },
+    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
   ) {
     await this.findOne(orgId, screenId);
     return this.prisma.screen.update({
@@ -96,6 +101,7 @@ export class ScreensService {
         ...(dto.longitude !== undefined ? { longitude: dto.longitude } : {}),
         ...(dto.prayerMethod !== undefined ? { prayerMethod: dto.prayerMethod } : {}),
         ...(dto.athanEnabled !== undefined ? { athanEnabled: dto.athanEnabled } : {}),
+        ...(dto.timezone !== undefined ? { timezone: dto.timezone } : {}),
       },
     });
   }

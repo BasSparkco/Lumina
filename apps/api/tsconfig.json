@@ -3,8 +3,8 @@
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "node",
+    "ignoreDeprecations": "5.0",
     "outDir": "./dist",
-    "baseUrl": "./",
     "paths": {
       "@lumina/*": ["../../packages/*/src"]
     },

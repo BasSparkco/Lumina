@@ -101,7 +101,7 @@ export class PlayerService {
     );
 
     // Resolve what's playing right now (server-side, as a hint)
-    const resolvedPlaylistId = this.schedules.resolveNow(rules, new Date());
+    const resolvedPlaylistId = this.schedules.resolveNow(rules, new Date(), screen.timezone);
 
     const hydrateZones = async (zones: NonNullable<typeof screen.layout>['zones']) =>
       Promise.all(

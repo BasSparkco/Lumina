@@ -9,6 +9,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
 class PairDto { @IsString() code!: string; }
+class RenameScreenDto { @IsString() name!: string; }
 
 @ApiTags('screens')
 @ApiBearerAuth()
@@ -35,6 +36,11 @@ export class ScreensController {
   @Delete(':id')
   remove(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.screens.remove(user.orgId, id);
+  }
+
+  @Put(':id')
+  rename(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: RenameScreenDto) {
+    return this.screens.rename(user.orgId, id, dto.name);
   }
 
   @Post(':id/assign')
@@ -70,7 +76,7 @@ export class ScreensController {
   updatePrayer(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean },
+    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
   ) {
     return this.screens.updatePrayerConfig(user.orgId, id, dto);
   }

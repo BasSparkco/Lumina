@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
@@ -57,6 +57,22 @@ export class PlaylistsService {
 
   async remove(orgId: string, id: string) {
     await this.assertOwns(orgId, id);
+
+    // None of Screen (default/emergency playlist), Zone, or Schedule cascade-delete when their
+    // referenced Playlist is removed — check first so an in-use playlist gets a clear error
+    // instead of a raw foreign-key failure (see the identical fix on asset deletion).
+    const [screenCount, zoneCount, scheduleCount] = await Promise.all([
+      this.prisma.screen.count({ where: { OR: [{ playlistId: id }, { emergencyPlaylistId: id }] } }),
+      this.prisma.zone.count({ where: { playlistId: id } }),
+      this.prisma.schedule.count({ where: { playlistId: id } }),
+    ]);
+    const usageCount = screenCount + zoneCount + scheduleCount;
+    if (usageCount > 0) {
+      throw new BadRequestException(
+        `This playlist is in use (${usageCount} reference${usageCount === 1 ? '' : 's'} across screens, layout zones, or schedules). Remove those references before deleting.`,
+      );
+    }
+
     await this.prisma.playlist.delete({ where: { id } });
   }
 

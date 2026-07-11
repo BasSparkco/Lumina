@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateLayoutDto } from './dto/create-layout.dto';
 
@@ -79,6 +79,16 @@ export class LayoutsService {
 
   async remove(orgId: string, id: string) {
     await this.findOne(orgId, id);
+
+    // Screen.layoutId has no onDelete: Cascade — check first so an in-use layout gets a
+    // clear error instead of a raw foreign-key failure (see the identical fix on assets).
+    const screenCount = await this.prisma.screen.count({ where: { layoutId: id } });
+    if (screenCount > 0) {
+      throw new BadRequestException(
+        `This layout is assigned to ${screenCount} screen${screenCount === 1 ? '' : 's'}. Unassign it from those screens before deleting.`,
+      );
+    }
+
     await this.prisma.layout.delete({ where: { id } });
   }
 }
