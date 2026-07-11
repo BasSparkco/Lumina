@@ -105,7 +105,7 @@ export class PlayerService {
 
     const hydrateZones = async (zones: NonNullable<typeof screen.layout>['zones']) =>
       Promise.all(
-        zones.map(async z => ({
+        zones.map(async (z: (typeof zones)[number]) => ({
           id: z.id,
           name: z.name,
           x: z.x,
@@ -154,7 +154,7 @@ export class PlayerService {
     };
   }
 
-  async heartbeat(screenId: string, currentAssetId: string | null) {
+  async heartbeat(screenId: string, _currentAssetId: string | null) {
     const screen = await this.prisma.screen.update({
       where: { id: screenId },
       data: { lastSeenAt: new Date(), status: 'ONLINE' },
@@ -168,13 +168,14 @@ export class PlayerService {
   private async hydratePlaylist(playlist: {
     id: string;
     name: string;
-    items: Array<{ id: string; position: number; durationSecs: number; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null } }>;
+    items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null } }[];
   }) {
     const items = await Promise.all(
       playlist.items.map(async item => ({
         id: item.id,
         position: item.position,
         durationSecs: item.durationSecs,
+        muted: item.muted,
         asset: {
           id: item.asset.id,
           name: item.asset.name,

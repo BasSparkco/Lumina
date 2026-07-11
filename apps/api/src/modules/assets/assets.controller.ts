@@ -16,6 +16,7 @@ import { IsString } from 'class-validator';
 import { memoryStorage } from 'multer';
 import { AssetsService } from './assets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -25,7 +26,7 @@ class RenameAssetDto { @IsString() name!: string; }
 
 @ApiTags('assets')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('assets')
 export class AssetsController {
   constructor(

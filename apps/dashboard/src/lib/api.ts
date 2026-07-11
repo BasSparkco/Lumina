@@ -1,6 +1,6 @@
 import Cookies from 'js-cookie';
 
-const BASE = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:4000/v1';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/v1';
 const TOKEN_KEY = 'lumina_token';
 
 export function getToken() { return Cookies.get(TOKEN_KEY) ?? null; }
@@ -97,10 +97,10 @@ export const playlistsApi = {
   get: (id: string) => req<Playlist>(`/playlists/${id}`),
   rename: (id: string, name: string) => req<PlaylistSummary>(`/playlists/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   remove: (id: string) => req<void>(`/playlists/${id}`, { method: 'DELETE' }),
-  addItem: (id: string, assetId: string, durationSecs: number) =>
-    req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ assetId, durationSecs }) }),
-  updateItem: (id: string, itemId: string, durationSecs: number) =>
-    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs }) }),
+  addItem: (id: string, assetId: string, durationSecs: number, muted?: boolean) =>
+    req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ assetId, durationSecs, muted }) }),
+  updateItem: (id: string, itemId: string, durationSecs: number, muted?: boolean) =>
+    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted }) }),
   removeItem: (id: string, itemId: string) => req<void>(`/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
   reorder: (id: string, ids: string[]) => req<void>(`/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
 };
@@ -155,7 +155,7 @@ export interface Asset {
   width: number | null; height: number | null; durationSecs: number | null; createdAt: string;
 }
 export interface PlaylistItem {
-  id: string; position: number; durationSecs: number;
+  id: string; position: number; durationSecs: number; muted: boolean;
   asset: Asset;
 }
 export interface PlaylistSummary { id: string; name: string; _count: { items: number }; updatedAt: string; }

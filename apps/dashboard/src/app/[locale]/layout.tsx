@@ -6,10 +6,10 @@ import { AuthProvider } from '@/context/AuthContext';
 import { QueryProvider } from '@/context/QueryProvider';
 import { LocaleAttributes } from './LocaleAttributes';
 
-type Props = {
+interface Props {
   children: React.ReactNode;
   params: { locale: string };
-};
+}
 
 // Nested under the true root (app/layout.tsx) — does NOT render <html>/<body>.
 // Everything here legitimately depends on the locale param, so it's fine for

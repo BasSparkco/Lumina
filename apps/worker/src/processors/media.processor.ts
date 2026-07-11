@@ -12,9 +12,6 @@ import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
-// @ffmpeg-installer/ffmpeg only bundles the ffmpeg binary, not ffprobe — without this,
-// fluent-ffmpeg falls back to searching the system PATH for ffprobe, which isn't installed
-// there, and `probeVideo()` throws "Cannot find ffprobe" on every single video.
 ffmpeg.setFfprobePath(ffprobePath.path);
 
 interface MediaJob {

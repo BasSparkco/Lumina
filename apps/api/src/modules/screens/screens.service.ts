@@ -4,10 +4,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import type { CreateScreenDto } from './dto/create-screen.dto';
 
-function randomCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
 @Injectable()
 export class ScreensService {
   constructor(
@@ -57,6 +53,9 @@ export class ScreensService {
     const screen = await this.findOne(orgId, screenId);
     const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
     if (!playlist) throw new NotFoundException('Playlist not found');
+    if (playlist.approvalStatus !== 'APPROVED') {
+      throw new BadRequestException('Only approved playlists can be assigned to a screen');
+    }
     const updated = await this.prisma.screen.update({ where: { id: screen.id }, data: { playlistId } });
     this.gateway.sendToScreen(screenId, { type: 'publish' });
     return updated;
@@ -118,6 +117,42 @@ export class ScreensService {
     });
     this.gateway.sendToScreen(screenId, { type: 'publish' });
     return updated;
+  }
+
+  async setGroup(orgId: string, screenId: string, groupId: string | null) {
+    await this.findOne(orgId, screenId);
+    if (groupId) {
+      const group = await this.prisma.screenGroup.findFirst({ where: { id: groupId, organizationId: orgId } });
+      if (!group) throw new NotFoundException('Screen group not found');
+    }
+    return this.prisma.screen.update({ where: { id: screenId }, data: { groupId } });
+  }
+
+  async fleetStatus(orgId: string) {
+    const screens = await this.prisma.screen.findMany({
+      where: { organizationId: orgId },
+      orderBy: { name: 'asc' },
+      include: {
+        alerts: { where: { resolvedAt: null }, orderBy: { createdAt: 'desc' } },
+      },
+    });
+
+    const now = Date.now();
+    const items = screens.map(s => ({
+      id: s.id,
+      name: s.name,
+      status: s.status,
+      lastSeenAt: s.lastSeenAt,
+      offlineForMs: s.status === 'OFFLINE' && s.lastSeenAt ? now - s.lastSeenAt.getTime() : null,
+      alerts: s.alerts,
+    }));
+
+    return {
+      total: items.length,
+      online: items.filter(i => i.status === 'ONLINE').length,
+      offline: items.filter(i => i.status === 'OFFLINE').length,
+      screens: items,
+    };
   }
 
   // Dashboard: confirm a pairing code → associates screen with org, returns screen

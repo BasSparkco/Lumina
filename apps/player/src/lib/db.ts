@@ -35,7 +35,7 @@ export const cache = {
   },
   async getPlaylist(): Promise<Playlist | undefined> {
     const database = await getDb();
-    return database.get('playlist', 'current');
+    return (await database.get('playlist', 'current')) as Playlist | undefined;
   },
   async set(key: string, value: string) {
     const database = await getDb();
@@ -43,7 +43,7 @@ export const cache = {
   },
   async get(key: string): Promise<string | undefined> {
     const database = await getDb();
-    return database.get('config', key);
+    return (await database.get('config', key)) as string | undefined;
   },
   async saveState(state: PlayerState) {
     const database = await getDb();
@@ -51,7 +51,7 @@ export const cache = {
   },
   async getState(): Promise<PlayerState | undefined> {
     const database = await getDb();
-    return database.get('state', 'current');
+    return (await database.get('state', 'current')) as PlayerState | undefined;
   },
   async clear() {
     const database = await getDb();

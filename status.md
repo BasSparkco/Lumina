@@ -1,9 +1,14 @@
-# Lumina — Daily Progress Log
+# Lumina — Daily Progress Log (Archive: Phases 0–4)
 
 ## How to use this file
-- Each session adds an entry under the current date.
-- **Finished steps** lists what got merged/working.
-- **Start here tomorrow** tells you exactly what to pick up next.
+- This file holds the history through Phase 4, back when one person logged everything here.
+- **As of Phase 5, this file is frozen** — don't add new entries below. The team now works in
+  parallel, each logging to its own file so daily entries never conflict:
+  - Backend track (Phase 5) → [status-backend.md](./status-backend.md)
+  - Frontend track (Phase 5) → [status-frontend.md](./status-frontend.md)
+  - Player app (own roadmap, not tied to Phase 5) → [status-player.md](./status-player.md)
+- See [Roadmap.md](./Roadmap.md) Phase 5 for the backend/frontend split task list, or
+  [Roadmap-Player.md](./Roadmap-Player.md) for the player app's own roadmap.
 
 ---
 
@@ -74,7 +79,9 @@
 - ✅ Dashboard: Nav updated — Layouts + Schedules links added
 
 **Start here next session:**
-> Phase 4 is complete. Start Phase 5: **Multi-tenant teams & RBAC** — multiple users per org with roles (owner/admin/editor/viewer), role-based permissions, screen groups/tags, content approval workflow, proof-of-play logging, fleet monitoring dashboard.
+> Phase 4 is complete. Phase 5 work is split into two tracks — see
+> [status-backend.md](./status-backend.md) and [status-frontend.md](./status-frontend.md) for
+> where each track picks up.
 
 ---
 

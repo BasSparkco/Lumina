@@ -16,7 +16,7 @@ export class FeedsController {
   }
 
   @Get('currency')
-  getCurrency(@Query('base') base: string = 'USD') {
+  getCurrency(@Query('base') base = 'USD') {
     return this.feeds.getCurrency(base);
   }
 

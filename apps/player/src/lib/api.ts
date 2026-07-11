@@ -1,4 +1,4 @@
-const BASE = import.meta.env['VITE_API_URL'] ?? 'http://localhost:4000/v1';
+const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('player_token');
@@ -28,6 +28,7 @@ export interface PlaylistItem {
   id: string;
   position: number;
   durationSecs: number;
+  muted: boolean;
   asset: {
     id: string;
     name: string;

@@ -10,12 +10,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   const redisAdapter = new RedisIoAdapter(app);
-  await redisAdapter.connectToRedis(process.env['REDIS_URL'] ?? 'redis://localhost:6381');
+  await redisAdapter.connectToRedis(process.env.REDIS_URL ?? 'redis://localhost:6381');
   app.useWebSocketAdapter(redisAdapter);
 
   app.useLogger(app.get(Logger));
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.enableCors({ origin: process.env['DASHBOARD_URL'] ?? '*' });
+  app.enableCors({ origin: process.env.DASHBOARD_URL ?? '*' });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
     new ValidationPipe({
@@ -32,7 +32,7 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config));
 
-  const port = process.env['PORT'] ?? 4000;
+  const port = process.env.PORT ?? 4000;
   await app.listen(port);
 }
 

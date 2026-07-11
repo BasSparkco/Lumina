@@ -2,6 +2,8 @@ import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 import { PlayerService } from './player.service';
+import { ProofOfPlayService } from '../proof-of-play/proof-of-play.service';
+import { IngestProofOfPlayDto } from '../proof-of-play/dto/ingest-proof-of-play.dto';
 import { PlayerJwtGuard } from '../../common/guards/player-jwt.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { ScreenJwtUser } from '../../common/types/jwt-user';
@@ -15,7 +17,10 @@ class HeartbeatDto {
 @ApiTags('player')
 @Controller('player')
 export class PlayerController {
-  constructor(private readonly player: PlayerService) {}
+  constructor(
+    private readonly player: PlayerService,
+    private readonly proofOfPlay: ProofOfPlayService,
+  ) {}
 
   // Step 1: player calls this on boot to get a pairing code
   @Post('init')
@@ -48,5 +53,12 @@ export class PlayerController {
   @UseGuards(PlayerJwtGuard)
   heartbeat(@CurrentUser() screen: ScreenJwtUser, @Body() dto: HeartbeatDto) {
     return this.player.heartbeat(screen.sub, dto.currentAssetId ?? null);
+  }
+
+  // Batched flush of the player's local proof-of-play buffer
+  @Post('proof-of-play')
+  @UseGuards(PlayerJwtGuard)
+  ingestProofOfPlay(@CurrentUser() screen: ScreenJwtUser, @Body() dto: IngestProofOfPlayDto) {
+    return this.proofOfPlay.ingest(screen.orgId, screen.sub, dto.events);
   }
 }

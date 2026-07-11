@@ -59,11 +59,10 @@ export class AssetsService {
       orderBy: { createdAt: 'desc' },
     });
     return Promise.all(
-      assets.map(async (a) => {
+      assets.map(async (a: (typeof assets)[number]) => {
         const url = await this.storage.signedUrl(a.storageKey);
-        const downloadUrl = await this.storage.signedUrl(a.storageKey, 3600, a.name);
         const thumbUrl = a.thumbnailKey ? await this.storage.signedUrl(a.thumbnailKey) : null;
-        return this.toDto(a, url, thumbUrl, downloadUrl);
+        return this.toDto(a, url, thumbUrl);
       }),
     );
   }
@@ -73,33 +72,13 @@ export class AssetsService {
     if (!asset) throw new NotFoundException('Asset not found');
 
     const url = await this.storage.signedUrl(asset.storageKey);
-    const downloadUrl = await this.storage.signedUrl(asset.storageKey, 3600, asset.name);
     const thumbUrl = asset.thumbnailKey ? await this.storage.signedUrl(asset.thumbnailKey) : null;
-    return this.toDto(asset, url, thumbUrl, downloadUrl);
-  }
-
-  async rename(orgId: string, id: string, name: string) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
-    return this.toDto(await this.prisma.asset.update({ where: { id }, data: { name } }), null);
+    return this.toDto(asset, url, thumbUrl);
   }
 
   async remove(orgId: string, id: string) {
     const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
-
-    // Check for playlist references *before* touching storage — Asset -> PlaylistItem has no
-    // onDelete: Cascade, so prisma.asset.delete() throws a foreign-key error for an in-use
-    // asset. Previously that check ran last, after the storage files were already deleted:
-    // the delete would fail here, but the actual file was already gone, leaving a DB row
-    // with dead storageKey/thumbnailKey references (a broken preview that a real refresh
-    // wouldn't fix, since the row was never actually removed).
-    const usageCount = await this.prisma.playlistItem.count({ where: { assetId: id } });
-    if (usageCount > 0) {
-      throw new BadRequestException(
-        `This asset is used in ${usageCount} playlist item${usageCount === 1 ? '' : 's'}. Remove it from those playlists before deleting.`,
-      );
-    }
 
     await this.storage.delete(asset.storageKey);
     if (asset.thumbnailKey) await this.storage.delete(asset.thumbnailKey);
@@ -110,7 +89,6 @@ export class AssetsService {
     asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; status: string; organizationId: string; createdAt: Date },
     signedUrl: string | null,
     thumbUrl?: string | null,
-    downloadUrl?: string | null,
   ) {
     return {
       id: asset.id,
@@ -124,7 +102,6 @@ export class AssetsService {
       status: asset.status,
       url: signedUrl,
       thumbnailUrl: thumbUrl ?? null,
-      downloadUrl: downloadUrl ?? null,
       organizationId: asset.organizationId,
       createdAt: asset.createdAt.toISOString(),
     };

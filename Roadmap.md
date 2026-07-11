@@ -18,7 +18,9 @@ Goal: a clean monorepo and the skeleton everything else hangs on.
 - ☑ NestJS API skeleton with health check, config module, logging (Pino)
 - ☑ Next.js dashboard skeleton with RTL-ready layout + i18n scaffolding (next-intl en/ar)
 - ☑ Prisma schema bootstrap + first migration (tenant isolation from day 1)
-- ☐ CI pipeline: install → lint → typecheck → test → build
+- ☑ CI pipeline: install → lint → typecheck → test → build (`.github/workflows/ci.yml`; verified
+  green locally across all 4 apps — no test files exist yet, Jest passes with `--passWithNoTests`
+  until real tests are written)
 
 **Exit criteria:** `pnpm dev` boots all apps; CI is green.
 
@@ -126,17 +128,21 @@ flights, weather, and currency from cached feeds.
 
 Goal: ready for real customers and teams.
 
-- ☐ Multiple users per org with roles (owner, admin, editor, viewer)
-- ☐ Role-based permissions across all resources
-- ☐ Screen groups & tags — bulk publish by location/group
-- ☐ Content approval workflow (editor submits → admin approves)
-- ☐ Proof-of-play logging + reporting/export
-- ☐ Fleet monitoring dashboard (uptime, last-seen, alerts on offline screens)
-- ☐ Audit log
-- ☐ Billing/subscriptions (Stripe) + per-screen plan limits
+Split into two parallel tracks so backend and frontend can work simultaneously without blocking
+each other — see each file for the detailed checklist and coordination notes:
+
+- **Backend track** (API/worker/Prisma): roles & RBAC, permissions, approval workflow, audit log,
+  screen groups/tags, proof-of-play logging, fleet monitoring, billing →
+  [Roadmap-Phase5-Backend.md](./Roadmap-Phase5-Backend.md)
+- **Frontend track** (dashboard UI): members/roles UI, approval UI, audit log viewer,
+  groups/tags UI, proof-of-play reports, fleet dashboard, billing UI →
+  [Roadmap-Phase5-Frontend.md](./Roadmap-Phase5-Frontend.md)
 
 **Exit criteria:** A team with mixed roles manages dozens of screens across locations with
 approvals, billing, and proof-of-play.
+
+The player app (`apps/player`) is developed independently on its own roadmap, not tied to this
+phase's timeline or split — see [Roadmap-Player.md](./Roadmap-Player.md).
 
 ---
 

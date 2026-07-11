@@ -17,6 +17,14 @@ export type PlayerCommand =
   | { type: 'reload' }
   | { type: 'clear-cache' };
 
+interface ScreenSocketData {
+  screenId?: string;
+  orgId?: string;
+  role?: 'player' | 'dashboard';
+}
+
+type AppSocket = Socket<Record<string, never>, Record<string, never>, Record<string, never>, ScreenSocketData>;
+
 @WebSocketGateway({
   cors: { origin: '*', credentials: true },
   transports: ['websocket', 'polling'],
@@ -30,10 +38,10 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly config: ConfigService,
   ) {}
 
-  async handleConnection(client: Socket) {
+  handleConnection(client: AppSocket) {
     const token =
-      (client.handshake.auth['token'] as string | undefined) ??
-      (client.handshake.headers['authorization'] as string | undefined)?.replace('Bearer ', '');
+      (client.handshake.auth.token as string | undefined) ??
+      client.handshake.headers.authorization?.replace('Bearer ', '');
 
     if (!token) {
       client.disconnect();
@@ -61,9 +69,9 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  handleDisconnect(client: Socket) {
-    if (client.data?.screenId) {
-      this.logger.log(`Player disconnected: ${client.data.screenId as string}`);
+  handleDisconnect(client: AppSocket) {
+    if (client.data.screenId) {
+      this.logger.log(`Player disconnected: ${client.data.screenId}`);
     }
   }
 
@@ -79,7 +87,7 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Player can ack a command
   @SubscribeMessage('ack')
-  handleAck(@ConnectedSocket() client: Socket, @MessageBody() data: { type: string }) {
-    this.logger.log(`Player ${client.data?.screenId as string} acked: ${data.type}`);
+  handleAck(@ConnectedSocket() client: AppSocket, @MessageBody() data: { type: string }) {
+    this.logger.log(`Player ${client.data.screenId ?? 'unknown'} acked: ${data.type}`);
   }
 }

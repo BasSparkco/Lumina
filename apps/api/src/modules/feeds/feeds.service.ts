@@ -68,7 +68,7 @@ export class FeedsService {
       const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       if (!res.ok) return null;
       const xml = await res.text();
-      const items: Array<{ title: string; link: string }> = [];
+      const items: { title: string; link: string }[] = [];
       const matches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/g);
       for (const m of matches) {
         const block = m[1] ?? '';
