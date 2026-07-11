@@ -1,7 +1,7 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw } from 'lucide-react';
+import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, X, Eye } from 'lucide-react';
 import { assetsApi, type Asset } from '@/lib/api';
 
 const typeIcon: Record<string, React.ReactNode> = {
@@ -22,6 +22,7 @@ export default function AssetsPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
+  const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
 
   const { data: assets = [], isLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
 
@@ -76,11 +77,14 @@ export default function AssetsPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {assets.map((asset: Asset) => (
-          <div key={asset.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden group">
+          <div key={asset.id}
+            onClick={() => setPreviewAsset(asset)}
+            className="bg-white rounded-xl border border-gray-200 overflow-hidden group cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all">
             {/* Thumbnail */}
-            <div className="relative aspect-video bg-gray-100 flex items-center justify-center">
+            <div className="relative aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
               {asset.thumbnailUrl ? (
-                <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+                <img src={asset.thumbnailUrl} alt={asset.name}
+                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110" />
               ) : (
                 <div className="text-gray-300">{typeIcon[asset.type]}</div>
               )}
@@ -89,6 +93,9 @@ export default function AssetsPage() {
                   <RefreshCw className="w-5 h-5 text-white animate-spin" />
                 </div>
               )}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                <Eye className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+              </div>
             </div>
             <div className="p-3">
               <div className="flex items-start justify-between gap-1">
@@ -98,7 +105,7 @@ export default function AssetsPage() {
                     {typeIcon[asset.type]} {formatBytes(asset.sizeBytes)}
                   </p>
                 </div>
-                <button onClick={() => { if (confirm('Delete this asset?')) removeMut.mutate(asset.id); }}
+                <button onClick={e => { e.stopPropagation(); if (confirm('Delete this asset?')) removeMut.mutate(asset.id); }}
                   className="p-1 text-gray-300 hover:text-red-500 transition-colors shrink-0">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -106,6 +113,63 @@ export default function AssetsPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      {previewAsset && (
+        <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
+      )}
+    </div>
+  );
+}
+
+function AssetPreviewModal({ asset, onClose }: { asset: Asset; onClose: () => void }) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{asset.name}</p>
+            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+              {typeIcon[asset.type]} {formatBytes(asset.sizeBytes)}
+              {asset.width && asset.height ? ` · ${asset.width}×${asset.height}` : ''}
+              {asset.durationSecs ? ` · ${Math.round(asset.durationSecs)}s` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 transition-colors shrink-0">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 bg-gray-900 flex items-center justify-center p-4">
+          {asset.status === 'PROCESSING' && (
+            <div className="text-gray-400 flex flex-col items-center gap-2 py-12">
+              <RefreshCw className="w-6 h-6 animate-spin" />
+              <p className="text-sm">Still processing…</p>
+            </div>
+          )}
+          {asset.status !== 'PROCESSING' && asset.type === 'IMAGE' && asset.url && (
+            <img src={asset.url} alt={asset.name} className="max-w-full max-h-[70vh] object-contain rounded" />
+          )}
+          {asset.status !== 'PROCESSING' && asset.type === 'VIDEO' && asset.url && (
+            // eslint-disable-next-line jsx-a11y/media-has-caption
+            <video src={asset.url} controls autoPlay className="max-w-full max-h-[70vh] rounded" />
+          )}
+          {asset.status !== 'PROCESSING' && asset.type === 'AUDIO' && asset.url && (
+            <div className="w-full flex flex-col items-center gap-4 py-8">
+              <Music className="w-16 h-16 text-gray-500" />
+              <audio src={asset.url} controls className="w-full max-w-md" />
+            </div>
+          )}
+          {asset.status !== 'PROCESSING' && !asset.url && (
+            <p className="text-sm text-gray-400 py-12">Preview unavailable.</p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -12,10 +12,10 @@ export const metadata: Metadata = {
   description: 'Cloud digital signage platform',
 };
 
-type Props = {
+interface Props {
   children: React.ReactNode;
   params: { locale: string };
-};
+}
 
 export default async function RootLayout({ children, params }: Props) {
   const { locale } = params;

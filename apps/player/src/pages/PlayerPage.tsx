@@ -14,7 +14,7 @@ import TickerWidget from '../components/TickerWidget';
 const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
 
-type PlayerCommand = { type: 'publish' | 'reload' | 'clear-cache' };
+interface PlayerCommand { type: 'publish' | 'reload' | 'clear-cache' }
 
 export default function PlayerPage() {
   const { token } = usePlayerStore();
@@ -161,9 +161,9 @@ export default function PlayerPage() {
 
 function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: PlayerState; onAssetChange: (id: string) => void }) {
   const cfg = zone.widgetConfig ?? {};
-  const lat = (cfg['latitude'] as number | undefined) ?? state.latitude;
-  const lon = (cfg['longitude'] as number | undefined) ?? state.longitude;
-  const lang = (cfg['lang'] as 'en' | 'ar' | undefined) ?? 'en';
+  const lat = (cfg.latitude as number | undefined) ?? state.latitude;
+  const lon = (cfg.longitude as number | undefined) ?? state.longitude;
+  const lang = (cfg.lang as 'en' | 'ar' | undefined) ?? 'en';
 
   switch (zone.zoneType) {
     case 'PRAYER':
@@ -172,9 +172,9 @@ function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: Playe
         <PrayerZoneWidget
           latitude={lat}
           longitude={lon}
-          method={((cfg['method'] as string | undefined) ?? state.prayerMethod) as PrayerMethod}
-          athanEnabled={(cfg['athanEnabled'] as boolean | undefined) ?? state.athanEnabled}
-          athanUrl={(cfg['athanUrl'] as string | undefined)}
+          method={((cfg.method as string | undefined) ?? state.prayerMethod) as PrayerMethod}
+          athanEnabled={(cfg.athanEnabled as boolean | undefined) ?? state.athanEnabled}
+          athanUrl={(cfg.athanUrl as string | undefined)}
           lang={lang}
         />
       );
@@ -184,14 +184,14 @@ function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: Playe
     case 'CURRENCY':
       return (
         <CurrencyWidget
-          base={(cfg['base'] as string | undefined) ?? 'USD'}
-          currencies={cfg['currencies'] as string[] | undefined}
+          base={(cfg.base as string | undefined) ?? 'USD'}
+          currencies={cfg.currencies as string[] | undefined}
           lang={lang}
         />
       );
     case 'TICKER':
-      if (!cfg['feedUrl']) return <Splash text="Ticker zone: no RSS URL set" />;
-      return <TickerWidget feedUrl={cfg['feedUrl'] as string} lang={lang} />;
+      if (!cfg.feedUrl) return <Splash text="Ticker zone: no RSS URL set" />;
+      return <TickerWidget feedUrl={cfg.feedUrl as string} lang={lang} />;
     default:
       return zone.playlist
         ? <ZonePlayer playlist={zone.playlist} onAssetChange={onAssetChange} />

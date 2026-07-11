@@ -5,6 +5,7 @@ import { ScreensService } from './screens.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
 import { AssignPlaylistDto } from './dto/assign-playlist.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
@@ -12,7 +13,7 @@ class PairDto { @IsString() code!: string; }
 
 @ApiTags('screens')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('screens')
 export class ScreensController {
   constructor(private readonly screens: ScreensService) {}
@@ -25,6 +26,11 @@ export class ScreensController {
   @Get()
   list(@CurrentUser() user: JwtUser) {
     return this.screens.list(user.orgId);
+  }
+
+  @Get('fleet-status')
+  fleetStatus(@CurrentUser() user: JwtUser) {
+    return this.screens.fleetStatus(user.orgId);
   }
 
   @Get(':id')
@@ -82,5 +88,14 @@ export class ScreensController {
     @Body() dto: { layoutId: string | null },
   ) {
     return this.screens.setLayout(user.orgId, id, dto.layoutId);
+  }
+
+  @Put(':id/group')
+  setGroup(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: { groupId: string | null },
+  ) {
+    return this.screens.setGroup(user.orgId, id, dto.groupId);
   }
 }

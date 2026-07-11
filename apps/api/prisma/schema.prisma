@@ -19,12 +19,17 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  screens   Screen[]
-  assets    Asset[]
-  playlists Playlist[]
-  layouts   Layout[]
-  schedules Schedule[]
+  users         User[]
+  screens       Screen[]
+  assets        Asset[]
+  playlists     Playlist[]
+  layouts       Layout[]
+  schedules     Schedule[]
+  invites       OrgInvite[]
+  auditLogs     AuditLog[]
+  screenGroups  ScreenGroup[]
+  proofOfPlays  ProofOfPlayLog[]
+  screenAlerts  ScreenAlert[]
 }
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
@@ -40,6 +45,8 @@ model User {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  auditLogs AuditLog[]
 }
 
 enum UserRole {
@@ -47,6 +54,34 @@ enum UserRole {
   ADMIN
   EDITOR
   VIEWER
+}
+
+model OrgInvite {
+  id         String    @id @default(cuid())
+  email      String
+  role       UserRole  @default(EDITOR)
+  token      String    @unique
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  action       String // e.g. "screen.create", "playlist.approve"
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 // ─── Screens ─────────────────────────────────────────────────────────────────
@@ -80,12 +115,63 @@ model Screen {
   layoutId String?
   layout   Layout? @relation(fields: [layoutId], references: [id])
 
-  schedules Schedule[]
+  groupId String?
+  group   ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  schedules       Schedule[]
+  proofOfPlays    ProofOfPlayLog[]
+  alerts          ScreenAlert[]
 }
 
 enum ScreenStatus {
   ONLINE
   OFFLINE
+}
+
+model ScreenGroup {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  screens Screen[]
+}
+
+model ProofOfPlayLog {
+  id         String   @id @default(cuid())
+  playedAt   DateTime
+  durationMs Int
+  createdAt  DateTime @default(now())
+
+  screenId String
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, screenId, playedAt])
+}
+
+model ScreenAlert {
+  id         String    @id @default(cuid())
+  type       String    // "OFFLINE" for now, extensible later
+  message    String
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  screenId String
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, resolvedAt])
 }
 
 // ─── Assets ──────────────────────────────────────────────────────────────────
@@ -108,7 +194,8 @@ model Asset {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  playlistItems PlaylistItem[]
+  playlistItems   PlaylistItem[]
+  proofOfPlays    ProofOfPlayLog[]
 }
 
 enum AssetType {
@@ -126,10 +213,11 @@ enum AssetStatus {
 // ─── Playlists ────────────────────────────────────────────────────────────────
 
 model Playlist {
-  id        String   @id @default(cuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String         @id @default(cuid())
+  name           String
+  approvalStatus ApprovalStatus @default(APPROVED)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -141,10 +229,18 @@ model Playlist {
   schedules         Schedule[]
 }
 
+enum ApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model PlaylistItem {
   id           String   @id @default(cuid())
   position     Int
   durationSecs Int      @default(10)
+  muted        Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

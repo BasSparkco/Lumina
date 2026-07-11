@@ -6,9 +6,10 @@ import { PlayerJwtStrategy } from './strategies/player-jwt.strategy';
 import { AuthModule } from '../auth/auth.module';
 import { WsModule } from '../ws/ws.module';
 import { SchedulesModule } from '../schedules/schedules.module';
+import { ProofOfPlayModule } from '../proof-of-play/proof-of-play.module';
 
 @Module({
-  imports: [PassportModule, AuthModule, WsModule, SchedulesModule],
+  imports: [PassportModule, AuthModule, WsModule, SchedulesModule, ProofOfPlayModule],
   providers: [PlayerService, PlayerJwtStrategy],
   controllers: [PlayerController],
 })

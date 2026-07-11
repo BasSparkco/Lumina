@@ -20,7 +20,7 @@ export class ConnectorsService implements OnModuleInit {
   private readonly redis: Redis;
 
   constructor(private readonly prisma: PrismaService) {
-    this.redis = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6381');
+    this.redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6381');
   }
 
   async onModuleInit() {
@@ -101,19 +101,19 @@ export class ConnectorsService implements OnModuleInit {
       await this.redis.set('feed:currency:EUR', JSON.stringify(normalized), 'EX', 7200); // 2h TTL
 
       // Also pre-compute USD base for convenience
-      if (rates['USD']) {
+      if (rates.USD) {
         const usdRates: Record<string, number> = {};
         for (const [cur, rate] of Object.entries(rates)) {
-          usdRates[cur] = parseFloat((rate / rates['USD']).toFixed(4));
+          usdRates[cur] = parseFloat((rate / rates.USD).toFixed(4));
         }
-        usdRates['USD'] = 1;
+        usdRates.USD = 1;
         const usdNorm = { base: 'USD', rates: usdRates, fetchedAt: normalized.fetchedAt };
         await this.redis.set('feed:currency:USD', JSON.stringify(usdNorm), 'EX', 7200);
       }
 
       this.logger.log(`Cached ECB currency rates (${Object.keys(rates).length} pairs)`);
     } catch (err) {
-      this.logger.warn(`Currency fetch failed: ${err}`);
+      this.logger.warn(`Currency fetch failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -125,7 +125,7 @@ export class ConnectorsService implements OnModuleInit {
     const xml = await res.text();
 
     // Simple regex extraction — covers standard RSS 2.0 and Atom
-    const items: Array<{ title: string; link: string; pubDate?: string }> = [];
+    const items: { title: string; link: string; pubDate?: string }[] = [];
     const itemMatches = xml.matchAll(/<item[^>]*>([\s\S]*?)<\/item>/g);
     for (const m of itemMatches) {
       const block = m[1] ?? '';

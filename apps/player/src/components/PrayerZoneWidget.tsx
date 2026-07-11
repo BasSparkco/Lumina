@@ -3,8 +3,6 @@ import {
   Coordinates,
   CalculationMethod,
   PrayerTimes,
-  Prayer,
-  SunnahTimes,
 } from 'adhan';
 
 const PRAYER_NAMES_EN: Record<string, string> = {
@@ -65,10 +63,6 @@ function computeTimes(lat: number, lon: number, method: PrayerMethod, date: Date
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-}
-
-function msUntil(target: Date): number {
-  return target.getTime() - Date.now();
 }
 
 export default function PrayerZoneWidget({ latitude, longitude, method, athanEnabled = false, athanUrl = DEFAULT_ATHAN_URL, lang = 'en' }: Props) {

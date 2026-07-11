@@ -58,7 +58,13 @@ export class AssetsService {
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' },
     });
-    return assets.map((a) => this.toDto(a, null));
+    return Promise.all(
+      assets.map(async (a: (typeof assets)[number]) => {
+        const url = await this.storage.signedUrl(a.storageKey);
+        const thumbUrl = a.thumbnailKey ? await this.storage.signedUrl(a.thumbnailKey) : null;
+        return this.toDto(a, url, thumbUrl);
+      }),
+    );
   }
 
   async findOne(orgId: string, id: string) {

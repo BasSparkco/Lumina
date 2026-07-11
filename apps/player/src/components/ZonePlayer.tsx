@@ -48,6 +48,22 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
     setIndex(i => (i + 1) % playlist.items.length);
   }
 
+  // Browsers block unmuted autoplay without prior user interaction — if that
+  // happens, fall back to muted playback rather than leaving the video paused.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || item?.asset.type !== 'VIDEO') return;
+    const playAttempt = el.play();
+    if (playAttempt) {
+      playAttempt.catch(() => {
+        if (!el.muted) {
+          el.muted = true;
+          void el.play();
+        }
+      });
+    }
+  }, [item]);
+
   if (!item) return null;
 
   return (
@@ -66,10 +82,11 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
           ref={videoRef}
           src={item.asset.url}
           autoPlay
-          muted
+          muted={item.muted}
+          loop={playlist.items.length === 1}
           playsInline
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-          onEnded={advance}
+          onEnded={playlist.items.length === 1 ? undefined : advance}
         />
       )}
       <video ref={preloadRef} style={{ display: 'none' }} preload="auto" muted />

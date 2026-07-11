@@ -4,13 +4,15 @@ import type { Job } from 'bullmq';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import ffprobePath from '@ffprobe-installer/ffprobe';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { StorageService } from '../storage/storage.service';
-import type { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfprobePath(ffprobePath.path);
 
 interface MediaJob {
   assetId: string;

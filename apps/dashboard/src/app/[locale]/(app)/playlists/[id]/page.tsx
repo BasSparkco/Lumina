@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ImageIcon, Film, Music, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw } from 'lucide-react';
+import { ImageIcon, Film, Music, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw, Volume2, VolumeX } from 'lucide-react';
 import { playlistsApi, assetsApi, type PlaylistItem, type Asset } from '@/lib/api';
 import { useLocale } from 'next-intl';
 
@@ -30,7 +30,8 @@ export default function PlaylistPage({ params }: { params: { id: string } }) {
   });
 
   const durMut = useMutation({
-    mutationFn: ({ itemId, dur }: { itemId: string; dur: number }) => playlistsApi.updateItem(id, itemId, dur),
+    mutationFn: ({ itemId, dur, muted }: { itemId: string; dur: number; muted: boolean }) =>
+      playlistsApi.updateItem(id, itemId, dur, muted),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
@@ -138,10 +139,19 @@ export default function PlaylistPage({ params }: { params: { id: string } }) {
 
             <div className="flex items-center gap-1 shrink-0">
               <input type="number" min={1} max={3600} value={item.durationSecs}
-                onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value) })}
+                onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value), muted: item.muted })}
                 className="w-14 border border-gray-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500" />
               <span className="text-xs text-gray-400">s</span>
             </div>
+
+            {item.asset.type === 'VIDEO' && (
+              <button
+                onClick={() => durMut.mutate({ itemId: item.id, dur: item.durationSecs, muted: !item.muted })}
+                title={item.muted ? 'Sound off — click to enable' : 'Sound on — click to mute'}
+                className={`p-1 shrink-0 transition-colors ${item.muted ? 'text-gray-300 hover:text-gray-600' : 'text-indigo-600 hover:text-indigo-700'}`}>
+                {item.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
 
             <button onClick={() => removeMut.mutate(item.id)}
               className="p-1 text-gray-300 hover:text-red-500 transition-colors">

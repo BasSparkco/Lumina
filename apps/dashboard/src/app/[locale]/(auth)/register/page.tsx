@@ -42,7 +42,7 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Create your account</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={e => { void handleSubmit(e); }} className="space-y-4">
           {field('Organization name', 'orgName')}
           {field('Your name', 'name')}
           {field('Email', 'email', 'email')}

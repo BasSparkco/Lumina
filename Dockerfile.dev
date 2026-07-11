@@ -1,0 +1,20 @@
+# Shared dev image for api, worker, and dashboard — hot-reload only, not for production.
+# Each service (see docker-compose.dev.yml) reuses this image and overrides `command` to pick
+# which app runs. Not used for apps/player (still run natively via `pnpm dev`).
+FROM node:20-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl python3 make g++ procps \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable
+
+WORKDIR /app
+
+COPY . .
+
+RUN pnpm install --frozen-lockfile
+# Prime the Prisma client into the store at build time so first container start doesn't stall.
+RUN pnpm --filter api exec prisma generate
+
+CMD ["pnpm", "dev"]

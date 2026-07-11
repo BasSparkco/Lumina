@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateScheduleDto } from './dto/create-schedule.dto';
-import type { Schedule } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 @Injectable()
 export class SchedulesService {
@@ -72,7 +72,7 @@ export class SchedulesService {
   }
 
   /** Returns the playlistId that should play right now for a given screen, or null. */
-  resolveNow(rules: Schedule[], now: Date): string | null {
+  resolveNow(rules: Prisma.ScheduleGetPayload<Record<string, never>>[], now: Date): string | null {
     const day = now.getDay();
     const hhmm = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
@@ -97,7 +97,7 @@ export class SchedulesService {
     return matching[0]?.playlistId ?? null;
   }
 
-  async getSchedulesForScreen(screenId: string): Promise<Schedule[]> {
+  async getSchedulesForScreen(screenId: string): Promise<Prisma.ScheduleGetPayload<Record<string, never>>[]> {
     return this.prisma.schedule.findMany({
       where: { screenId },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
