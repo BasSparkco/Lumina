@@ -73,7 +73,4 @@ manageable from the dashboard without needing direct API calls.
 
 ## Notes for coordinating with the backend track
 
-- If a mocked shape turns out to differ from what ships, that's expected — just re-check
-  `status-backend.md` "Breaking changes for frontend" periodically and adjust your fixtures/calls.
-- Keep mocks isolated (e.g. a `mocks/` or `fixtures/` folder) so swapping to real API calls is a
-  small diff, not a rewrite.
+- If a mocked shape turns out to differ from what shiz
