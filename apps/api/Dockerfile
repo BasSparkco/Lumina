@@ -1,5 +1,5 @@
 # ── Build stage ───────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /repo
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl python3 make g++ \
@@ -20,6 +20,9 @@ RUN pnpm install --frozen-lockfile
 # `generate`, which never opens a connection — a placeholder is enough at build time; the real
 # value is injected as a runtime env var by docker-compose for `migrate deploy`/the app itself.
 RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder" pnpm --filter api exec prisma generate
+# @lumina/db compiles the generated (Prisma-authored) client .ts sources to plain CommonJS —
+# it must be built before api, since api only consumes @lumina/db's compiled dist output.
+RUN pnpm --filter @lumina/db build
 RUN pnpm --filter api build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
@@ -28,7 +31,7 @@ RUN pnpm --filter api build
 # `output`) is guaranteed to match what was just typechecked and built — a fresh
 # `pnpm deploy --prod` here re-resolves node_modules and drops workspace-linked packages like
 # @lumina/db, breaking `new PrismaClient()` at runtime with a module-not-found error.
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /repo
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \

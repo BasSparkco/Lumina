@@ -1,5 +1,5 @@
 # ── Build stage ───────────────────────────────────────────────────────────────
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /repo
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl python3 make g++ \
@@ -16,12 +16,15 @@ COPY packages packages
 RUN pnpm install --frozen-lockfile
 
 RUN pnpm --filter worker exec prisma generate --schema=../api/prisma/schema.prisma
+# @lumina/db compiles the generated (Prisma-authored) client .ts sources to plain CommonJS —
+# it must be built before worker, since worker only consumes @lumina/db's compiled dist output.
+RUN pnpm --filter @lumina/db build
 RUN pnpm --filter worker build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 # Not a slim/pruned image — see apps/api/Dockerfile for why `pnpm deploy --prod` isn't used here
 # (it drops the generated Prisma client engine).
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /repo
 
 # ffmpeg/ffprobe (via the installer packages) and sharp both need these at runtime,

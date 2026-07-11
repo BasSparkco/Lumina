@@ -2,8 +2,11 @@
   "name": "@lumina/db",
   "version": "0.0.0",
   "private": true,
-  "main": "./generated/prisma/client.ts",
-  "types": "./generated/prisma/client.ts",
+  "main": "./dist/client.js",
+  "types": "./dist/client.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
   "dependencies": {
     "@prisma/client": "^7.8.0"
   }
