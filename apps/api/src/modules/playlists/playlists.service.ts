@@ -36,19 +36,17 @@ export class PlaylistsService {
     });
     if (!playlist) throw new NotFoundException('Playlist not found');
 
-    const itemsWithUrls = await Promise.all(
-      playlist.items.map(async (item: (typeof playlist.items)[number]) => ({
-        ...item,
-        asset: {
-          ...item.asset,
-          sizeBytes: Number(item.asset.sizeBytes),
-          url: await this.storage.signedUrl(item.asset.storageKey),
-          thumbnailUrl: item.asset.thumbnailKey
-            ? await this.storage.signedUrl(item.asset.thumbnailKey)
-            : null,
-        },
-      })),
-    );
+    const itemsWithUrls = playlist.items.map((item: (typeof playlist.items)[number]) => ({
+      ...item,
+      asset: {
+        ...item.asset,
+        sizeBytes: Number(item.asset.sizeBytes),
+        url: this.storage.publicUrl(item.asset.storageKey),
+        thumbnailUrl: item.asset.thumbnailKey
+          ? this.storage.publicUrl(item.asset.thumbnailKey)
+          : null,
+      },
+    }));
 
     return { ...playlist, items: itemsWithUrls };
   }

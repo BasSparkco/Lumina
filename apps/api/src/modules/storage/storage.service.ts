@@ -6,7 +6,15 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Readable } from 'stream';
+
+export interface MediaObject {
+  body: Readable;
+  contentType?: string;
+  contentLength?: number;
+  contentRange?: string;
+  statusCode: number;
+}
 
 @Injectable()
 export class StorageService {
@@ -34,25 +42,31 @@ export class StorageService {
     );
   }
 
+  /**
+   * Streams an object directly from the internal S3 endpoint (never returns a URL) — used to
+   * serve media publicly through the API itself, since S3_ENDPOINT is only reachable from
+   * inside the deployment network (e.g. the `minio` container hostname in prod) and a signed
+   * URL built from it can never be fetched by a browser.
+   */
+  async getObject(key: string, range?: string): Promise<MediaObject> {
+    const res = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key, ...(range && { Range: range }) }),
+    );
+    return {
+      body: res.Body as Readable,
+      contentType: res.ContentType,
+      contentLength: res.ContentLength,
+      contentRange: res.ContentRange,
+      statusCode: res.ContentRange ? 206 : 200,
+    };
+  }
+
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  async signedUrl(key: string, expiresIn = 3600, downloadFilename?: string): Promise<string> {
-    return getSignedUrl(
-      this.client,
-      new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ...(downloadFilename && {
-          ResponseContentDisposition: `attachment; filename="${downloadFilename.replace(/[\r\n"]/g, '')}"`,
-        }),
-      }),
-      { expiresIn },
-    );
-  }
-
-  publicUrl(key: string): string {
-    return `${this.cdnBase}/${key}`;
+  publicUrl(key: string, downloadFilename?: string): string {
+    const url = `${this.cdnBase}/${key}`;
+    return downloadFilename ? `${url}?download=${encodeURIComponent(downloadFilename)}` : url;
   }
 }

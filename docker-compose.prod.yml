@@ -80,6 +80,9 @@ services:
       NODE_ENV: production
       PORT: "4000"
       DASHBOARD_URL: "https://${DOMAIN}"
+      # The player PWA runs on its own subdomain and calls this API directly from the
+      # browser — must be CORS-whitelisted separately from DASHBOARD_URL (see main.ts).
+      PLAYER_URL: "https://${PLAYER_DOMAIN}"
       DATABASE_URL: "postgresql://lumina:${POSTGRES_PASSWORD}@postgres:5432/lumina"
       REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
       JWT_SECRET: ${JWT_SECRET}
@@ -88,7 +91,10 @@ services:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       S3_REGION: us-east-1
-      CDN_BASE_URL: "https://${DOMAIN}/media"
+      # Routed through the api's own /v1/media proxy — the api's public router already
+      # matches PathPrefix(`/v1`) below, so no extra Traefik route is needed. S3_ENDPOINT
+      # above (the `minio` container hostname) is internal-only and can't be given to browsers.
+      CDN_BASE_URL: "https://${DOMAIN}/v1/media"
       WEATHER_API_KEY: ${WEATHER_API_KEY:-}
       CURRENCY_API_KEY: ${CURRENCY_API_KEY:-}
       FLIGHTS_API_KEY: ${FLIGHTS_API_KEY:-}

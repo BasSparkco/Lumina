@@ -15,7 +15,13 @@ async function bootstrap() {
 
   app.useLogger(app.get(Logger));
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.enableCors({ origin: process.env.DASHBOARD_URL ?? '*' });
+  // Two distinct browser origins call this API directly: the dashboard and the player PWA
+  // (physical screens, on its own subdomain). Both need to be whitelisted, or requests from
+  // whichever one is missing get silently CORS-blocked in the browser.
+  const allowedOrigins = [process.env.DASHBOARD_URL, process.env.PLAYER_URL].filter(
+    (v): v is string => Boolean(v),
+  );
+  app.enableCors({ origin: allowedOrigins.length ? allowedOrigins : '*' });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
     new ValidationPipe({

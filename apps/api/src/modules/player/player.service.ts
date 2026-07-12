@@ -171,7 +171,7 @@ export class PlayerService {
     items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null } }[];
   }) {
     const items = await Promise.all(
-      playlist.items.map(async item => ({
+      playlist.items.map(item => ({
         id: item.id,
         position: item.position,
         durationSecs: item.durationSecs,
@@ -181,9 +181,9 @@ export class PlayerService {
           name: item.asset.name,
           type: item.asset.type,
           mimeType: item.asset.mimeType,
-          url: await this.storage.signedUrl(item.asset.storageKey, 86400),
+          url: this.storage.publicUrl(item.asset.storageKey),
           thumbnailUrl: item.asset.thumbnailKey
-            ? await this.storage.signedUrl(item.asset.thumbnailKey, 86400)
+            ? this.storage.publicUrl(item.asset.thumbnailKey)
             : null,
         },
       })),

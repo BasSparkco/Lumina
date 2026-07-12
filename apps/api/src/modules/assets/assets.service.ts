@@ -60,9 +60,9 @@ export class AssetsService {
     });
     return Promise.all(
       assets.map(async (a: (typeof assets)[number]) => {
-        const url = await this.storage.signedUrl(a.storageKey);
-        const downloadUrl = await this.storage.signedUrl(a.storageKey, 3600, a.name);
-        const thumbUrl = a.thumbnailKey ? await this.storage.signedUrl(a.thumbnailKey) : null;
+        const url = this.storage.publicUrl(a.storageKey);
+        const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
+        const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
         return this.toDto(a, url, thumbUrl, downloadUrl);
       }),
     );
@@ -72,9 +72,9 @@ export class AssetsService {
     const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
 
-    const url = await this.storage.signedUrl(asset.storageKey);
-    const downloadUrl = await this.storage.signedUrl(asset.storageKey, 3600, asset.name);
-    const thumbUrl = asset.thumbnailKey ? await this.storage.signedUrl(asset.thumbnailKey) : null;
+    const url = this.storage.publicUrl(asset.storageKey);
+    const downloadUrl = this.storage.publicUrl(asset.storageKey, asset.name);
+    const thumbUrl = asset.thumbnailKey ? this.storage.publicUrl(asset.thumbnailKey) : null;
     return this.toDto(asset, url, thumbUrl, downloadUrl);
   }
 
@@ -108,7 +108,7 @@ export class AssetsService {
 
   private toDto(
     asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; status: string; organizationId: string; createdAt: Date },
-    signedUrl: string | null,
+    url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
   ) {
@@ -122,7 +122,7 @@ export class AssetsService {
       width: asset.width,
       height: asset.height,
       status: asset.status,
-      url: signedUrl,
+      url,
       thumbnailUrl: thumbUrl ?? null,
       downloadUrl: downloadUrl ?? null,
       organizationId: asset.organizationId,
