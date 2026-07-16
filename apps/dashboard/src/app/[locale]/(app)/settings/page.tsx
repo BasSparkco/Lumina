@@ -1,11 +1,13 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { Moon, Sun, SettingsIcon, Clock, Globe, Timer, ShieldQuestion } from 'lucide-react';
+import { Moon, Sun, SettingsIcon, Clock, Globe, Timer, ShieldQuestion, CalendarDays } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useTimeFormat } from '@/hooks/useTimeFormat';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useDefaultItemDuration } from '@/hooks/useDefaultItemDuration';
+import { useFaithFeatures } from '@/hooks/useFaithFeatures';
+import { useDateFormat } from '@/hooks/useDateFormat';
 import { Toggle } from '@/components/Toggle';
 
 function SettingRow({ icon, title, description, control }: { icon: React.ReactNode; title: string; description: string; control: React.ReactNode }) {
@@ -30,6 +32,8 @@ export default function SettingsPage() {
   const { format, setFormat } = useTimeFormat();
   const { enabled: confirmBeforeDelete, setEnabled: setConfirmBeforeDelete } = useConfirmBeforeDelete();
   const { duration, setDuration } = useDefaultItemDuration();
+  const { enabled: faithFeatures, setEnabled: setFaithFeatures } = useFaithFeatures();
+  const { format: dateFormat, setFormat: setDateFormat } = useDateFormat();
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
@@ -90,6 +94,31 @@ export default function SettingsPage() {
             </button>
           </div>
         }
+      />
+
+      <SettingRow
+        icon={<CalendarDays className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+        title={t('dateFormat')}
+        description={t('dateFormatDesc')}
+        control={
+          <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <button onClick={() => setDateFormat('DD/MM/YYYY')}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${dateFormat === 'DD/MM/YYYY' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+              DD/MM/YYYY
+            </button>
+            <button onClick={() => setDateFormat('MM/DD/YYYY')}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-gray-200 dark:border-gray-700 ${dateFormat === 'MM/DD/YYYY' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+              MM/DD/YYYY
+            </button>
+          </div>
+        }
+      />
+
+      <SettingRow
+        icon={<Moon className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+        title={t('faithFeatures')}
+        description={t('faithFeaturesDesc')}
+        control={<Toggle checked={faithFeatures} onChange={setFaithFeatures} />}
       />
 
       <SettingRow

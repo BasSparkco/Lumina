@@ -6,6 +6,7 @@ import { History, ChevronLeft, ChevronRight, Users, List, Monitor, ImageIcon, La
 import { auditLogApi, AUDIT_ACTION_STYLES, type AuditResourceType, type AuditLogEntry } from '@/lib/mocks/auditLog';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
+import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
 
 const RESOURCE_TYPES: AuditResourceType[] = ['MEMBER', 'PLAYLIST', 'SCREEN', 'ASSET', 'LAYOUT', 'SCHEDULE', 'GROUP'];
 
@@ -26,6 +27,7 @@ export default function AuditLogPage() {
   const canRender = useRouteGuard(canViewAuditLog);
   const t = useTranslations('auditLog');
   const tc = useTranslations('common');
+  const { format: dateFormat } = useDateFormat();
 
   const [resourceType, setResourceType] = useState<AuditResourceType | 'ALL'>('ALL');
   const [fromDate, setFromDate] = useState('');
@@ -135,7 +137,7 @@ export default function AuditLogPage() {
                 return (
                   <tr key={entry.id}>
                     <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {new Date(entry.timestamp).toLocaleString()}
+                      {formatDateTime(entry.timestamp, dateFormat)}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="text-gray-900 dark:text-gray-100">{entry.userName}</div>

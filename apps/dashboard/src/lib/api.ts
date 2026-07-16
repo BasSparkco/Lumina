@@ -64,8 +64,13 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/layout`, { method: 'PUT', body: JSON.stringify({ layoutId }) }),
   setEmergency: (id: string, active: boolean, playlistId?: string) =>
     req<Screen>(`/screens/${id}/emergency`, { method: 'PUT', body: JSON.stringify({ active, playlistId }) }),
+  setStopped: (id: string, stopped: boolean) =>
+    req<Screen>(`/screens/${id}/stop`, { method: 'PUT', body: JSON.stringify({ stopped }) }),
   updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string }) =>
     req<Screen>(`/screens/${id}/prayer`, { method: 'PUT', body: JSON.stringify(data) }),
+  captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
+  crashReports: (id: string) => req<CrashReport[]>(`/screens/${id}/crash-reports`),
+  fleetStatus: () => req<FleetStatus>('/screens/fleet-status'),
 };
 
 // ── Assets ──────────────────────────────────────────────────────────────────
@@ -88,6 +93,10 @@ export const assetsApi = {
   get: (id: string) => req<Asset>(`/assets/${id}`),
   rename: (id: string, name: string) => req<Asset>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   remove: (id: string) => req<void>(`/assets/${id}`, { method: 'DELETE' }),
+  createText: (name: string, content: string, style: TextStyle) =>
+    req<Asset>('/assets/text', { method: 'POST', body: JSON.stringify({ name, content, ...style }) }),
+  updateText: (id: string, dto: { name?: string; content?: string } & Partial<TextStyle>) =>
+    req<Asset>(`/assets/${id}/text`, { method: 'PUT', body: JSON.stringify(dto) }),
 };
 
 // ── Playlists ────────────────────────────────────────────────────────────────
@@ -103,6 +112,8 @@ export const playlistsApi = {
     req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted }) }),
   removeItem: (id: string, itemId: string) => req<void>(`/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
   reorder: (id: string, ids: string[]) => req<void>(`/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
+  updateConfig: (id: string, config: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder }) =>
+    req<Playlist>(`/playlists/${id}/config`, { method: 'PUT', body: JSON.stringify(config) }),
 };
 
 // ── Layouts ─────────────────────────────────────────────────────────────────
@@ -144,19 +155,38 @@ export interface ScheduleEntry extends CreateScheduleInput {
 export interface Screen {
   id: string; name: string; status: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null;
   paired: boolean; playlistId: string | null; playlist?: { id: string; name: string } | null;
-  layoutId: string | null; emergencyActive: boolean;
+  layoutId: string | null; emergencyActive: boolean; stopped: boolean;
   latitude: number | null; longitude: number | null;
   prayerMethod: string; athanEnabled: boolean; timezone: string;
+  screenshotUrl: string | null; screenshotUpdatedAt: string | null;
+  hasContent: boolean;
 }
+export interface CrashReport {
+  id: string; type: 'UNCAUGHT_EXCEPTION' | 'WATCHDOG_RECOVERY'; summary: string;
+  stackTrace: string | null; occurredAt: string;
+}
+export interface FleetStatus {
+  total: number; online: number; offline: number;
+  screens: { id: string; crashCount7d: number }[];
+}
+export type TextFontFamily = 'SANS' | 'SERIF' | 'MONOSPACE';
+export type TextSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE';
+export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; }
 export interface Asset {
-  id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO'; mimeType: string;
+  id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT'; mimeType: string;
   sizeBytes: number; status: string; url: string | null; thumbnailUrl: string | null;
-  downloadUrl: string | null;
+  downloadUrl: string | null; textContent: string | null;
+  textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
   width: number | null; height: number | null; durationSecs: number | null; createdAt: string;
 }
 export interface PlaylistItem {
   id: string; position: number; durationSecs: number; muted: boolean;
   asset: Asset;
 }
+export type TransitionStyle = 'NONE' | 'CROSSFADE';
+export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
 export interface PlaylistSummary { id: string; name: string; _count: { items: number }; updatedAt: string; }
-export interface Playlist extends PlaylistSummary { items: PlaylistItem[]; }
+export interface Playlist extends PlaylistSummary {
+  items: PlaylistItem[];
+  transitionStyle: TransitionStyle; transitionDurationMs: number; playbackOrder: PlaybackOrder;
+}

@@ -6,6 +6,19 @@ interface Props {
   onAssetChange?: (assetId: string) => void;
 }
 
+const FONT_FAMILY_STACKS: Record<string, string> = {
+  SANS: 'system-ui, sans-serif',
+  SERIF: 'Georgia, "Times New Roman", serif',
+  MONOSPACE: '"Courier New", monospace',
+};
+
+const FONT_SIZE_CLAMPS: Record<string, string> = {
+  SMALL: 'clamp(1rem, 3vw, 2.5rem)',
+  MEDIUM: 'clamp(1.5rem, 5vw, 5rem)',
+  LARGE: 'clamp(2rem, 7vw, 7rem)',
+  XLARGE: 'clamp(2.5rem, 9vw, 9rem)',
+};
+
 export default function ZonePlayer({ playlist, onAssetChange }: Props) {
   const [index, setIndex] = useState(0);
   const [item, setItem] = useState<PlaylistItem | null>(null);
@@ -27,7 +40,7 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
 
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    if (current.asset.type === 'IMAGE') {
+    if (current.asset.type === 'IMAGE' || current.asset.type === 'TEXT') {
       timerRef.current = setTimeout(advance, current.durationSecs * 1000);
     }
     // VIDEO: onEnded triggers advance
@@ -35,7 +48,7 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
     // Preload next video
     const nextIdx = (index + 1) % playlist.items.length;
     const next = playlist.items[nextIdx];
-    if (next?.asset.type === 'VIDEO' && preloadRef.current) {
+    if (next?.asset.type === 'VIDEO' && next.asset.url && preloadRef.current) {
       preloadRef.current.src = next.asset.url;
       preloadRef.current.load();
     }
@@ -68,16 +81,44 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
       {item.asset.type === 'IMAGE' && (
         <img
           key={item.id}
-          src={item.asset.url}
+          src={item.asset.url ?? undefined}
           alt={item.asset.name}
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         />
+      )}
+      {item.asset.type === 'TEXT' && (
+        <div
+          key={item.id}
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '5%',
+            boxSizing: 'border-box',
+          }}
+        >
+          <p
+            style={{
+              color: item.asset.textColor ?? '#fff',
+              fontFamily: FONT_FAMILY_STACKS[item.asset.textFontFamily ?? 'SANS'],
+              fontSize: FONT_SIZE_CLAMPS[item.asset.textSize ?? 'MEDIUM'],
+              textAlign: 'center',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              margin: 0,
+            }}
+          >
+            {item.asset.textContent}
+          </p>
+        </div>
       )}
       {item.asset.type === 'VIDEO' && (
         <video
           key={item.id}
           ref={videoRef}
-          src={item.asset.url}
+          src={item.asset.url ?? undefined}
           autoPlay
           muted={item.muted}
           loop={playlist.items.length === 1}

@@ -8,6 +8,7 @@ import { proofOfPlayApi, type ProofOfPlayEntry } from '@/lib/mocks/proofOfPlay';
 import { getUptimePercents } from '@/lib/mocks/uptime';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
 import { downloadCsv } from '@/lib/csv';
+import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
 
 const PAGE_SIZE = 10;
 const CHART_HEIGHT_PX = 100;
@@ -33,6 +34,7 @@ function formatDuration(ms: number): string {
 
 function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
   const t = useTranslations('reports');
+  const { format: dateFormat } = useDateFormat();
 
   const [screenId, setScreenId] = useState<string>('ALL');
   const [fromDate, setFromDate] = useState('');
@@ -85,7 +87,7 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
     downloadCsv(
       `proof-of-play-${new Date().toISOString().slice(0, 10)}.csv`,
       [t('time'), t('screenColumn'), t('asset'), t('playlist'), t('duration')],
-      filtered.map(e => [new Date(e.playedAt).toLocaleString(), e.screenName, e.assetName, e.playlistName, e.durationSecs]),
+      filtered.map(e => [formatDateTime(e.playedAt, dateFormat), e.screenName, e.assetName, e.playlistName, e.durationSecs]),
     );
   }
 
@@ -172,7 +174,7 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
               {pageItems.map(entry => (
                 <tr key={entry.id}>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                    {new Date(entry.playedAt).toLocaleString()}
+                    {formatDateTime(entry.playedAt, dateFormat)}
                   </td>
                   <td className="px-4 py-2.5 text-gray-900 dark:text-gray-100">{entry.screenName}</td>
                   <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">{entry.assetName}</td>
@@ -202,10 +204,13 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
   );
 }
 
+const CRASH_LOOP_THRESHOLD = 3;
+
 function FleetTab({ screens, screensLoading }: { screens: Screen[]; screensLoading: boolean }) {
   const t = useTranslations('fleet');
   const ts = useTranslations('screens');
   const liveStatuses = useScreenSocket();
+  const { format: dateFormat } = useDateFormat();
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -214,6 +219,12 @@ function FleetTab({ screens, screensLoading }: { screens: Screen[]; screensLoadi
   }, []);
 
   const uptimeByScreen = useMemo(() => getUptimePercents(screens.map(s => s.id)), [screens]);
+
+  const { data: fleetStatus } = useQuery({ queryKey: ['fleetStatus'], queryFn: screensApi.fleetStatus });
+  const crashCountByScreen = useMemo(
+    () => Object.fromEntries((fleetStatus?.screens ?? []).map(s => [s.id, s.crashCount7d])),
+    [fleetStatus],
+  );
 
   function effectiveStatus(screen: Screen): 'ONLINE' | 'OFFLINE' {
     if (!screen.lastSeenAt || msSince(screen.lastSeenAt, now) > OFFLINE_THRESHOLD_MS) return 'OFFLINE';
@@ -273,6 +284,7 @@ function FleetTab({ screens, screensLoading }: { screens: Screen[]; screensLoadi
                 <th className="text-start font-medium px-4 py-2.5">{t('status')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('lastSeenColumn')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('uptime')}</th>
+                <th className="text-start font-medium px-4 py-2.5">{t('crashes7d')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -296,9 +308,23 @@ function FleetTab({ screens, screensLoading }: { screens: Screen[]; screensLoadi
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                    {screen.lastSeenAt ? new Date(screen.lastSeenAt).toLocaleString() : ts('neverSeen')}
+                    {screen.lastSeenAt ? formatDateTime(screen.lastSeenAt, dateFormat) : ts('neverSeen')}
                   </td>
                   <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">{uptimeByScreen[screen.id] ?? 0}%</td>
+                  <td className="px-4 py-2.5">
+                    {(crashCountByScreen[screen.id] ?? 0) > 0 ? (
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                        (crashCountByScreen[screen.id] ?? 0) >= CRASH_LOOP_THRESHOLD
+                          ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400'
+                          : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400'
+                      }`}>
+                        {(crashCountByScreen[screen.id] ?? 0) >= CRASH_LOOP_THRESHOLD && <AlertTriangle className="w-3 h-3" />}
+                        {crashCountByScreen[screen.id]}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 dark:text-gray-600">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

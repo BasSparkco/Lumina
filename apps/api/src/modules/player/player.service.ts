@@ -53,7 +53,9 @@ export class PlayerService {
 
   /**
    * Full player state:
-   *   - emergencyActive + emergencyPlaylist (takes priority over everything)
+   *   - stopped (highest priority — blanks the screen regardless of everything below,
+   *     including an active emergency override)
+   *   - emergencyActive + emergencyPlaylist (takes priority over layout/schedule)
    *   - layout with signed-URL playlists per zone (if a layout is assigned)
    *   - scheduleRules (with their playlists pre-fetched) for local resolver
    *   - defaultPlaylist as fallback when no schedule rule matches
@@ -126,6 +128,7 @@ export class PlayerService {
       longitude: screen.longitude,
       prayerMethod: screen.prayerMethod,
       athanEnabled: screen.athanEnabled,
+      stopped: screen.stopped,
       emergencyActive: screen.emergencyActive,
       emergencyPlaylist: screen.emergencyPlaylist
         ? await this.hydratePlaylist(screen.emergencyPlaylist)
@@ -154,10 +157,38 @@ export class PlayerService {
     };
   }
 
-  async heartbeat(screenId: string, _currentAssetId: string | null) {
+  async uploadScreenshot(orgId: string, screenId: string, jpeg: Buffer) {
+    await this.storage.upload(this.storage.screenshotKey(orgId, screenId), jpeg, 'image/jpeg');
+    await this.prisma.screen.update({ where: { id: screenId }, data: { screenshotUpdatedAt: new Date() } });
+    return { ok: true };
+  }
+
+  async ingestCrashReports(orgId: string, screenId: string, events: { type: string; summary: string; stackTrace?: string; occurredAt: string }[]) {
+    if (events.length === 0) return { ok: true, count: 0 };
+    const { count } = await this.prisma.crashReport.createMany({
+      data: events.map(e => ({
+        screenId,
+        organizationId: orgId,
+        type: e.type,
+        summary: e.summary,
+        stackTrace: e.stackTrace,
+        occurredAt: new Date(e.occurredAt),
+      })),
+    });
+    return { ok: true, count };
+  }
+
+  async heartbeat(screenId: string, _currentAssetId: string | null, hasContent?: boolean) {
     const screen = await this.prisma.screen.update({
       where: { id: screenId },
-      data: { lastSeenAt: new Date(), status: 'ONLINE' },
+      data: {
+        lastSeenAt: new Date(),
+        status: 'ONLINE',
+        // Only the player knows whether *right now* actually resolves to playable content
+        // (schedule gaps, locally-resolved layout zones) — omit means "unchanged," not "false,"
+        // so older player builds that don't send this yet don't flip screens to the badge.
+        ...(hasContent !== undefined ? { hasContent } : {}),
+      },
     });
     if (screen.organizationId) {
       this.gateway.sendStatusToOrg(screen.organizationId, screenId, 'ONLINE');
@@ -168,26 +199,45 @@ export class PlayerService {
   private async hydratePlaylist(playlist: {
     id: string;
     name: string;
-    items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null } }[];
+    transitionStyle: string;
+    transitionDurationMs: number;
+    playbackOrder: string;
+    items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null } }[];
   }) {
     const items = await Promise.all(
-      playlist.items.map(item => ({
-        id: item.id,
-        position: item.position,
-        durationSecs: item.durationSecs,
-        muted: item.muted,
-        asset: {
-          id: item.asset.id,
-          name: item.asset.name,
-          type: item.asset.type,
-          mimeType: item.asset.mimeType,
-          url: this.storage.publicUrl(item.asset.storageKey),
-          thumbnailUrl: item.asset.thumbnailKey
-            ? this.storage.publicUrl(item.asset.thumbnailKey)
-            : null,
-        },
-      })),
+      playlist.items.map(item => {
+        // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
+        // the player renders textContent directly instead of loading a url.
+        const isText = item.asset.type === 'TEXT';
+        return {
+          id: item.id,
+          position: item.position,
+          durationSecs: item.durationSecs,
+          muted: item.muted,
+          asset: {
+            id: item.asset.id,
+            name: item.asset.name,
+            type: item.asset.type,
+            mimeType: item.asset.mimeType,
+            url: isText ? null : this.storage.publicUrl(item.asset.storageKey),
+            thumbnailUrl: !isText && item.asset.thumbnailKey
+              ? this.storage.publicUrl(item.asset.thumbnailKey)
+              : null,
+            textContent: item.asset.textContent,
+            textFontFamily: item.asset.textFontFamily,
+            textColor: item.asset.textColor,
+            textSize: item.asset.textSize,
+          },
+        };
+      }),
     );
-    return { id: playlist.id, name: playlist.name, items };
+    return {
+      id: playlist.id,
+      name: playlist.name,
+      transitionStyle: playlist.transitionStyle,
+      transitionDurationMs: playlist.transitionDurationMs,
+      playbackOrder: playlist.playbackOrder,
+      items,
+    };
   }
 }

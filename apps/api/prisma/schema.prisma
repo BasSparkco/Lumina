@@ -31,6 +31,7 @@ model Organization {
   screenGroups  ScreenGroup[]
   proofOfPlays  ProofOfPlayLog[]
   screenAlerts  ScreenAlert[]
+  crashReports  CrashReport[]
 }
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
@@ -101,6 +102,17 @@ model Screen {
   prayerMethod        String       @default("UmmAlQura")
   athanEnabled        Boolean      @default(false)
   emergencyActive     Boolean      @default(false)
+  stopped             Boolean      @default(false)
+  // Item 5 (awaiting-content badge) — reported by the player on each heartbeat, since it's the
+  // one that actually knows whether *right now* resolves to real content (schedule gaps,
+  // locally-resolved layout zones, etc.), not just "is a playlist assigned." Defaults to false
+  // (unconfirmed) rather than true, so a freshly paired screen reads as "awaiting content" until
+  // its first heartbeat says otherwise, instead of silently looking fine.
+  hasContent          Boolean      @default(false)
+  // Live-preview screenshot: stored at a deterministic storage key (see StorageService screenshot
+  // helpers), overwritten in place on every upload — this is a single "latest" preview, not a
+  // history, so no key/id needs to live in the DB, just whether/when one has ever landed.
+  screenshotUpdatedAt DateTime?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -122,6 +134,7 @@ model Screen {
   schedules       Schedule[]
   proofOfPlays    ProofOfPlayLog[]
   alerts          ScreenAlert[]
+  crashReports    CrashReport[]
 }
 
 enum ScreenStatus {
@@ -175,6 +188,23 @@ model ScreenAlert {
   @@index([organizationId, resolvedAt])
 }
 
+model CrashReport {
+  id         String   @id @default(cuid())
+  type       String   // "UNCAUGHT_EXCEPTION" | "WATCHDOG_RECOVERY" — free-form, same convention as ScreenAlert.type
+  summary    String
+  stackTrace String?
+  occurredAt DateTime // when the crash actually happened on-device, not when it reached us
+  createdAt  DateTime @default(now())
+
+  screenId String
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, screenId, occurredAt])
+}
+
 // ─── Assets ──────────────────────────────────────────────────────────────────
 
 model Asset {
@@ -182,12 +212,21 @@ model Asset {
   name         String
   type         AssetType
   mimeType     String
-  storageKey   String    // S3/R2 object key — never the full URL
+  storageKey   String    // S3/R2 object key — never the full URL. Unused (synthetic key,
+                         // nothing ever uploaded) for TEXT assets, which store their content
+                         // in textContent instead of an object.
   thumbnailKey String?
   sizeBytes    BigInt
   durationSecs Float?    // for video/audio
   width        Int?
   height       Int?
+  textContent  String?   // plain-text body for TEXT assets only
+  // Styling for TEXT assets only — null means "use the player's default" for that field,
+  // so non-TEXT assets never carry these and a TEXT asset created before this field existed
+  // still renders sensibly instead of blank/broken.
+  textFontFamily TextFontFamily?
+  textColor      String?         // "#RRGGBB"
+  textSize       TextSize?
   status       AssetStatus @default(PROCESSING)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -203,6 +242,20 @@ enum AssetType {
   IMAGE
   VIDEO
   AUDIO
+  TEXT
+}
+
+enum TextFontFamily {
+  SANS
+  SERIF
+  MONOSPACE
+}
+
+enum TextSize {
+  SMALL
+  MEDIUM
+  LARGE
+  XLARGE
 }
 
 enum AssetStatus {
@@ -217,6 +270,11 @@ model Playlist {
   id             String         @id @default(cuid())
   name           String
   approvalStatus ApprovalStatus @default(APPROVED)
+  // Item 8 (transition effects) and item 9 (shuffle) — both configurable per playlist, not
+  // per item, per the plain-English "configurable per playlist" framing in roadmap2.0.md.
+  transitionStyle       TransitionStyle @default(NONE)
+  transitionDurationMs  Int             @default(500)
+  playbackOrder         PlaybackOrder   @default(SEQUENTIAL)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -235,6 +293,16 @@ enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum TransitionStyle {
+  NONE
+  CROSSFADE
+}
+
+enum PlaybackOrder {
+  SEQUENTIAL
+  SHUFFLE
 }
 
 model PlaylistItem {

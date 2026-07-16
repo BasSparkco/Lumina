@@ -32,10 +32,14 @@ export interface PlaylistItem {
   asset: {
     id: string;
     name: string;
-    type: 'IMAGE' | 'VIDEO' | 'AUDIO';
+    type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT';
     mimeType: string;
-    url: string;
+    url: string | null;
     thumbnailUrl: string | null;
+    textContent: string | null;
+    textFontFamily: 'SANS' | 'SERIF' | 'MONOSPACE' | null;
+    textColor: string | null;
+    textSize: 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE' | null;
   };
 }
 
@@ -79,6 +83,7 @@ export interface PlayerState {
   longitude: number | null;
   prayerMethod: string;
   athanEnabled: boolean;
+  stopped: boolean;
   emergencyActive: boolean;
   emergencyPlaylist: Playlist | null;
   layout: { id: string; name: string; zones: Zone[] } | null;

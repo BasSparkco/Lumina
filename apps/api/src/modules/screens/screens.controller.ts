@@ -69,6 +69,16 @@ export class ScreensController {
     return this.screens.reloadScreen(user.orgId, id);
   }
 
+  @Post(':id/capture-screenshot')
+  captureScreenshot(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.captureScreenshot(user.orgId, id);
+  }
+
+  @Get(':id/crash-reports')
+  crashReports(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.crashReports(user.orgId, id);
+  }
+
   @Put(':id/emergency')
   setEmergency(
     @CurrentUser() user: JwtUser,
@@ -76,6 +86,15 @@ export class ScreensController {
     @Body() dto: { active: boolean; playlistId?: string },
   ) {
     return this.screens.setEmergency(user.orgId, id, dto.active, dto.playlistId);
+  }
+
+  @Put(':id/stop')
+  setStopped(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: { stopped: boolean },
+  ) {
+    return this.screens.setStopped(user.orgId, id, dto.stopped);
   }
 
   @Put(':id/prayer')

@@ -111,6 +111,10 @@ export default function PlayerPage() {
   if (!loaded) return <Splash text="Loading…" />;
   if (!state) return <Splash text="No content assigned" />;
 
+  // Stopped from the dashboard — takes priority over everything else, including an
+  // active emergency override, since it's an explicit "blank this screen now" action.
+  if (state.stopped) return <Splash text="Playback stopped" />;
+
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (

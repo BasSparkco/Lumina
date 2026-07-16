@@ -154,7 +154,39 @@
       "publishToGroup": "نشر إلى المجموعة",
       "publishing": "جارٍ النشر…",
       "published": "{count, plural, zero {تم النشر إلى لا شاشات} one {تم النشر إلى شاشة واحدة} two {تم النشر إلى شاشتين} few {تم النشر إلى # شاشات} many {تم النشر إلى # شاشة} other {تم النشر إلى # شاشة}}"
-    }
+    },
+    "stoppedBanner": "تم إيقاف البث",
+    "stopStreamTitle": "إيقاف البث على هذه الشاشة",
+    "resumeStreamTitle": "استئناف البث على هذه الشاشة",
+    "nameWarning": {
+      "title": "امنح هذه الشاشة اسمًا",
+      "body": "قد يكون من السهل الخلط بين \"{name}\" وشاشات أخرى لاحقًا — أعد تسميتها الآن، أو تخطَّ هذه الخطوة للاحتفاظ بهذا الاسم.",
+      "placeholder": "مثال: شاشة الاستقبال",
+      "skip": "تخطي",
+      "save": "حفظ الاسم",
+      "saving": "جارٍ الحفظ…"
+    },
+    "screenshot": {
+      "title": "معاينة مباشرة",
+      "show": "إظهار المعاينة المباشرة",
+      "hide": "إخفاء المعاينة المباشرة",
+      "refresh": "تحديث الآن",
+      "capturedAt": "التُقطت {when}",
+      "none": "لا توجد لقطة شاشة بعد — اضغط تحديث لطلب واحدة من الشاشة."
+    },
+    "crashHistory": {
+      "title": "سجل الأعطال",
+      "show": "إظهار سجل الأعطال",
+      "hide": "إخفاء سجل الأعطال",
+      "loading": "جارٍ تحميل سجل الأعطال…",
+      "none": "لا توجد أعطال مسجَّلة.",
+      "type": {
+        "UNCAUGHT_EXCEPTION": "عطل",
+        "WATCHDOG_RECOVERY": "استعادة قسرية (تجمّد)"
+      }
+    },
+    "awaitingContent": "بانتظار المحتوى",
+    "awaitingContentTitle": "هذه الشاشة لا تعرض حاليًا أي محتوى قابل للتشغيل"
   },
   "assets": {
     "title": "الأصول",
@@ -167,7 +199,28 @@
     "view": "عرض",
     "download": "تنزيل",
     "deleteConfirm": "هل تريد حذف هذا الأصل؟",
-    "deleteAsset": "حذف الأصل"
+    "deleteAsset": "حذف الأصل",
+    "newText": "نص جديد",
+    "newTextModalTitle": "أصل نصي جديد",
+    "newTextNamePlaceholder": "مثال: رسالة ترحيب",
+    "newTextContentLabel": "المحتوى",
+    "newTextContentPlaceholder": "اكتب النص المراد عرضه…",
+    "newTextSaving": "جارٍ الحفظ…",
+    "newTextSave": "حفظ",
+    "editTextModalTitle": "تعديل الأصل النصي",
+    "style": {
+      "font": "الخط",
+      "fontSans": "بلا زوائد",
+      "fontSerif": "ذو زوائد",
+      "fontMonospace": "ثابت العرض",
+      "size": "الحجم",
+      "sizeSmall": "صغير",
+      "sizeMedium": "متوسط",
+      "sizeLarge": "كبير",
+      "sizeXlarge": "كبير جدًا",
+      "color": "اللون",
+      "preview": "معاينة"
+    }
   },
   "playlists": {
     "title": "قوائم التشغيل",
@@ -196,7 +249,18 @@
     "submitForReview": "إرسال للمراجعة",
     "submitting": "جارٍ الإرسال…",
     "pendingReviewBanner": "تم إرسال قائمة التشغيل هذه وهي بانتظار الموافقة.",
-    "rejectedReasonLabel": "مرفوضة — السبب"
+    "rejectedReasonLabel": "مرفوضة — السبب",
+    "transition": {
+      "label": "الانتقال",
+      "none": "بدون (قطع مباشر)",
+      "crossfade": "تلاشٍ متبادل",
+      "ms": "مللي ثانية"
+    },
+    "playbackOrder": {
+      "label": "الترتيب",
+      "sequential": "متسلسل",
+      "shuffle": "عشوائي"
+    }
   },
   "layouts": {
     "title": "التخطيطات",
@@ -383,7 +447,9 @@
       "REJECT": "تم الرفض",
       "ADD_ITEM": "تمت إضافة عنصر",
       "REMOVE_ITEM": "تمت إزالة عنصر"
-    }
+    },
+    "detailStopped": "تم إيقاف البث",
+    "detailResumed": "تم استئناف البث"
   },
   "reports": {
     "title": "التقارير",
@@ -420,7 +486,8 @@
     "status": "الحالة",
     "lastSeenColumn": "آخر ظهور",
     "uptime": "وقت التشغيل (7 أيام)",
-    "offlineFor": "غير متصلة منذ {duration}"
+    "offlineFor": "غير متصلة منذ {duration}",
+    "crashes7d": "الأعطال (7 أيام)"
   },
   "billing": {
     "title": "الفوترة",
@@ -460,6 +527,10 @@
     "defaultDurationDesc": "عدد الثواني التي يُعرض خلالها عنصر قائمة التشغيل الجديد افتراضيًا",
     "sec": "ث",
     "confirmBeforeDelete": "تأكيد قبل الحذف",
-    "confirmBeforeDeleteDesc": "إظهار مربّع حوار للتأكيد قبل حذف أو إزالة العناصر"
+    "confirmBeforeDeleteDesc": "إظهار مربّع حوار للتأكيد قبل حذف أو إزالة العناصر",
+    "dateFormat": "تنسيق التاريخ",
+    "dateFormatDesc": "طريقة عرض التواريخ في لوحة التحكم",
+    "faithFeatures": "ميزات العبادة / الصلاة",
+    "faithFeaturesDesc": "إظهار قالب المسجد في التخطيطات وإعدادات الصلاة في الشاشات"
   }
 }

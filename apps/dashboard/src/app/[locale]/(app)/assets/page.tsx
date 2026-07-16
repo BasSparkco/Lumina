@@ -2,8 +2,8 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download } from 'lucide-react';
-import { assetsApi, type Asset } from '@/lib/api';
+import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil } from 'lucide-react';
+import { assetsApi, type Asset, type TextFontFamily, type TextSize } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
@@ -14,12 +14,117 @@ const typeIcon: Record<string, React.ReactNode> = {
   IMAGE: <ImageIcon className="w-4 h-4 text-blue-500" />,
   VIDEO: <Film className="w-4 h-4 text-purple-500" />,
   AUDIO: <Music className="w-4 h-4 text-green-500" />,
+  TEXT: <Type className="w-4 h-4 text-amber-500" />,
+};
+
+const FONT_FAMILY_STACKS: Record<TextFontFamily, string> = {
+  SANS: 'system-ui, sans-serif',
+  SERIF: 'Georgia, "Times New Roman", serif',
+  MONOSPACE: '"Courier New", monospace',
+};
+
+const FONT_SIZE_PREVIEW: Record<TextSize, string> = {
+  SMALL: '0.9rem',
+  MEDIUM: '1.3rem',
+  LARGE: '1.7rem',
+  XLARGE: '2.1rem',
 };
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
   if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1024 ** 2).toFixed(1)} MB`;
+}
+
+interface TextAssetModalProps {
+  asset: Asset | null; // null = create mode
+  onClose: () => void;
+  onSaved: (asset: Asset, previousName?: string) => void;
+}
+
+function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
+  const t = useTranslations('assets');
+  const tc = useTranslations('common');
+  const [name, setName] = useState(asset?.name ?? '');
+  const [content, setContent] = useState(asset?.textContent ?? '');
+  const [fontFamily, setFontFamily] = useState<TextFontFamily>(asset?.textFontFamily ?? 'SANS');
+  const [color, setColor] = useState(asset?.textColor ?? '#FFFFFF');
+  const [size, setSize] = useState<TextSize>(asset?.textSize ?? 'MEDIUM');
+
+  const saveMut = useMutation({
+    mutationFn: () => asset
+      ? assetsApi.updateText(asset.id, { name: name.trim(), content, textFontFamily: fontFamily, textColor: color, textSize: size })
+      : assetsApi.createText(name.trim(), content, { textFontFamily: fontFamily, textColor: color, textSize: size }),
+    onSuccess: (saved) => onSaved(saved, asset?.name),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <Type className="w-4 h-4 text-amber-500" /> {asset ? t('editTextModalTitle') : t('newTextModalTitle')}
+        </h2>
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{tc('name')}</label>
+        <input autoFocus value={name} onChange={e => setName(e.target.value)}
+          placeholder={t('newTextNamePlaceholder')}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('newTextContentLabel')}</label>
+        <textarea value={content} onChange={e => setContent(e.target.value)} rows={4} maxLength={5000}
+          placeholder={t('newTextContentPlaceholder')}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3 resize-none" />
+
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.font')}</label>
+            <select value={fontFamily} onChange={e => setFontFamily(e.target.value as TextFontFamily)}
+              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="SANS">{t('style.fontSans')}</option>
+              <option value="SERIF">{t('style.fontSerif')}</option>
+              <option value="MONOSPACE">{t('style.fontMonospace')}</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.size')}</label>
+            <select value={size} onChange={e => setSize(e.target.value as TextSize)}
+              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="SMALL">{t('style.sizeSmall')}</option>
+              <option value="MEDIUM">{t('style.sizeMedium')}</option>
+              <option value="LARGE">{t('style.sizeLarge')}</option>
+              <option value="XLARGE">{t('style.sizeXlarge')}</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.color')}</label>
+            <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg px-1.5 py-1">
+              <input type="color" value={color} onChange={e => setColor(e.target.value)}
+                className="w-6 h-6 shrink-0 rounded cursor-pointer bg-transparent" />
+              <input value={color} onChange={e => setColor(e.target.value)} maxLength={7}
+                className="w-full min-w-0 text-sm bg-transparent dark:text-gray-100 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.preview')}</label>
+        <div className="w-full aspect-video bg-black rounded-lg flex items-center justify-center p-4 mb-4 overflow-hidden">
+          <p style={{
+            color, fontFamily: FONT_FAMILY_STACKS[fontFamily], fontSize: FONT_SIZE_PREVIEW[size],
+            textAlign: 'center', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
+          }}>
+            {content || t('newTextContentPlaceholder')}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+          <button onClick={() => saveMut.mutate()} disabled={!name.trim() || !content.trim() || saveMut.isPending}
+            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            {saveMut.isPending ? t('newTextSaving') : t('newTextSave')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AssetsPage() {
@@ -39,8 +144,18 @@ export default function AssetsPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [textModal, setTextModal] = useState<Asset | 'new' | null>(null);
 
   const { data: assets = [], isLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+
+  function handleTextSaved(saved: Asset, previousName?: string) {
+    logAction({
+      resourceType: 'ASSET', resourceName: previousName ?? saved.name, action: previousName ? 'UPDATE' : 'CREATE',
+      userName: user?.name ?? '', userEmail: user?.email ?? '',
+    });
+    void qc.invalidateQueries({ queryKey: ['assets'] });
+    setTextModal(null);
+  }
 
   const removeMut = useMutation({
     mutationFn: (asset: Asset) => assetsApi.remove(asset.id),
@@ -111,19 +226,31 @@ export default function AssetsPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
         </div>
         {canEditContent && (
-          <>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setTextModal('new')}
+              className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+              <Type className="w-4 h-4" /> {t('newText')}
+            </button>
             <button onClick={() => inputRef.current?.click()} disabled={uploading}
               className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
               {uploading ? <><RefreshCw className="w-4 h-4 animate-spin" /> {t('uploading', { progress })}</> : <><Upload className="w-4 h-4" /> {t('upload')}</>}
             </button>
             <input ref={inputRef} type="file" multiple accept="image/*,video/*,audio/*" className="hidden"
               onChange={e => { void handleFiles(e.target.files); }} />
-          </>
+          </div>
         )}
       </div>
 
       {uploadError && <div className="mb-4 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 text-sm px-4 py-2 rounded-lg">{uploadError}</div>}
       {deleteError && <div className="mb-4 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 text-sm px-4 py-2 rounded-lg">{deleteError}</div>}
+
+      {textModal && canEditContent && (
+        <TextAssetModal
+          asset={textModal === 'new' ? null : textModal}
+          onClose={() => setTextModal(null)}
+          onSaved={handleTextSaved}
+        />
+      )}
 
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
@@ -137,13 +264,23 @@ export default function AssetsPage() {
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {assets.map((asset: Asset) => (
           <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden group">
-            {/* Thumbnail — click to view full size */}
+            {/* Thumbnail — click to view full size (images) or edit (text) */}
             <button
-              onClick={() => asset.thumbnailUrl && setViewingId(asset.id)}
-              disabled={!asset.thumbnailUrl}
+              onClick={() => { if (asset.thumbnailUrl) setViewingId(asset.id); else if (asset.type === 'TEXT' && canEditContent) setTextModal(asset); }}
+              disabled={!asset.thumbnailUrl && !(asset.type === 'TEXT' && canEditContent)}
               className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center disabled:cursor-default">
               {asset.thumbnailUrl ? (
                 <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+              ) : asset.type === 'TEXT' ? (
+                <p
+                  style={{
+                    color: asset.textColor ?? '#fff',
+                    fontFamily: FONT_FAMILY_STACKS[asset.textFontFamily ?? 'SANS'],
+                    background: '#000',
+                  }}
+                  className="w-full h-full px-3 py-2 text-xs overflow-hidden text-center flex items-center justify-center whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
+                  {asset.textContent}
+                </p>
               ) : (
                 <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
               )}
@@ -152,10 +289,10 @@ export default function AssetsPage() {
                   <RefreshCw className="w-5 h-5 text-white animate-spin" />
                 </div>
               )}
-              {asset.thumbnailUrl && (
+              {(asset.thumbnailUrl || (asset.type === 'TEXT' && canEditContent)) && (
                 <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
                   <span className="flex items-center gap-1.5 text-white text-xs font-medium">
-                    <Maximize2 className="w-3.5 h-3.5" /> {t('view')}
+                    {asset.thumbnailUrl ? <><Maximize2 className="w-3.5 h-3.5" /> {t('view')}</> : <><Pencil className="w-3.5 h-3.5" /> {tc('edit')}</>}
                   </span>
                 </div>
               )}

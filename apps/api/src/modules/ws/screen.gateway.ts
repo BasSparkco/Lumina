@@ -15,7 +15,8 @@ import type { Server, Socket } from 'socket.io';
 export type PlayerCommand =
   | { type: 'publish' }
   | { type: 'reload' }
-  | { type: 'clear-cache' };
+  | { type: 'clear-cache' }
+  | { type: 'capture-screenshot' };
 
 interface ScreenSocketData {
   screenId?: string;

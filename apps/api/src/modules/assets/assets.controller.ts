@@ -12,8 +12,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { memoryStorage } from 'multer';
+import type { TextFontFamily, TextSize } from '@lumina/db';
 import { AssetsService } from './assets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -22,7 +23,27 @@ import type { JwtUser } from '../../common/types/jwt-user';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 
+const TEXT_FONT_FAMILIES = ['SANS', 'SERIF', 'MONOSPACE'] as const;
+const TEXT_SIZES = ['SMALL', 'MEDIUM', 'LARGE', 'XLARGE'] as const;
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
 class RenameAssetDto { @IsString() name!: string; }
+
+class TextStyleDto {
+  @IsOptional() @IsIn(TEXT_FONT_FAMILIES) textFontFamily?: TextFontFamily;
+  @IsOptional() @Matches(HEX_COLOR, { message: 'textColor must be a hex color like #RRGGBB' }) textColor?: string;
+  @IsOptional() @IsIn(TEXT_SIZES) textSize?: TextSize;
+}
+
+class CreateTextAssetDto extends TextStyleDto {
+  @IsString() name!: string;
+  @IsString() @MinLength(1) @MaxLength(5000) content!: string;
+}
+
+class UpdateTextAssetDto extends TextStyleDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(5000) content?: string;
+}
 
 @ApiTags('assets')
 @ApiBearerAuth()
@@ -41,6 +62,20 @@ export class AssetsController {
     return this.assets.upload(user.orgId, file, async (assetId, key, type) => {
       await this.mediaQueue.add('generate-thumbnail', { assetId, key, type });
     });
+  }
+
+  @Post('text')
+  createText(@CurrentUser() user: JwtUser, @Body() dto: CreateTextAssetDto) {
+    return this.assets.createText(user.orgId, dto.name, dto.content, {
+      textFontFamily: dto.textFontFamily,
+      textColor: dto.textColor,
+      textSize: dto.textSize,
+    });
+  }
+
+  @Put(':id/text')
+  updateText(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: UpdateTextAssetDto) {
+    return this.assets.updateText(user.orgId, id, dto);
   }
 
   @Get()

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { UserRole } from '@lumina/db';
+import type { UserRole, TransitionStyle, PlaybackOrder } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
@@ -36,24 +36,43 @@ export class PlaylistsService {
     });
     if (!playlist) throw new NotFoundException('Playlist not found');
 
-    const itemsWithUrls = playlist.items.map((item: (typeof playlist.items)[number]) => ({
+    const itemsWithUrls = playlist.items.map((item: (typeof playlist.items)[number]) => this.withAssetUrls(item));
+
+    return { ...playlist, items: itemsWithUrls };
+  }
+
+  private withAssetUrls<T extends { asset: { type: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint } }>(
+    item: T,
+  ) {
+    // TEXT assets have no real object behind storageKey (see AssetsService.createText) — a
+    // "url" built from it would 404, so leave it null and let the frontend/player render
+    // asset.textContent instead.
+    const isText = item.asset.type === 'TEXT';
+    return {
       ...item,
       asset: {
         ...item.asset,
         sizeBytes: Number(item.asset.sizeBytes),
-        url: this.storage.publicUrl(item.asset.storageKey),
-        thumbnailUrl: item.asset.thumbnailKey
+        url: isText ? null : this.storage.publicUrl(item.asset.storageKey),
+        thumbnailUrl: !isText && item.asset.thumbnailKey
           ? this.storage.publicUrl(item.asset.thumbnailKey)
           : null,
       },
-    }));
-
-    return { ...playlist, items: itemsWithUrls };
+    };
   }
 
   async rename(orgId: string, id: string, name: string) {
     await this.assertOwns(orgId, id);
     return this.prisma.playlist.update({ where: { id }, data: { name } });
+  }
+
+  async updateConfig(
+    orgId: string,
+    id: string,
+    dto: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder },
+  ) {
+    await this.assertOwns(orgId, id);
+    return this.prisma.playlist.update({ where: { id }, data: dto });
   }
 
   async remove(orgId: string, id: string) {
@@ -88,9 +107,11 @@ export class PlaylistsService {
     });
     const position = (last?.position ?? -1) + 1;
 
-    return this.prisma.playlistItem.create({
+    const item = await this.prisma.playlistItem.create({
       data: { playlistId, assetId, position, durationSecs, ...(muted !== undefined && { muted }) },
+      include: { asset: true },
     });
+    return this.withAssetUrls(item);
   }
 
   async updateItem(orgId: string, playlistId: string, itemId: string, durationSecs: number, muted?: boolean) {

@@ -69,4 +69,11 @@ export class StorageService {
     const url = `${this.cdnBase}/${key}`;
     return downloadFilename ? `${url}?download=${encodeURIComponent(downloadFilename)}` : url;
   }
+
+  // Deterministic, overwritten in place on every upload — a screen's screenshot is a single
+  // "latest" live preview, not a history, so both the uploader (PlayerService) and the reader
+  // (ScreensService) need to agree on the same key without either owning the other.
+  screenshotKey(orgId: string, screenId: string): string {
+    return `${orgId}/screenshots/${screenId}.jpg`;
+  }
 }

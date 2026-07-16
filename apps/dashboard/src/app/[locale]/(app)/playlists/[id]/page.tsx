@@ -2,8 +2,8 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ImageIcon, Film, Music, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw, Send } from 'lucide-react';
-import { playlistsApi, assetsApi, type Playlist, type PlaylistItem, type Asset } from '@/lib/api';
+import { ImageIcon, Film, Music, Type, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw, Send, Shuffle, Sparkles } from 'lucide-react';
+import { playlistsApi, assetsApi, type Playlist, type PlaylistItem, type Asset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord } from '@/lib/mocks/approvals';
 import { useLocale, useTranslations } from 'next-intl';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -80,6 +80,7 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
       });
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: [...old.items, created] });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
+      void qc.invalidateQueries({ queryKey: ['playlists'] });
       setShowAssetPicker(false);
     },
   });
@@ -93,6 +94,7 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
       });
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: old.items.filter(i => i.id !== item.id) });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
+      void qc.invalidateQueries({ queryKey: ['playlists'] });
     },
   });
 
@@ -103,6 +105,12 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
 
   const reorderMut = useMutation({
     mutationFn: (ids: string[]) => playlistsApi.reorder(id, ids),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
+  const configMut = useMutation({
+    mutationFn: (config: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder }) =>
+      playlistsApi.updateConfig(id, config),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
@@ -119,6 +127,7 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
     IMAGE: <ImageIcon className="w-3.5 h-3.5 text-blue-500" />,
     VIDEO: <Film className="w-3.5 h-3.5 text-purple-500" />,
     AUDIO: <Music className="w-3.5 h-3.5 text-green-500" />,
+    TEXT: <Type className="w-3.5 h-3.5 text-amber-500" />,
   };
 
   if (isLoading) return <div className="p-8 text-sm text-gray-400">{t('loading')}</div>;
@@ -156,6 +165,38 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
               <Plus className="w-4 h-4" /> {t('addItem')}
             </button>
           )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 mb-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+          <label className="text-xs text-gray-500 dark:text-gray-400">{t('transition.label')}</label>
+          <select value={playlist.transitionStyle} disabled={!canEditContent}
+            onChange={e => configMut.mutate({ transitionStyle: e.target.value as TransitionStyle })}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+            <option value="NONE">{t('transition.none')}</option>
+            <option value="CROSSFADE">{t('transition.crossfade')}</option>
+          </select>
+          {playlist.transitionStyle === 'CROSSFADE' && (
+            <>
+              <input type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
+                disabled={!canEditContent}
+                onChange={e => configMut.mutate({ transitionDurationMs: Math.min(3000, Math.max(100, Number(e.target.value) || 100)) })}
+                className="w-20 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50" />
+              <span className="text-xs text-gray-400 dark:text-gray-500">{t('transition.ms')}</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Shuffle className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+          <label className="text-xs text-gray-500 dark:text-gray-400">{t('playbackOrder.label')}</label>
+          <select value={playlist.playbackOrder} disabled={!canEditContent}
+            onChange={e => configMut.mutate({ playbackOrder: e.target.value as PlaybackOrder })}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+            <option value="SEQUENTIAL">{t('playbackOrder.sequential')}</option>
+            <option value="SHUFFLE">{t('playbackOrder.shuffle')}</option>
+          </select>
         </div>
       </div>
 

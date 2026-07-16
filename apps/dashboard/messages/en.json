@@ -154,7 +154,39 @@
       "publishToGroup": "Publish to group",
       "publishing": "Publishing…",
       "published": "{count, plural, one {Published to # screen} other {Published to # screens}}"
-    }
+    },
+    "stoppedBanner": "Playback stopped",
+    "stopStreamTitle": "Stop the stream on this screen",
+    "resumeStreamTitle": "Resume the stream on this screen",
+    "nameWarning": {
+      "title": "Give this screen a name",
+      "body": "\"{name}\" is easy to mix up with other screens later — rename it now, or skip to keep this name.",
+      "placeholder": "e.g. Lobby Display",
+      "skip": "Skip",
+      "save": "Save name",
+      "saving": "Saving…"
+    },
+    "screenshot": {
+      "title": "Live preview",
+      "show": "Show live preview",
+      "hide": "Hide live preview",
+      "refresh": "Refresh now",
+      "capturedAt": "Captured {when}",
+      "none": "No screenshot yet — refresh to request one from the screen."
+    },
+    "crashHistory": {
+      "title": "Crash history",
+      "show": "Show crash history",
+      "hide": "Hide crash history",
+      "loading": "Loading crash history…",
+      "none": "No crashes reported.",
+      "type": {
+        "UNCAUGHT_EXCEPTION": "Crash",
+        "WATCHDOG_RECOVERY": "Force-recovered (stalled)"
+      }
+    },
+    "awaitingContent": "Awaiting content",
+    "awaitingContentTitle": "This screen isn't currently resolving to any playable content"
   },
   "assets": {
     "title": "Assets",
@@ -167,7 +199,28 @@
     "view": "View",
     "download": "Download",
     "deleteConfirm": "Delete this asset?",
-    "deleteAsset": "Delete asset"
+    "deleteAsset": "Delete asset",
+    "newText": "New text",
+    "newTextModalTitle": "New text asset",
+    "newTextNamePlaceholder": "e.g. Welcome Message",
+    "newTextContentLabel": "Content",
+    "newTextContentPlaceholder": "Type the words to display…",
+    "newTextSaving": "Saving…",
+    "newTextSave": "Save",
+    "editTextModalTitle": "Edit text asset",
+    "style": {
+      "font": "Font",
+      "fontSans": "Sans-serif",
+      "fontSerif": "Serif",
+      "fontMonospace": "Monospace",
+      "size": "Size",
+      "sizeSmall": "Small",
+      "sizeMedium": "Medium",
+      "sizeLarge": "Large",
+      "sizeXlarge": "Extra large",
+      "color": "Color",
+      "preview": "Preview"
+    }
   },
   "playlists": {
     "title": "Playlists",
@@ -196,7 +249,18 @@
     "submitForReview": "Submit for review",
     "submitting": "Submitting…",
     "pendingReviewBanner": "This playlist has been submitted and is awaiting approval.",
-    "rejectedReasonLabel": "Rejected — reason"
+    "rejectedReasonLabel": "Rejected — reason",
+    "transition": {
+      "label": "Transition",
+      "none": "None (hard cut)",
+      "crossfade": "Crossfade",
+      "ms": "ms"
+    },
+    "playbackOrder": {
+      "label": "Order",
+      "sequential": "Sequential",
+      "shuffle": "Shuffle"
+    }
   },
   "layouts": {
     "title": "Layouts",
@@ -383,7 +447,9 @@
       "REJECT": "Rejected",
       "ADD_ITEM": "Added item",
       "REMOVE_ITEM": "Removed item"
-    }
+    },
+    "detailStopped": "Playback stopped",
+    "detailResumed": "Playback resumed"
   },
   "reports": {
     "title": "Reports",
@@ -420,7 +486,8 @@
     "status": "Status",
     "lastSeenColumn": "Last seen",
     "uptime": "Uptime (7d)",
-    "offlineFor": "Offline for {duration}"
+    "offlineFor": "Offline for {duration}",
+    "crashes7d": "Crashes (7d)"
   },
   "billing": {
     "title": "Billing",
@@ -460,6 +527,10 @@
     "defaultDurationDesc": "Seconds a new playlist item plays for by default",
     "sec": "sec",
     "confirmBeforeDelete": "Confirm before deleting",
-    "confirmBeforeDeleteDesc": "Show a confirmation dialog before deleting or removing items"
+    "confirmBeforeDeleteDesc": "Show a confirmation dialog before deleting or removing items",
+    "dateFormat": "Date format",
+    "dateFormatDesc": "How dates are displayed throughout the dashboard",
+    "faithFeatures": "Faith / prayer features",
+    "faithFeaturesDesc": "Show the Mosque layout preset and faith/prayer screen settings"
   }
 }

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import type { TransitionStyle, PlaybackOrder } from '@lumina/db';
 import { PlaylistsService } from './playlists.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -20,6 +21,13 @@ class UpdateItemDto {
   @IsBoolean() @IsOptional() muted?: boolean;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) ids!: string[]; }
+class UpdateConfigDto {
+  @IsOptional() @IsIn(['NONE', 'CROSSFADE']) transitionStyle?: TransitionStyle;
+  // Bounds agreed with the Android side so the CMS can never save a value the player would
+  // silently clamp or reject — keep these in sync if that range changes.
+  @IsOptional() @IsInt() @Min(100) @Max(3000) transitionDurationMs?: number;
+  @IsOptional() @IsIn(['SEQUENTIAL', 'SHUFFLE']) playbackOrder?: PlaybackOrder;
+}
 
 @ApiTags('playlists')
 @ApiBearerAuth()
@@ -80,6 +88,11 @@ export class PlaylistsController {
   @Put(':id/reorder')
   reorder(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: ReorderDto) {
     return this.playlists.reorderItems(user.orgId, id, dto.ids);
+  }
+
+  @Put(':id/config')
+  updateConfig(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: UpdateConfigDto) {
+    return this.playlists.updateConfig(user.orgId, id, dto);
   }
 
   @Post(':id/submit')

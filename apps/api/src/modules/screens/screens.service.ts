@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import type { CreateScreenDto } from './dto/create-screen.dto';
+
+const CRASH_ROLLUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ScreensService {
@@ -10,7 +13,17 @@ export class ScreensService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly gateway: ScreenGateway,
+    private readonly storage: StorageService,
   ) {}
+
+  private withScreenshotUrl<T extends { id: string; organizationId: string | null; screenshotUpdatedAt: Date | null }>(screen: T) {
+    return {
+      ...screen,
+      screenshotUrl: screen.screenshotUpdatedAt && screen.organizationId
+        ? this.storage.publicUrl(this.storage.screenshotKey(screen.organizationId, screen.id))
+        : null,
+    };
+  }
 
   async create(orgId: string, dto: CreateScreenDto) {
     return this.prisma.screen.create({
@@ -23,11 +36,12 @@ export class ScreensService {
   }
 
   async list(orgId: string) {
-    return this.prisma.screen.findMany({
+    const screens = await this.prisma.screen.findMany({
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' },
       include: { playlist: { select: { id: true, name: true } } },
     });
+    return screens.map(s => this.withScreenshotUrl(s));
   }
 
   async findOne(orgId: string, id: string) {
@@ -36,11 +50,12 @@ export class ScreensService {
       include: { playlist: { select: { id: true, name: true } } },
     });
     if (!screen) throw new NotFoundException('Screen not found');
-    return screen;
+    return this.withScreenshotUrl(screen);
   }
 
   async remove(orgId: string, id: string) {
-    await this.findOne(orgId, id);
+    const screen = await this.findOne(orgId, id);
+    if (screen.screenshotUpdatedAt) await this.storage.delete(this.storage.screenshotKey(orgId, id));
     await this.prisma.screen.delete({ where: { id } });
   }
 
@@ -73,6 +88,21 @@ export class ScreensService {
     return { ok: true };
   }
 
+  async captureScreenshot(orgId: string, screenId: string) {
+    await this.findOne(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'capture-screenshot' });
+    return { ok: true };
+  }
+
+  async crashReports(orgId: string, screenId: string) {
+    await this.findOne(orgId, screenId);
+    return this.prisma.crashReport.findMany({
+      where: { screenId, organizationId: orgId },
+      orderBy: { occurredAt: 'desc' },
+      take: 20,
+    });
+  }
+
   async setEmergency(orgId: string, screenId: string, active: boolean, playlistId?: string) {
     await this.findOne(orgId, screenId);
     if (playlistId) {
@@ -83,6 +113,13 @@ export class ScreensService {
       where: { id: screenId },
       data: { emergencyActive: active, ...(playlistId ? { emergencyPlaylistId: playlistId } : {}) },
     });
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
+  }
+
+  async setStopped(orgId: string, screenId: string, stopped: boolean) {
+    await this.findOne(orgId, screenId);
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { stopped } });
     this.gateway.sendToScreen(screenId, { type: 'publish' });
     return updated;
   }
@@ -137,6 +174,13 @@ export class ScreensService {
       },
     });
 
+    const crashCounts = await this.prisma.crashReport.groupBy({
+      by: ['screenId'],
+      where: { organizationId: orgId, occurredAt: { gte: new Date(Date.now() - CRASH_ROLLUP_WINDOW_MS) } },
+      _count: { id: true },
+    });
+    const crashCountByScreen = Object.fromEntries(crashCounts.map(c => [c.screenId, c._count.id]));
+
     const now = Date.now();
     const items = screens.map(s => ({
       id: s.id,
@@ -145,6 +189,7 @@ export class ScreensService {
       lastSeenAt: s.lastSeenAt,
       offlineForMs: s.status === 'OFFLINE' && s.lastSeenAt ? now - s.lastSeenAt.getTime() : null,
       alerts: s.alerts,
+      crashCount7d: crashCountByScreen[s.id] ?? 0,
     }));
 
     return {
@@ -166,9 +211,16 @@ export class ScreensService {
       { expiresIn: '10y' },
     );
 
+    // Give still-default-named screens a running serial ("Unnamed Screen 3") instead of a
+    // bare, indistinguishable "Unnamed Screen" — based on how many screens this org already
+    // has, so the number reflects the order they were added in even once some get renamed.
+    const name = screen.name === 'Unnamed Screen'
+      ? `Unnamed Screen ${(await this.prisma.screen.count({ where: { organizationId: orgId } })) + 1}`
+      : screen.name;
+
     return this.prisma.screen.update({
       where: { id: screen.id },
-      data: { paired: true, pairingCode: null, playerToken: token, organizationId: orgId },
+      data: { paired: true, pairingCode: null, playerToken: token, organizationId: orgId, name },
     });
   }
 }

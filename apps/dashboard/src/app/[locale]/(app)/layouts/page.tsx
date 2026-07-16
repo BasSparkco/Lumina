@@ -7,6 +7,7 @@ import { LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy } from 'lucide-rea
 import { layoutsApi, playlistsApi, type Layout, type ZoneInput, type ZoneType } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
+import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 
@@ -147,6 +148,7 @@ export default function LayoutsPage() {
   const { user } = useAuth();
   const { canEditContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
+  const { enabled: faithEnabled } = useFaithFeatures();
   const logAction = useAuditLog();
   const t = useTranslations('layouts');
   const tc = useTranslations('common');
@@ -160,6 +162,11 @@ export default function LayoutsPage() {
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // Not everyone needs prayer-time widgets — keep the "Mosque" preset and PRAYER zone type
+  // out of the way until the org opts in via Settings.
+  const visiblePresetKeys = faithEnabled ? PRESET_ZONE_KEYS : PRESET_ZONE_KEYS.filter(k => k !== 'mosque');
+  const visibleZoneTypes = faithEnabled ? ZONE_TYPE_VALUES : ZONE_TYPE_VALUES.filter(zt => zt !== 'PRAYER');
 
   const createMut = useMutation({
     mutationFn: () => layoutsApi.create(name, zones),
@@ -279,7 +286,7 @@ export default function LayoutsPage() {
               className="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-indigo-500 focus:outline-none bg-transparent w-64"
               placeholder={t('layoutName')} />
             <div className="flex gap-2 flex-wrap">
-              {PRESET_ZONE_KEYS.map(preset => (
+              {visiblePresetKeys.map(preset => (
                 <button key={preset} onClick={() => setZones(PRESET_ZONES[preset])}
                   className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
                   {t(`presets.${preset}`)}
@@ -347,7 +354,10 @@ export default function LayoutsPage() {
                     {/* Zone type */}
                     <select value={z.zoneType ?? 'MEDIA'} onChange={e => updateZone(i, { zoneType: e.target.value as ZoneType, widgetConfig: {} })}
                       className="col-span-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                      {ZONE_TYPE_VALUES.map(zt => (
+                      {/* Keep an existing PRAYER zone's own option visible even with the feature
+                          off, so its <select> doesn't silently show a value with no matching
+                          option — but don't offer PRAYER for zones that aren't already that type. */}
+                      {(visibleZoneTypes.includes(z.zoneType ?? 'MEDIA') ? visibleZoneTypes : [...visibleZoneTypes, z.zoneType ?? 'MEDIA']).map(zt => (
                         <option key={zt} value={zt}>{t(`zoneTypes.${zt}`)}</option>
                       ))}
                     </select>
