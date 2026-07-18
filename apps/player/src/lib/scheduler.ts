@@ -41,3 +41,29 @@ export function msUntilNextTransition(rules: ScheduleRule[], now: Date): number 
   nextMinute.setMinutes(nextMinute.getMinutes() + 1);
   return Math.max(1000, nextMinute.getTime() - now.getTime());
 }
+
+export interface PowerRule {
+  id: string;
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
+}
+
+/** No rules ⇒ always on (the feature is unset for this screen). Otherwise a plain OR across all
+ * rules — there's no priority to arbitrate, just "is any window open right now." */
+export function resolvePower(rules: PowerRule[], now: Date): boolean {
+  if (rules.length === 0) return true;
+
+  const day = now.getDay();
+  const hhmm = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+  return rules.some(r => {
+    if (r.daysOfWeek.length > 0 && !r.daysOfWeek.includes(day)) return false;
+
+    if (r.startTime <= r.endTime) {
+      return hhmm >= r.startTime && hhmm < r.endTime;
+    }
+    // Crosses midnight (e.g. 22:00–06:00)
+    return hhmm >= r.startTime || hhmm < r.endTime;
+  });
+}

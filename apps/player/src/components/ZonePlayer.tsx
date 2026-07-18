@@ -4,12 +4,17 @@ import type { Playlist, PlaylistItem } from '../lib/api';
 interface Props {
   playlist: Playlist;
   onAssetChange?: (assetId: string) => void;
+  volume?: number; // 0-100, screen/group-resolved; defaults to full volume
 }
 
 const FONT_FAMILY_STACKS: Record<string, string> = {
   SANS: 'system-ui, sans-serif',
   SERIF: 'Georgia, "Times New Roman", serif',
   MONOSPACE: '"Courier New", monospace',
+  ROUNDED: 'ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif',
+  CONDENSED: '"Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif',
+  IMPACT: 'Impact, "Arial Black", sans-serif',
+  HANDWRITTEN: '"Segoe Script", "Bradley Hand", "Comic Sans MS", cursive',
 };
 
 const FONT_SIZE_CLAMPS: Record<string, string> = {
@@ -19,7 +24,7 @@ const FONT_SIZE_CLAMPS: Record<string, string> = {
   XLARGE: 'clamp(2.5rem, 9vw, 9rem)',
 };
 
-export default function ZonePlayer({ playlist, onAssetChange }: Props) {
+export default function ZonePlayer({ playlist, onAssetChange, volume = 100 }: Props) {
   const [index, setIndex] = useState(0);
   const [item, setItem] = useState<PlaylistItem | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,13 +71,22 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
   useEffect(() => {
     const el = videoRef.current;
     if (!el || item?.asset.type !== 'VIDEO') return;
+    el.volume = Math.max(0, Math.min(1, volume / 100));
     el.play().catch(() => {
       if (!el.muted) {
         el.muted = true;
         void el.play();
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
+
+  // `volume` has no JSX/DOM-attribute equivalent (unlike `muted`), so a volume-only change
+  // (screen/group volume edited in the dashboard, no new item/src) needs its own effect to
+  // push the value onto the still-mounted video element.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, volume / 100));
+  }, [volume]);
 
   if (!item) return null;
 
@@ -97,6 +111,9 @@ export default function ZonePlayer({ playlist, onAssetChange }: Props) {
             justifyContent: 'center',
             padding: '5%',
             boxSizing: 'border-box',
+            // null = transparent, i.e. the container's own black shows through (the historical
+            // look from before this field existed).
+            backgroundColor: item.asset.textBackgroundColor ?? undefined,
           }}
         >
           <p

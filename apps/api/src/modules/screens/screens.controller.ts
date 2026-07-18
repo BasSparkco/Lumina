@@ -115,6 +115,15 @@ export class ScreensController {
     return this.screens.setLayout(user.orgId, id, dto.layoutId);
   }
 
+  @Put(':id/volume')
+  setVolume(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: { volume: number | null },
+  ) {
+    return this.screens.setVolume(user.orgId, id, dto.volume);
+  }
+
   @Put(':id/group')
   setGroup(
     @CurrentUser() user: JwtUser,

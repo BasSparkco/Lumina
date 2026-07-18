@@ -15,6 +15,7 @@ import { PlayerModule } from './modules/player/player.module';
 import { WsModule } from './modules/ws/ws.module';
 import { LayoutsModule } from './modules/layouts/layouts.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
+import { PowerSchedulesModule } from './modules/power-schedules/power-schedules.module';
 import { FeedsModule } from './modules/feeds/feeds.module';
 import { OrgModule } from './modules/org/org.module';
 import { AuditModule } from './modules/audit/audit.module';
@@ -83,6 +84,7 @@ loadEnvFile();
     WsModule,
     LayoutsModule,
     SchedulesModule,
+    PowerSchedulesModule,
     FeedsModule,
     OrgModule,
     AuditModule,

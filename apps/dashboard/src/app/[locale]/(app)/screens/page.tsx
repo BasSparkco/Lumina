@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Square, Play, TriangleAlert, Camera, Bug, FileQuestion } from 'lucide-react';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Square, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2 } from 'lucide-react';
 import { screensApi, playlistsApi, layoutsApi, type Screen } from '@/lib/api';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
@@ -165,6 +165,42 @@ function CrashHistoryPanel({ screen }: { screen: Screen }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function VolumeControl({ screen, disabled }: { screen: Screen; disabled: boolean }) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const logAction = useAuditLog();
+  const t = useTranslations('screens');
+  // Local draft so the slider tracks the pointer smoothly; the mutation only fires once the
+  // user releases it, rather than on every intermediate onChange event while dragging.
+  const [draft, setDraft] = useState(screen.volume ?? 100);
+
+  const volumeMut = useMutation({
+    mutationFn: (volume: number) => screensApi.setVolume(screen.id, volume),
+    onSuccess: (updated) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: `${updated.volume}%`,
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  return (
+    <div>
+      <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+        <Volume2 className="w-3 h-3" /> {t('volume')} <span className="ms-auto text-gray-500 dark:text-gray-400">{draft}%</span>
+      </label>
+      <input
+        type="range" min={0} max={100} value={draft} disabled={disabled}
+        onChange={e => setDraft(Number(e.target.value))}
+        onMouseUp={() => volumeMut.mutate(draft)}
+        onTouchEnd={() => volumeMut.mutate(draft)}
+        className="w-full accent-indigo-600 disabled:opacity-50"
+      />
     </div>
   );
 }
@@ -648,6 +684,8 @@ export default function ScreensPage() {
                   onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz })}
                 />
               </div>
+
+              <VolumeControl screen={screen} disabled={!canEditContent} />
 
               <div>
                 <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">

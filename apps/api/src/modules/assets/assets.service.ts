@@ -62,7 +62,7 @@ export class AssetsService {
     orgId: string,
     name: string,
     content: string,
-    style: { textFontFamily?: TextFontFamily; textColor?: string; textSize?: TextSize } = {},
+    style: { textFontFamily?: TextFontFamily; textColor?: string; textSize?: TextSize; textBackgroundColor?: string } = {},
   ) {
     // No object ever gets uploaded for a TEXT asset — the content lives in `textContent` —
     // so storageKey is just a unique placeholder, never a real S3 key. remove() below skips
@@ -78,6 +78,9 @@ export class AssetsService {
         textFontFamily: style.textFontFamily ?? DEFAULT_TEXT_STYLE.textFontFamily,
         textColor: style.textColor ?? DEFAULT_TEXT_STYLE.textColor,
         textSize: style.textSize ?? DEFAULT_TEXT_STYLE.textSize,
+        // Unlike font/color/size, no default here — null means transparent, i.e. the player's
+        // own black background shows through, which is the historical (pre-this-field) look.
+        textBackgroundColor: style.textBackgroundColor ?? null,
         organizationId: orgId,
         status: 'READY',
       },
@@ -88,7 +91,7 @@ export class AssetsService {
   async updateText(
     orgId: string,
     id: string,
-    dto: { name?: string; content?: string; textFontFamily?: TextFontFamily; textColor?: string; textSize?: TextSize },
+    dto: { name?: string; content?: string; textFontFamily?: TextFontFamily; textColor?: string; textSize?: TextSize; textBackgroundColor?: string },
   ) {
     const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
@@ -102,6 +105,7 @@ export class AssetsService {
         ...(dto.textFontFamily !== undefined ? { textFontFamily: dto.textFontFamily } : {}),
         ...(dto.textColor !== undefined ? { textColor: dto.textColor } : {}),
         ...(dto.textSize !== undefined ? { textSize: dto.textSize } : {}),
+        ...(dto.textBackgroundColor !== undefined ? { textBackgroundColor: dto.textBackgroundColor } : {}),
       },
     });
     return this.toDto(updated, null);
@@ -177,7 +181,7 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null; status: string; organizationId: string; createdAt: Date },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; status: string; organizationId: string; createdAt: Date },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
@@ -195,6 +199,7 @@ export class AssetsService {
       textFontFamily: asset.textFontFamily,
       textColor: asset.textColor,
       textSize: asset.textSize,
+      textBackgroundColor: asset.textBackgroundColor,
       status: asset.status,
       url,
       thumbnailUrl: thumbUrl ?? null,

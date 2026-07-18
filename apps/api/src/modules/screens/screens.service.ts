@@ -156,6 +156,14 @@ export class ScreensService {
     return updated;
   }
 
+  async setVolume(orgId: string, screenId: string, volume: number | null) {
+    await this.findOne(orgId, screenId);
+    const clamped = volume === null ? null : Math.max(0, Math.min(100, Math.round(volume)));
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { volume: clamped } });
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
+  }
+
   async setGroup(orgId: string, screenId: string, groupId: string | null) {
     await this.findOne(orgId, screenId);
     if (groupId) {

@@ -21,6 +21,10 @@ const FONT_FAMILY_STACKS: Record<TextFontFamily, string> = {
   SANS: 'system-ui, sans-serif',
   SERIF: 'Georgia, "Times New Roman", serif',
   MONOSPACE: '"Courier New", monospace',
+  ROUNDED: 'ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif',
+  CONDENSED: '"Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif',
+  IMPACT: 'Impact, "Arial Black", sans-serif',
+  HANDWRITTEN: '"Segoe Script", "Bradley Hand", "Comic Sans MS", cursive',
 };
 
 const FONT_SIZE_PREVIEW: Record<TextSize, string> = {
@@ -50,11 +54,12 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
   const [fontFamily, setFontFamily] = useState<TextFontFamily>(asset?.textFontFamily ?? 'SANS');
   const [color, setColor] = useState(asset?.textColor ?? '#FFFFFF');
   const [size, setSize] = useState<TextSize>(asset?.textSize ?? 'MEDIUM');
+  const [backgroundColor, setBackgroundColor] = useState(asset?.textBackgroundColor ?? '#000000');
 
   const saveMut = useMutation({
     mutationFn: () => asset
-      ? assetsApi.updateText(asset.id, { name: name.trim(), content, textFontFamily: fontFamily, textColor: color, textSize: size })
-      : assetsApi.createText(name.trim(), content, { textFontFamily: fontFamily, textColor: color, textSize: size }),
+      ? assetsApi.updateText(asset.id, { name: name.trim(), content, textFontFamily: fontFamily, textColor: color, textSize: size, textBackgroundColor: backgroundColor })
+      : assetsApi.createText(name.trim(), content, { textFontFamily: fontFamily, textColor: color, textSize: size, textBackgroundColor: backgroundColor }),
     onSuccess: (saved) => onSaved(saved, asset?.name),
   });
 
@@ -73,7 +78,7 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
           placeholder={t('newTextContentPlaceholder')}
           className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3 resize-none" />
 
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
             <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.font')}</label>
             <select value={fontFamily} onChange={e => setFontFamily(e.target.value as TextFontFamily)}
@@ -81,6 +86,10 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
               <option value="SANS">{t('style.fontSans')}</option>
               <option value="SERIF">{t('style.fontSerif')}</option>
               <option value="MONOSPACE">{t('style.fontMonospace')}</option>
+              <option value="ROUNDED">{t('style.fontRounded')}</option>
+              <option value="CONDENSED">{t('style.fontCondensed')}</option>
+              <option value="IMPACT">{t('style.fontImpact')}</option>
+              <option value="HANDWRITTEN">{t('style.fontHandwritten')}</option>
             </select>
           </div>
           <div>
@@ -102,10 +111,19 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
                 className="w-full min-w-0 text-sm bg-transparent dark:text-gray-100 focus:outline-none" />
             </div>
           </div>
+          <div>
+            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.backgroundColor')}</label>
+            <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg px-1.5 py-1">
+              <input type="color" value={backgroundColor} onChange={e => setBackgroundColor(e.target.value)}
+                className="w-6 h-6 shrink-0 rounded cursor-pointer bg-transparent" />
+              <input value={backgroundColor} onChange={e => setBackgroundColor(e.target.value)} maxLength={7}
+                className="w-full min-w-0 text-sm bg-transparent dark:text-gray-100 focus:outline-none" />
+            </div>
+          </div>
         </div>
 
         <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.preview')}</label>
-        <div className="w-full aspect-video bg-black rounded-lg flex items-center justify-center p-4 mb-4 overflow-hidden">
+        <div className="w-full aspect-video rounded-lg flex items-center justify-center p-4 mb-4 overflow-hidden" style={{ background: backgroundColor }}>
           <p style={{
             color, fontFamily: FONT_FAMILY_STACKS[fontFamily], fontSize: FONT_SIZE_PREVIEW[size],
             textAlign: 'center', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
@@ -276,7 +294,7 @@ export default function AssetsPage() {
                   style={{
                     color: asset.textColor ?? '#fff',
                     fontFamily: FONT_FAMILY_STACKS[asset.textFontFamily ?? 'SANS'],
-                    background: '#000',
+                    background: asset.textBackgroundColor ?? '#000',
                   }}
                   className="w-full h-full px-3 py-2 text-xs overflow-hidden text-center flex items-center justify-center whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
                   {asset.textContent}

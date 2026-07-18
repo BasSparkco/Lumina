@@ -37,9 +37,10 @@ export interface PlaylistItem {
     url: string | null;
     thumbnailUrl: string | null;
     textContent: string | null;
-    textFontFamily: 'SANS' | 'SERIF' | 'MONOSPACE' | null;
+    textFontFamily: 'SANS' | 'SERIF' | 'MONOSPACE' | 'ROUNDED' | 'CONDENSED' | 'IMPACT' | 'HANDWRITTEN' | null;
     textColor: string | null;
     textSize: 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE' | null;
+    textBackgroundColor: string | null;
   };
 }
 
@@ -59,6 +60,13 @@ export interface ScheduleRule {
   endDate: string | null;
   playlistId: string;
   playlist: Playlist | null;
+}
+
+export interface PowerRule {
+  id: string;
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
 }
 
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
@@ -90,6 +98,9 @@ export interface PlayerState {
   scheduleRules: ScheduleRule[];
   resolvedPlaylistId: string | null;
   defaultPlaylist: Playlist | null;
+  poweredOn: boolean;
+  powerScheduleRules: PowerRule[];
+  volume: number;
 }
 
 export const api = {

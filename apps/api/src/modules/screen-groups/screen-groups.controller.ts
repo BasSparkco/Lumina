@@ -43,4 +43,9 @@ export class ScreenGroupsController {
   bulkPublish(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.groups.bulkPublish(user.orgId, id);
   }
+
+  @Put(':id/volume')
+  setVolume(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: { volume: number | null }) {
+    return this.groups.setVolume(user.orgId, id, dto.volume);
+  }
 }

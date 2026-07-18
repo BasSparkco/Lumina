@@ -66,6 +66,8 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/emergency`, { method: 'PUT', body: JSON.stringify({ active, playlistId }) }),
   setStopped: (id: string, stopped: boolean) =>
     req<Screen>(`/screens/${id}/stop`, { method: 'PUT', body: JSON.stringify({ stopped }) }),
+  setVolume: (id: string, volume: number | null) =>
+    req<Screen>(`/screens/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
   updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string }) =>
     req<Screen>(`/screens/${id}/prayer`, { method: 'PUT', body: JSON.stringify(data) }),
   captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
@@ -137,6 +139,35 @@ export const schedulesApi = {
   remove: (id: string) => req<void>(`/schedules/${id}`, { method: 'DELETE' }),
 };
 
+// ── Power schedules ──────────────────────────────────────────────────────────
+export const powerSchedulesApi = {
+  list: (target: { screenId?: string; groupId?: string }) => {
+    const params = new URLSearchParams();
+    if (target.screenId) params.set('screenId', target.screenId);
+    if (target.groupId) params.set('groupId', target.groupId);
+    const qs = params.toString();
+    return req<PowerScheduleEntry[]>(`/power-schedules${qs ? `?${qs}` : ''}`);
+  },
+  create: (data: CreatePowerScheduleInput) =>
+    req<PowerScheduleEntry>('/power-schedules', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: CreatePowerScheduleInput) =>
+    req<PowerScheduleEntry>(`/power-schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id: string) => req<void>(`/power-schedules/${id}`, { method: 'DELETE' }),
+  previewNow: (screenId: string) =>
+    req<{ poweredOn: boolean }>(`/power-schedules/preview?screenId=${screenId}`),
+};
+
+// Real backend-side screen groups (/screen-groups) — distinct from lib/mocks/screenGroups.ts,
+// which the Screens page still uses for its own group chips/assignment pending its own
+// migration off localStorage. This client only needs a target list + the ability to create one
+// for the power-schedule picker below; it doesn't touch screen-to-group assignment.
+export const realScreenGroupsApi = {
+  list: () => req<{ id: string; name: string; volume: number | null }[]>('/screen-groups'),
+  create: (name: string) => req<{ id: string; name: string; volume: number | null }>('/screen-groups', { method: 'POST', body: JSON.stringify({ name }) }),
+  setVolume: (id: string, volume: number | null) =>
+    req<{ id: string; name: string; volume: number | null }>(`/screen-groups/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
+};
+
 // ── Types ───────────────────────────────────────────────────────────────────
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
@@ -152,6 +183,13 @@ export interface CreateScheduleInput {
 export interface ScheduleEntry extends CreateScheduleInput {
   id: string; createdAt: string; playlist: { id: string; name: string }; screen: { id: string; name: string };
 }
+export interface CreatePowerScheduleInput {
+  screenId?: string; groupId?: string; daysOfWeek?: number[]; startTime: string; endTime: string;
+}
+export interface PowerScheduleEntry extends CreatePowerScheduleInput {
+  id: string; createdAt: string;
+  screen: { id: string; name: string } | null; group: { id: string; name: string } | null;
+}
 export interface Screen {
   id: string; name: string; status: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null;
   paired: boolean; playlistId: string | null; playlist?: { id: string; name: string } | null;
@@ -159,7 +197,7 @@ export interface Screen {
   latitude: number | null; longitude: number | null;
   prayerMethod: string; athanEnabled: boolean; timezone: string;
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
-  hasContent: boolean;
+  hasContent: boolean; volume: number | null;
 }
 export interface CrashReport {
   id: string; type: 'UNCAUGHT_EXCEPTION' | 'WATCHDOG_RECOVERY'; summary: string;
@@ -169,14 +207,15 @@ export interface FleetStatus {
   total: number; online: number; offline: number;
   screens: { id: string; crashCount7d: number }[];
 }
-export type TextFontFamily = 'SANS' | 'SERIF' | 'MONOSPACE';
+export type TextFontFamily = 'SANS' | 'SERIF' | 'MONOSPACE' | 'ROUNDED' | 'CONDENSED' | 'IMPACT' | 'HANDWRITTEN';
 export type TextSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE';
-export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; }
+export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; textBackgroundColor?: string; }
 export interface Asset {
   id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT'; mimeType: string;
   sizeBytes: number; status: string; url: string | null; thumbnailUrl: string | null;
   downloadUrl: string | null; textContent: string | null;
   textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
+  textBackgroundColor: string | null;
   width: number | null; height: number | null; durationSecs: number | null; createdAt: string;
 }
 export interface PlaylistItem {

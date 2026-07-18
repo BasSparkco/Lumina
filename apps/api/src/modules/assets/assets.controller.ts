@@ -23,7 +23,7 @@ import type { JwtUser } from '../../common/types/jwt-user';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 
-const TEXT_FONT_FAMILIES = ['SANS', 'SERIF', 'MONOSPACE'] as const;
+const TEXT_FONT_FAMILIES = ['SANS', 'SERIF', 'MONOSPACE', 'ROUNDED', 'CONDENSED', 'IMPACT', 'HANDWRITTEN'] as const;
 const TEXT_SIZES = ['SMALL', 'MEDIUM', 'LARGE', 'XLARGE'] as const;
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
@@ -33,6 +33,7 @@ class TextStyleDto {
   @IsOptional() @IsIn(TEXT_FONT_FAMILIES) textFontFamily?: TextFontFamily;
   @IsOptional() @Matches(HEX_COLOR, { message: 'textColor must be a hex color like #RRGGBB' }) textColor?: string;
   @IsOptional() @IsIn(TEXT_SIZES) textSize?: TextSize;
+  @IsOptional() @Matches(HEX_COLOR, { message: 'textBackgroundColor must be a hex color like #RRGGBB' }) textBackgroundColor?: string;
 }
 
 class CreateTextAssetDto extends TextStyleDto {
@@ -70,6 +71,7 @@ export class AssetsController {
       textFontFamily: dto.textFontFamily,
       textColor: dto.textColor,
       textSize: dto.textSize,
+      textBackgroundColor: dto.textBackgroundColor,
     });
   }
 

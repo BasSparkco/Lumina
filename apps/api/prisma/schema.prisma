@@ -26,6 +26,7 @@ model Organization {
   playlists     Playlist[]
   layouts       Layout[]
   schedules     Schedule[]
+  powerSchedules PowerSchedule[]
   invites       OrgInvite[]
   auditLogs     AuditLog[]
   screenGroups  ScreenGroup[]
@@ -103,6 +104,9 @@ model Screen {
   athanEnabled        Boolean      @default(false)
   emergencyActive     Boolean      @default(false)
   stopped             Boolean      @default(false)
+  // Item 10 (volume control) — 0-100, null = inherit the screen's group's volume, or 100 if
+  // there's no group or the group's own volume is unset.
+  volume              Int?
   // Item 5 (awaiting-content badge) — reported by the player on each heartbeat, since it's the
   // one that actually knows whether *right now* resolves to real content (schedule gaps,
   // locally-resolved layout zones, etc.), not just "is a playlist assigned." Defaults to false
@@ -132,6 +136,7 @@ model Screen {
   group   ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   schedules       Schedule[]
+  powerSchedules  PowerSchedule[]
   proofOfPlays    ProofOfPlayLog[]
   alerts          ScreenAlert[]
   crashReports    CrashReport[]
@@ -145,13 +150,17 @@ enum ScreenStatus {
 model ScreenGroup {
   id        String   @id @default(cuid())
   name      String
+  // Item 10 (volume control) — 0-100, null = default 100. Screens in this group inherit this
+  // unless they have their own explicit Screen.volume set.
+  volume    Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  screens Screen[]
+  screens        Screen[]
+  powerSchedules PowerSchedule[]
 }
 
 model ProofOfPlayLog {
@@ -224,9 +233,10 @@ model Asset {
   // Styling for TEXT assets only — null means "use the player's default" for that field,
   // so non-TEXT assets never carry these and a TEXT asset created before this field existed
   // still renders sensibly instead of blank/broken.
-  textFontFamily TextFontFamily?
-  textColor      String?         // "#RRGGBB"
-  textSize       TextSize?
+  textFontFamily      TextFontFamily?
+  textColor           String?         // "#RRGGBB"
+  textSize            TextSize?
+  textBackgroundColor String?         // "#RRGGBB"; null = transparent (shows the player's black behind it)
   status       AssetStatus @default(PROCESSING)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -249,6 +259,10 @@ enum TextFontFamily {
   SANS
   SERIF
   MONOSPACE
+  ROUNDED
+  CONDENSED
+  IMPACT
+  HANDWRITTEN
 }
 
 enum TextSize {
@@ -385,6 +399,30 @@ model Schedule {
 
   screenId String
   screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// Recurring window during which a screen's display should be considered "powered on."
+// Exactly one of screenId/groupId is set (enforced in PowerSchedulesService, not here) — a
+// screen-level rule set takes precedence over its group's when both exist. No priority/date
+// range/name like Schedule: this is a plain boolean OR across matching windows, nothing to
+// arbitrate between multiple rules.
+model PowerSchedule {
+  id         String @id @default(cuid())
+  daysOfWeek Int[]  // empty = every day; 0=Sun 1=Mon … 6=Sat
+  startTime  String // "HH:MM" 24h local time — display turns on
+  endTime    String // "HH:MM" 24h local time — display turns off
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  screenId String?
+  screen   Screen? @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  groupId String?
+  group   ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

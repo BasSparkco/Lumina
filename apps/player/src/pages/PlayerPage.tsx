@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type Playlist, type PlayerState, type Zone } from '../lib/api';
 import { cache } from '../lib/db';
 import { connectSocket, disconnectSocket } from '../lib/socket';
-import { resolveSchedule, msUntilNextTransition } from '../lib/scheduler';
+import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/scheduler';
 import { usePlayerStore } from '../store/playerStore';
 import ZonePlayer from '../components/ZonePlayer';
 import PrayerZoneWidget, { type PrayerMethod } from '../components/PrayerZoneWidget';
@@ -21,6 +21,7 @@ export default function PlayerPage() {
   const navigate = useNavigate();
   const [state, setState] = useState<PlayerState | null>(null);
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
+  const [poweredOn, setPoweredOn] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -54,22 +55,28 @@ export default function PlayerPage() {
     return s.defaultPlaylist;
   }, []);
 
-  // Re-evaluate schedule every minute
+  // Applies both the resolved playlist and the resolved power-on state for a given state snapshot.
+  const applyState = useCallback((s: PlayerState) => {
+    setActivePlaylist(resolvePlaylist(s));
+    setPoweredOn(resolvePower(s.powerScheduleRules, new Date()));
+  }, [resolvePlaylist]);
+
+  // Re-evaluate schedule + power window every minute
   const scheduleNextCheck = useCallback((s: PlayerState) => {
     if (scheduleTimerRef.current) clearTimeout(scheduleTimerRef.current);
     const delay = msUntilNextTransition(s.scheduleRules, new Date());
     scheduleTimerRef.current = setTimeout(() => {
-      setActivePlaylist(resolvePlaylist(s));
+      applyState(s);
       scheduleNextCheck(s);
     }, delay);
-  }, [resolvePlaylist]);
+  }, [applyState]);
 
   useEffect(() => {
     if (!token) { void navigate('/'); return; }
 
     void loadState().then(s => {
       if (s) {
-        setActivePlaylist(resolvePlaylist(s));
+        applyState(s);
         scheduleNextCheck(s);
       }
     });
@@ -81,7 +88,7 @@ export default function PlayerPage() {
     refreshRef.current = setInterval(async () => {
       const s = await loadState();
       if (s) {
-        setActivePlaylist(resolvePlaylist(s));
+        applyState(s);
         scheduleNextCheck(s);
       }
     }, STATE_REFRESH_INTERVAL);
@@ -90,7 +97,7 @@ export default function PlayerPage() {
     sock.on('command', async (cmd: PlayerCommand) => {
       if (cmd.type === 'publish') {
         const s = await loadState();
-        if (s) { setActivePlaylist(resolvePlaylist(s)); scheduleNextCheck(s); }
+        if (s) { applyState(s); scheduleNextCheck(s); }
       } else if (cmd.type === 'reload') {
         window.location.reload();
       } else if (cmd.type === 'clear-cache') {
@@ -111,6 +118,11 @@ export default function PlayerPage() {
   if (!loaded) return <Splash text="Loading…" />;
   if (!state) return <Splash text="No content assigned" />;
 
+  // Outside its power-on window — highest priority of all, above even an explicit stop or
+  // emergency override, since it represents the physical display being off. A real off screen
+  // shows nothing, so this is a bare black container with no status text (unlike Splash).
+  if (!poweredOn) return <FullscreenContainer />;
+
   // Stopped from the dashboard — takes priority over everything else, including an
   // active emergency override, since it's an explicit "blank this screen now" action.
   if (state.stopped) return <Splash text="Playback stopped" />;
@@ -119,7 +131,7 @@ export default function PlayerPage() {
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (
       <FullscreenContainer>
-        <ZonePlayer playlist={state.emergencyPlaylist} onAssetChange={id => { currentAssetRef.current = id; }} />
+        <ZonePlayer playlist={state.emergencyPlaylist} volume={state.volume} onAssetChange={id => { currentAssetRef.current = id; }} />
       </FullscreenContainer>
     );
   }
@@ -157,6 +169,7 @@ export default function PlayerPage() {
     <FullscreenContainer>
       <ZonePlayer
         playlist={activePlaylist}
+        volume={state.volume}
         onAssetChange={id => { currentAssetRef.current = id; }}
       />
     </FullscreenContainer>
@@ -198,12 +211,12 @@ function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: Playe
       return <TickerWidget feedUrl={cfg.feedUrl as string} lang={lang} />;
     default:
       return zone.playlist
-        ? <ZonePlayer playlist={zone.playlist} onAssetChange={onAssetChange} />
+        ? <ZonePlayer playlist={zone.playlist} volume={state.volume} onAssetChange={onAssetChange} />
         : null;
   }
 }
 
-function FullscreenContainer({ children }: { children: React.ReactNode }) {
+function FullscreenContainer({ children }: { children?: React.ReactNode }) {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
       {children}

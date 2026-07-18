@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import { SchedulesService } from '../schedules/schedules.service';
+import { PowerSchedulesService } from '../power-schedules/power-schedules.service';
 
 @Injectable()
 export class PlayerService {
@@ -11,6 +12,7 @@ export class PlayerService {
     private readonly storage: StorageService,
     private readonly gateway: ScreenGateway,
     private readonly schedules: SchedulesService,
+    private readonly powerSchedules: PowerSchedulesService,
   ) {}
 
   async requestPairingCode(): Promise<{ pairingCode: string; screenId: string }> {
@@ -53,12 +55,15 @@ export class PlayerService {
 
   /**
    * Full player state:
-   *   - stopped (highest priority — blanks the screen regardless of everything below,
-   *     including an active emergency override)
+   *   - poweredOn + powerScheduleRules (highest priority — outside its window the display
+   *     blanks to black regardless of everything below, including stopped/emergency)
+   *   - stopped (blanks the screen regardless of everything below, including an active
+   *     emergency override)
    *   - emergencyActive + emergencyPlaylist (takes priority over layout/schedule)
    *   - layout with signed-URL playlists per zone (if a layout is assigned)
    *   - scheduleRules (with their playlists pre-fetched) for local resolver
    *   - defaultPlaylist as fallback when no schedule rule matches
+   *   - volume (0-100): the screen's own value, else its group's, else 100
    */
   async getState(screenId: string) {
     const screen = await this.prisma.screen.findUnique({
@@ -82,6 +87,7 @@ export class PlayerService {
         playlist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },
+        group: { select: { volume: true } },
       },
     });
     if (!screen) throw new NotFoundException('Screen not found');
@@ -104,6 +110,13 @@ export class PlayerService {
 
     // Resolve what's playing right now (server-side, as a hint)
     const resolvedPlaylistId = this.schedules.resolveNow(rules, new Date(), screen.timezone);
+
+    // Item 6 (display power schedule) — screen-level rules override the screen's group's; no
+    // rules anywhere means the feature is unset for this screen, i.e. always on.
+    const power = await this.powerSchedules.resolveForScreen(screen);
+
+    // Item 10 (volume control) — screen's own value wins, else its group's, else full volume.
+    const volume = screen.volume ?? screen.group?.volume ?? 100;
 
     const hydrateZones = async (zones: NonNullable<typeof screen.layout>['zones']) =>
       Promise.all(
@@ -154,6 +167,14 @@ export class PlayerService {
       ),
       resolvedPlaylistId,
       defaultPlaylist: screen.playlist ? await this.hydratePlaylist(screen.playlist) : null,
+      poweredOn: power.poweredOn,
+      powerScheduleRules: power.rules.map(r => ({
+        id: r.id,
+        daysOfWeek: r.daysOfWeek,
+        startTime: r.startTime,
+        endTime: r.endTime,
+      })),
+      volume,
     };
   }
 
@@ -202,7 +223,7 @@ export class PlayerService {
     transitionStyle: string;
     transitionDurationMs: number;
     playbackOrder: string;
-    items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null } }[];
+    items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
   }) {
     const items = await Promise.all(
       playlist.items.map(item => {
@@ -227,6 +248,7 @@ export class PlayerService {
             textFontFamily: item.asset.textFontFamily,
             textColor: item.asset.textColor,
             textSize: item.asset.textSize,
+            textBackgroundColor: item.asset.textBackgroundColor,
           },
         };
       }),

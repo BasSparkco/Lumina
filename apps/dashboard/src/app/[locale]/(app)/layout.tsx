@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, CalendarClock, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
@@ -19,6 +19,7 @@ const nav: { href: string; key: string; icon: typeof Monitor; visible?: (p: Perm
   { href: '/playlists', key: 'playlists', icon: List },
   { href: '/layouts', key: 'layouts', icon: LayoutTemplate },
   { href: '/schedules', key: 'schedules', icon: CalendarClock },
+  { href: '/power-schedule', key: 'powerSchedule', icon: PowerCircle },
   { href: '/members', key: 'members', icon: Users, visible: p => p.canManageMembers },
   { href: '/billing', key: 'billing', icon: CreditCard, visible: p => p.canManageBilling },
   { href: '/audit-log', key: 'auditLog', icon: History, visible: p => p.canViewAuditLog },
