@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Rnd } from 'react-rnd';
@@ -13,8 +13,40 @@ import { useAuditLog } from '@/hooks/useAuditLog';
 
 const PREVIEW_W = 400;
 const PREVIEW_H = 225;
+const SNAP_THRESHOLD = 6;
+const MIN_ZONE_PX = 20;
 
 const clampPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 10) / 10));
+
+type Box = { left: number; top: number; width: number; height: number };
+
+// Snap a moving edge (or center) to the nearest same-axis edge/center among other zones
+// or the canvas bounds — mirrors the alignment guides in Google Drawings/Slides.
+function snapDragAxis(pos: number, size: number, targets: number[]): { pos: number; guide: number | null } {
+  const candidates = [pos, pos + size / 2, pos + size];
+  let bestDiff = SNAP_THRESHOLD;
+  let result: { pos: number; guide: number } | null = null;
+  for (const target of targets) {
+    for (const c of candidates) {
+      const diff = Math.abs(c - target);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        result = { pos: target - (c - pos), guide: target };
+      }
+    }
+  }
+  return result ?? { pos, guide: null };
+}
+
+function snapEdge(value: number, targets: number[]): { value: number; guide: number | null } {
+  let bestDiff = SNAP_THRESHOLD;
+  let best: number | null = null;
+  for (const target of targets) {
+    const diff = Math.abs(value - target);
+    if (diff < bestDiff) { bestDiff = diff; best = target; }
+  }
+  return best !== null ? { value: best, guide: best } : { value, guide: null };
+}
 
 const ZONE_TYPE_VALUES: ZoneType[] = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'];
 
@@ -163,6 +195,25 @@ export default function LayoutsPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
+  // Live preview canvas size in px — kept in sync with its actual rendered width so the
+  // preview can take up most of the page instead of a fixed small box.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewSize, setPreviewSize] = useState({ width: PREVIEW_W, height: PREVIEW_H });
+  // The zone currently being dragged/resized, tracked outside `zones` state so interaction
+  // frames don't re-render the settings list below the preview — only committed on drop.
+  const [dragBox, setDragBox] = useState<{ index: number } & Box | null>(null);
+  const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
+
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const update = () => setPreviewSize({ width: el.clientWidth, height: el.clientWidth * 9 / 16 });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editing]);
+
   // Not everyone needs prayer-time widgets — keep the "Mosque" preset and PRAYER zone type
   // out of the way until the org opts in via Settings.
   const visiblePresetKeys = faithEnabled ? PRESET_ZONE_KEYS : PRESET_ZONE_KEYS.filter(k => k !== 'mosque');
@@ -261,10 +312,117 @@ export default function LayoutsPage() {
     setZones(prev => prev.map((z, idx) => idx === i ? { ...z, ...patch } : z));
   }
 
+  const getBoxPx = useCallback((z: ZoneInput): Box => ({
+    left: (z.x / 100) * previewSize.width,
+    top: (z.y / 100) * previewSize.height,
+    width: (z.width / 100) * previewSize.width,
+    height: (z.height / 100) * previewSize.height,
+  }), [previewSize]);
+
+  const computeTargets = useCallback((excludeIndex: number) => {
+    const xs = new Set<number>([0, previewSize.width / 2, previewSize.width]);
+    const ys = new Set<number>([0, previewSize.height / 2, previewSize.height]);
+    zones.forEach((z, idx) => {
+      if (idx === excludeIndex) return;
+      const b = getBoxPx(z);
+      xs.add(b.left); xs.add(b.left + b.width / 2); xs.add(b.left + b.width);
+      ys.add(b.top); ys.add(b.top + b.height / 2); ys.add(b.top + b.height);
+    });
+    return { xs: [...xs], ys: [...ys] };
+  }, [zones, previewSize, getBoxPx]);
+
+  const clampBox = useCallback((box: Box): Box => {
+    const width = Math.min(box.width, previewSize.width);
+    const height = Math.min(box.height, previewSize.height);
+    return {
+      width, height,
+      left: Math.min(Math.max(box.left, 0), previewSize.width - width),
+      top: Math.min(Math.max(box.top, 0), previewSize.height - height),
+    };
+  }, [previewSize]);
+
+  function handleDrag(i: number, x: number, y: number) {
+    const z = zones[i];
+    if (!z) return;
+    const box = getBoxPx(z);
+    const { xs, ys } = computeTargets(i);
+    const snapX = snapDragAxis(x, box.width, xs);
+    const snapY = snapDragAxis(y, box.height, ys);
+    const next = clampBox({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
+    setDragBox({ index: i, ...next });
+    setGuides({ v: snapX.guide !== null ? [snapX.guide] : [], h: snapY.guide !== null ? [snapY.guide] : [] });
+  }
+
+  function handleDragStop(i: number, x: number, y: number) {
+    const z = zones[i];
+    if (!z) return;
+    const box = getBoxPx(z);
+    const { xs, ys } = computeTargets(i);
+    const snapX = snapDragAxis(x, box.width, xs);
+    const snapY = snapDragAxis(y, box.height, ys);
+    const next = clampBox({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
+    updateZone(i, {
+      x: clampPct(next.left / previewSize.width * 100),
+      y: clampPct(next.top / previewSize.height * 100),
+    });
+    setDragBox(null);
+    setGuides({ v: [], h: [] });
+  }
+
+  function resolveResize(i: number, direction: string, box: Box): Box {
+    const { xs, ys } = computeTargets(i);
+    let { left, top, width, height } = box;
+    let right = left + width, bottom = top + height;
+    const vGuides: number[] = [];
+    const hGuides: number[] = [];
+
+    if (/right/i.test(direction)) {
+      const s = snapEdge(right, xs);
+      if (s.guide !== null) { right = s.value; vGuides.push(s.guide); }
+    }
+    if (/left/i.test(direction)) {
+      const s = snapEdge(left, xs);
+      if (s.guide !== null) { left = s.value; vGuides.push(s.guide); }
+    }
+    if (/bottom/i.test(direction)) {
+      const s = snapEdge(bottom, ys);
+      if (s.guide !== null) { bottom = s.value; hGuides.push(s.guide); }
+    }
+    if (/top/i.test(direction)) {
+      const s = snapEdge(top, ys);
+      if (s.guide !== null) { top = s.value; hGuides.push(s.guide); }
+    }
+
+    width = Math.max(MIN_ZONE_PX, right - left);
+    height = Math.max(MIN_ZONE_PX, bottom - top);
+    const next = clampBox({ left, top, width, height });
+    setGuides({ v: vGuides, h: hGuides });
+    return next;
+  }
+
+  function handleResize(i: number, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
+    const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
+    const next = resolveResize(i, direction, box);
+    setDragBox({ index: i, ...next });
+  }
+
+  function handleResizeStop(i: number, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
+    const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
+    const next = resolveResize(i, direction, box);
+    updateZone(i, {
+      x: clampPct(next.left / previewSize.width * 100),
+      y: clampPct(next.top / previewSize.height * 100),
+      width: clampPct(next.width / previewSize.width * 100),
+      height: clampPct(next.height / previewSize.height * 100),
+    });
+    setDragBox(null);
+    setGuides({ v: [], h: [] });
+  }
+
   const saving = createMut.isPending || updateMut.isPending;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-8 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
@@ -295,42 +453,49 @@ export default function LayoutsPage() {
             </div>
           </div>
 
-          {/* Visual preview + zone list side by side */}
-          <div className="flex gap-6">
-            {/* Screen preview — drag to move, drag the edges/corners to resize, like resizing a window */}
-            <div className="shrink-0">
+          {/* Visual preview, full-width, with zone settings stacked below */}
+          <div className="flex flex-col gap-6">
+            {/* Screen preview — drag to move, drag the edges/corners to resize, like resizing a window.
+                Pink guide lines snap moving edges/centers to other zones and the canvas bounds. */}
+            <div>
               <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('preview')}</div>
-              <div style={{ width: PREVIEW_W, height: PREVIEW_H, background: '#111', position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
-                {zones.map((z, i) => (
-                  <Rnd
-                    key={i}
-                    bounds="parent"
-                    minWidth={20}
-                    minHeight={20}
-                    size={{ width: (z.width / 100) * PREVIEW_W, height: (z.height / 100) * PREVIEW_H }}
-                    position={{ x: (z.x / 100) * PREVIEW_W, y: (z.y / 100) * PREVIEW_H }}
-                    onDragStop={(_e, d) => updateZone(i, { x: clampPct(d.x / PREVIEW_W * 100), y: clampPct(d.y / PREVIEW_H * 100) })}
-                    onResizeStop={(_e, _dir, ref, _delta, position) => updateZone(i, {
-                      width: clampPct(parseFloat(ref.style.width) / PREVIEW_W * 100),
-                      height: clampPct(parseFloat(ref.style.height) / PREVIEW_H * 100),
-                      x: clampPct(position.x / PREVIEW_W * 100),
-                      y: clampPct(position.y / PREVIEW_H * 100),
-                    })}
-                    style={{
-                      background: ZONE_COLORS[i % ZONE_COLORS.length] + '55',
-                      border: `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexDirection: 'column', gap: 2,
-                    }}>
-                    <span style={{ fontSize: 9, color: '#fff', fontWeight: 600, textAlign: 'center' }}>{z.name}</span>
-                    <span style={{ opacity: 0.7, fontSize: 8, color: '#fff' }}>{t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`)}</span>
-                  </Rnd>
+              <div ref={previewRef} style={{ width: '100%', aspectRatio: '16 / 9', background: '#111', position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
+                {previewSize.width > 0 && zones.map((z, i) => {
+                  const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
+                  return (
+                    <Rnd
+                      key={i}
+                      bounds="parent"
+                      minWidth={MIN_ZONE_PX}
+                      minHeight={MIN_ZONE_PX}
+                      size={{ width: box.width, height: box.height }}
+                      position={{ x: box.left, y: box.top }}
+                      onDrag={(_e, d) => handleDrag(i, d.x, d.y)}
+                      onDragStop={(_e, d) => handleDragStop(i, d.x, d.y)}
+                      onResize={(_e, dir, ref, _delta, position) => handleResize(i, dir, ref, position)}
+                      onResizeStop={(_e, dir, ref, _delta, position) => handleResizeStop(i, dir, ref, position)}
+                      style={{
+                        background: ZONE_COLORS[i % ZONE_COLORS.length] + '55',
+                        border: `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexDirection: 'column', gap: 2,
+                      }}>
+                      <span style={{ fontSize: 11, color: '#fff', fontWeight: 600, textAlign: 'center' }}>{z.name}</span>
+                      <span style={{ opacity: 0.7, fontSize: 10, color: '#fff' }}>{t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`)}</span>
+                    </Rnd>
+                  );
+                })}
+                {guides.v.map((x, idx) => (
+                  <div key={`v-${idx}`} style={{ position: 'absolute', left: x, top: 0, width: 0, height: '100%', borderLeft: '1px solid #ec4899', pointerEvents: 'none', zIndex: 50 }} />
+                ))}
+                {guides.h.map((y, idx) => (
+                  <div key={`h-${idx}`} style={{ position: 'absolute', top: y, left: 0, height: 0, width: '100%', borderTop: '1px solid #ec4899', pointerEvents: 'none', zIndex: 50 }} />
                 ))}
               </div>
             </div>
 
             {/* Zone list */}
-            <div className="flex-1 space-y-3 max-h-80 overflow-y-auto pt-1">
+            <div className="max-w-4xl space-y-3">
               <div className="grid grid-cols-7 gap-2 text-[10px] text-gray-400 dark:text-gray-500 px-0.5">
                 <span />
                 <span className="col-span-2">{tc('name')}</span>
