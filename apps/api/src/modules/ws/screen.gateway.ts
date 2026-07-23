@@ -16,7 +16,8 @@ export type PlayerCommand =
   | { type: 'publish' }
   | { type: 'reload' }
   | { type: 'clear-cache' }
-  | { type: 'capture-screenshot' };
+  | { type: 'capture-screenshot' }
+  | { type: 'unpair'; pairingCode: string };
 
 interface ScreenSocketData {
   screenId?: string;

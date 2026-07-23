@@ -23,7 +23,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace(`/${locale}/screens`);
+    if (!loading && user) router.replace(`/${locale}/dashboard`);
   }, [user, loading, router, locale]);
 
   async function handleSubmit() {
@@ -32,7 +32,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      router.push(`/${locale}/screens`);
+      router.push(`/${locale}/dashboard`);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loginFailed'));
       // Keep the email — the backend intentionally returns the same error

@@ -44,6 +44,11 @@ export class ScreensController {
     return this.screens.remove(user.orgId, id);
   }
 
+  @Post(':id/unpair')
+  unpair(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.unpair(user.orgId, id);
+  }
+
   @Put(':id')
   rename(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: RenameScreenDto) {
     return this.screens.rename(user.orgId, id, dto.name);

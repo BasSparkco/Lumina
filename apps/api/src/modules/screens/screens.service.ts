@@ -59,17 +59,45 @@ export class ScreensService {
     await this.prisma.screen.delete({ where: { id } });
   }
 
+  // Distinct from `remove`: keeps the screen's row (name, history, settings) so it still shows
+  // up in the dashboard, but disconnects the paired device — its player JWT has no expiry-side
+  // revocation, so a still-online player is told over the socket to drop its stored credentials
+  // and go back to the pairing screen; a fresh pairing code is generated for whatever device
+  // re-pairs into this screen next (the same one, or a swapped-in replacement).
+  async unpair(orgId: string, id: string) {
+    await this.findOne(orgId, id);
+
+    let code: string;
+    let attempts = 0;
+    do {
+      code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      attempts++;
+    } while (attempts < 10 && (await this.prisma.screen.findUnique({ where: { pairingCode: code } })));
+
+    const updated = await this.prisma.screen.update({
+      where: { id },
+      data: { paired: false, playerToken: null, pairingCode: code, status: 'OFFLINE' },
+    });
+    // Hands the new code straight to the still-connected device rather than making it request
+    // its own via /player/init — that would mint an unrelated orphan screen row instead of
+    // re-pairing back into this one, losing its name/history/settings in the dashboard.
+    this.gateway.sendToScreen(id, { type: 'unpair', pairingCode: code });
+    return updated;
+  }
+
   async rename(orgId: string, id: string, name: string) {
     await this.findOne(orgId, id);
     return this.prisma.screen.update({ where: { id }, data: { name } });
   }
 
-  async assignPlaylist(orgId: string, screenId: string, playlistId: string) {
+  async assignPlaylist(orgId: string, screenId: string, playlistId: string | null) {
     const screen = await this.findOne(orgId, screenId);
-    const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
-    if (!playlist) throw new NotFoundException('Playlist not found');
-    if (playlist.approvalStatus !== 'APPROVED') {
-      throw new BadRequestException('Only approved playlists can be assigned to a screen');
+    if (playlistId) {
+      const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
+      if (!playlist) throw new NotFoundException('Playlist not found');
+      if (playlist.approvalStatus !== 'APPROVED') {
+        throw new BadRequestException('Only approved playlists can be assigned to a screen');
+      }
     }
     const updated = await this.prisma.screen.update({ where: { id: screen.id }, data: { playlistId } });
     this.gateway.sendToScreen(screenId, { type: 'publish' });
@@ -130,7 +158,7 @@ export class ScreensService {
     dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
   ) {
     await this.findOne(orgId, screenId);
-    return this.prisma.screen.update({
+    const updated = await this.prisma.screen.update({
       where: { id: screenId },
       data: {
         ...(dto.latitude !== undefined ? { latitude: dto.latitude } : {}),
@@ -140,6 +168,11 @@ export class ScreensService {
         ...(dto.timezone !== undefined ? { timezone: dto.timezone } : {}),
       },
     });
+    // Without this, a screen already displaying a Prayer/Weather zone keeps showing "no
+    // location set" (or stale times) until its next periodic 60s state refresh — every other
+    // screen setter below pushes live, this one silently didn't.
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
   }
 
   async setLayout(orgId: string, screenId: string, layoutId: string | null) {

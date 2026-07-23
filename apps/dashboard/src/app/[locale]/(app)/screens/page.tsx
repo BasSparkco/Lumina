@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Square, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2 } from 'lucide-react';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2 } from 'lucide-react';
 import { screensApi, playlistsApi, layoutsApi, type Screen } from '@/lib/api';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
@@ -305,13 +305,25 @@ export default function ScreensPage() {
     },
   });
 
+  const unpairMut = useMutation({
+    mutationFn: (screen: Screen) => screensApi.unpair(screen.id),
+    onSuccess: (_updated, screen) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: screen.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: ta('detailUnpaired'),
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
   const assignMut = useMutation({
-    mutationFn: ({ id, playlistId }: { id: string; playlistId: string }) => screensApi.assign(id, playlistId),
+    mutationFn: ({ id, playlistId }: { id: string; playlistId: string | null }) => screensApi.assign(id, playlistId),
     onSuccess: (updated, { playlistId }) => {
       logAction({
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
         userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: playlists.find(p => p.id === playlistId)?.name,
+        detail: playlistId ? playlists.find(p => p.id === playlistId)?.name : ta('detailPlaylistCleared'),
       });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -445,9 +457,13 @@ export default function ScreensPage() {
     return liveStatuses[screen.id] ?? screen.status;
   }
 
-  const visibleScreens = activeGroupId ? screens.filter(s => groupAssignments[s.id] === activeGroupId) : screens;
+  // Unpairing keeps the row around server-side (so re-pairing the same device lands back on
+  // its name/history/settings), but it's no longer a screen anyone here is managing day to
+  // day — hide it until something re-pairs into it.
+  const pairedScreens = screens.filter(s => s.paired);
+  const visibleScreens = activeGroupId ? pairedScreens.filter(s => groupAssignments[s.id] === activeGroupId) : pairedScreens;
   const screenLimit = planLimit(currentPlan);
-  const atScreenLimit = screenLimit !== null && screens.length >= screenLimit;
+  const atScreenLimit = screenLimit !== null && pairedScreens.length >= screenLimit;
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -648,7 +664,8 @@ export default function ScreensPage() {
               </div>
 
               {!screen.hasContent && (
-                <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-2 py-1.5">
+                <div title={t('awaitingContentTitle')}
+                  className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-2 py-1.5">
                   <FileQuestion className="w-3 h-3" /> {t('awaitingContent')}
                 </div>
               )}
@@ -657,7 +674,7 @@ export default function ScreensPage() {
                 <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('defaultPlaylist')}</label>
                 <select
                   value={screen.playlistId ?? ''} disabled={!canEditContent}
-                  onChange={e => { if (e.target.value) assignMut.mutate({ id: screen.id, playlistId: e.target.value }); }}
+                  onChange={e => assignMut.mutate({ id: screen.id, playlistId: e.target.value || null })}
                   className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
                   <option value="">{t('none')}</option>
                   {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -734,7 +751,7 @@ export default function ScreensPage() {
 
               {screen.stopped && (
                 <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-2 py-1.5">
-                  <Square className="w-3 h-3 fill-current" /> {t('stoppedBanner')}
+                  <Pause className="w-3 h-3 fill-current" /> {t('stoppedBanner')}
                 </div>
               )}
 
@@ -751,13 +768,13 @@ export default function ScreensPage() {
                   <button
                     onClick={() => stopMut.mutate({ id: screen.id, stopped: !screen.stopped })}
                     disabled={stopMut.isPending && stopMut.variables?.id === screen.id}
-                    title={screen.stopped ? t('resumeStreamTitle') : t('stopStreamTitle')}
+                    title={screen.stopped ? t('resumeStreamTitle') : t('pauseStreamTitle')}
                     className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
                       screen.stopped
                         ? 'border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950'
                         : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}>
-                    {screen.stopped ? <Play className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+                    {screen.stopped ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
                   </button>
                   <button
                     onClick={() => emergencyMut.mutate({ id: screen.id, active: !screen.emergencyActive })}
@@ -776,6 +793,13 @@ export default function ScreensPage() {
                     title={t('reloadTitle')}
                     className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
                     <RefreshCw className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => { if (confirmDelete(t('unpairConfirm'))) unpairMut.mutate(screen); }}
+                    disabled={unpairMut.isPending && unpairMut.variables?.id === screen.id}
+                    title={t('unpairTitle')}
+                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
+                    <Unplug className="w-3 h-3" />
                   </button>
                 </div>
               )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
 import { api, type Playlist, type PlayerState, type Zone } from '../lib/api';
 import { cache } from '../lib/db';
 import { connectSocket, disconnectSocket } from '../lib/socket';
@@ -14,10 +15,62 @@ import TickerWidget from '../components/TickerWidget';
 const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
 
-interface PlayerCommand { type: 'publish' | 'reload' | 'clear-cache' }
+type PlayerCommand =
+  | { type: 'publish' | 'reload' | 'clear-cache' | 'capture-screenshot' }
+  | { type: 'unpair'; pairingCode: string };
+
+// Whether a given zone actually has something to show, mirroring each widget's own "nothing
+// configured" fallback in ZoneRenderer below (a Prayer/Weather zone with no location, or a
+// Ticker with no feed URL, is exactly the kind of gap the "Awaiting content" badge exists to
+// flag — it just wasn't ever being reported to the dashboard).
+function zoneHasContent(zone: Zone, state: PlayerState): boolean {
+  const cfg = zone.widgetConfig ?? {};
+  switch (zone.zoneType) {
+    case 'PRAYER':
+    case 'WEATHER': {
+      const lat = (cfg.latitude as number | undefined) ?? state.latitude;
+      const lon = (cfg.longitude as number | undefined) ?? state.longitude;
+      return lat != null && lon != null;
+    }
+    case 'TICKER':
+      return !!cfg.feedUrl;
+    case 'CURRENCY':
+      return true;
+    default:
+      return !!zone.playlist && zone.playlist.items.length > 0;
+  }
+}
+
+// Item 5 (awaiting-content badge) — the backend only flips this from the player's own
+// heartbeat, so it needs an honest answer for whatever's *actually* about to render, not just
+// "is a playlist assigned." Deliberately ignores poweredOn/stopped: a screen paused or outside
+// its power window isn't missing content, so neither should flip the badge on.
+function computeHasContent(state: PlayerState, activePlaylist: Playlist | null): boolean {
+  if (state.emergencyActive && state.emergencyPlaylist) return state.emergencyPlaylist.items.length > 0;
+  if (state.layout) return state.layout.zones.some(z => zoneHasContent(z, state));
+  return !!activePlaylist && activePlaylist.items.length > 0;
+}
+
+// Best-effort — a failed capture (e.g. a tainted canvas from a CORS-blocked asset) shouldn't
+// crash playback; the dashboard just keeps showing whatever screenshot it already had.
+async function captureAndUploadScreenshot() {
+  try {
+    const canvas = await html2canvas(document.body, {
+      backgroundColor: '#000000',
+      useCORS: true,
+      logging: false,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+    if (blob) await api.uploadScreenshot(blob);
+  } catch {
+    /* ignore — see comment above */
+  }
+}
 
 export default function PlayerPage() {
-  const { token } = usePlayerStore();
+  const { token, unpair } = usePlayerStore();
   const navigate = useNavigate();
   const [state, setState] = useState<PlayerState | null>(null);
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
@@ -27,6 +80,9 @@ export default function PlayerPage() {
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scheduleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentAssetRef = useRef<string | null>(null);
+  // Read by the heartbeat interval below, which is set up once on mount and would otherwise
+  // only ever see the `activePlaylist`/`state` values from that first render.
+  const hasContentRef = useRef(false);
 
   const loadState = useCallback(async () => {
     try {
@@ -57,8 +113,10 @@ export default function PlayerPage() {
 
   // Applies both the resolved playlist and the resolved power-on state for a given state snapshot.
   const applyState = useCallback((s: PlayerState) => {
-    setActivePlaylist(resolvePlaylist(s));
+    const playlist = resolvePlaylist(s);
+    setActivePlaylist(playlist);
     setPoweredOn(resolvePower(s.powerScheduleRules, new Date()));
+    hasContentRef.current = computeHasContent(s, playlist);
   }, [resolvePlaylist]);
 
   // Re-evaluate schedule + power window every minute
@@ -82,7 +140,7 @@ export default function PlayerPage() {
     });
 
     heartbeatRef.current = setInterval(async () => {
-      try { await api.heartbeat(currentAssetRef.current); } catch { /* keep playing */ }
+      try { await api.heartbeat(currentAssetRef.current, hasContentRef.current); } catch { /* keep playing */ }
     }, HEARTBEAT_INTERVAL);
 
     refreshRef.current = setInterval(async () => {
@@ -103,7 +161,21 @@ export default function PlayerPage() {
       } else if (cmd.type === 'clear-cache') {
         await cache.clear();
         window.location.reload();
+      } else if (cmd.type === 'capture-screenshot') {
+        void captureAndUploadScreenshot();
+      } else if (cmd.type === 'unpair') {
+        await cache.clear();
+        unpair(cmd.pairingCode);
+        void navigate('/');
       }
+    });
+
+    // A screen that was briefly offline (wifi hiccup, tab suspended) otherwise doesn't see
+    // whatever changed until the next STATE_REFRESH_INTERVAL tick (up to 60s) — `reconnect`
+    // (unlike `connect`, which also fires on the very first connection) only fires after a
+    // real drop, so this doesn't duplicate the loadState() call already made above.
+    sock.io.on('reconnect', () => {
+      void loadState().then(s => { if (s) { applyState(s); scheduleNextCheck(s); } });
     });
 
     return () => {
@@ -123,9 +195,9 @@ export default function PlayerPage() {
   // shows nothing, so this is a bare black container with no status text (unlike Splash).
   if (!poweredOn) return <FullscreenContainer />;
 
-  // Stopped from the dashboard — takes priority over everything else, including an
+  // Paused from the dashboard — takes priority over everything else, including an
   // active emergency override, since it's an explicit "blank this screen now" action.
-  if (state.stopped) return <Splash text="Playback stopped" />;
+  if (state.stopped) return <Splash text="Playback paused" />;
 
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {

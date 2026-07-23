@@ -1,6 +1,7 @@
-import { IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class AssignPlaylistDto {
+  @IsOptional()
   @IsString()
-  playlistId!: string;
+  playlistId!: string | null;
 }

@@ -54,9 +54,10 @@ export const screensApi = {
   list: () => req<Screen[]>('/screens'),
   create: (name: string) => req<Screen>('/screens', { method: 'POST', body: JSON.stringify({ name }) }),
   remove: (id: string) => req<void>(`/screens/${id}`, { method: 'DELETE' }),
+  unpair: (id: string) => req<Screen>(`/screens/${id}/unpair`, { method: 'POST' }),
   rename: (id: string, name: string) => req<Screen>(`/screens/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   pair: (code: string) => req<Screen>('/screens/pair', { method: 'POST', body: JSON.stringify({ code }) }),
-  assign: (id: string, playlistId: string) =>
+  assign: (id: string, playlistId: string | null) =>
     req<Screen>(`/screens/${id}/assign`, { method: 'POST', body: JSON.stringify({ playlistId }) }),
   publish: (id: string) => req<{ ok: boolean }>(`/screens/${id}/publish`, { method: 'POST' }),
   reload: (id: string) => req<{ ok: boolean }>(`/screens/${id}/reload`, { method: 'POST' }),

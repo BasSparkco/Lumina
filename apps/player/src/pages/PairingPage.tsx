@@ -7,12 +7,22 @@ export default function PairingPage() {
   const [code, setCode] = useState<string>('');
   const [error, setError] = useState<string>('');
   const navigate = useNavigate();
-  const { screenId, token, setScreenId, setToken } = usePlayerStore();
+  const { screenId, token, setScreenId, setToken, pendingPairingCode, clearPendingPairingCode } = usePlayerStore();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // If already paired, go straight to player
   useEffect(() => {
     if (token && screenId) { void navigate('/play'); return; }
+
+    // Handed a fresh code for our *existing* screenId (an unpair just happened) — resume
+    // polling on that same screen entity instead of requesting a brand new one, which would
+    // orphan this screen's name/history/settings behind a code nobody's displaying.
+    if (pendingPairingCode && screenId) {
+      setCode(pendingPairingCode);
+      clearPendingPairingCode();
+      startPolling(screenId);
+      return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }
 
     async function start() {
       try {

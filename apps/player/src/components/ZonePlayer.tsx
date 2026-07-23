@@ -97,6 +97,7 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100 }: Pr
           key={item.id}
           src={item.asset.url ?? undefined}
           alt={item.asset.name}
+          crossOrigin="anonymous"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         />
       )}
@@ -140,6 +141,7 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100 }: Pr
           muted={item.muted}
           loop={playlist.items.length === 1}
           playsInline
+          crossOrigin="anonymous"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           onEnded={playlist.items.length === 1 ? undefined : advance}
         />

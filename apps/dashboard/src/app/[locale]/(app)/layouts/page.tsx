@@ -581,9 +581,16 @@ export default function LayoutsPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {layouts.map((layout: Layout) => (
-          <div key={layout.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+        {layouts.map((layout: Layout) => {
+          const isEditingThis = editing !== null && editing !== 'new' && editing.id === layout.id;
+          return (
+          <div key={layout.id} className={`bg-white dark:bg-gray-900 rounded-xl border p-4 ${isEditingThis ? 'border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-100 dark:ring-indigo-900/50' : 'border-gray-200 dark:border-gray-800'}`}>
             <div className="flex items-center justify-between mb-3 gap-2">
+              {isEditingThis && (
+                <span className="flex items-center gap-1 shrink-0 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded">
+                  <Pencil className="w-2.5 h-2.5" /> {t('currentlyEditing')}
+                </span>
+              )}
               {renamingId === layout.id ? (
                 <input
                   autoFocus
@@ -662,7 +669,8 @@ export default function LayoutsPage() {
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{t('screenCount', { count: layout._count.screens })}</p>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -26,7 +26,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(form.orgName, form.email, form.password, form.name);
-      router.push(`/${locale}/screens`);
+      router.push(`/${locale}/dashboard`);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('registrationFailed'));
       setForm(f => ({ ...f, password: '' }));

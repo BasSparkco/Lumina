@@ -3,6 +3,7 @@
     "title": "Lumina Signage"
   },
   "nav": {
+    "dashboard": "Dashboard",
     "screens": "Screens",
     "assets": "Assets",
     "playlists": "Playlists",
@@ -16,6 +17,8 @@
     "settings": "Settings",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "signOut": "Sign out",
     "loading": "Loading…"
   },
@@ -157,9 +160,11 @@
       "publishing": "Publishing…",
       "published": "{count, plural, one {Published to # screen} other {Published to # screens}}"
     },
-    "stoppedBanner": "Playback stopped",
-    "stopStreamTitle": "Stop the stream on this screen",
+    "stoppedBanner": "Playback paused",
+    "pauseStreamTitle": "Pause the stream on this screen",
     "resumeStreamTitle": "Resume the stream on this screen",
+    "unpairTitle": "Unpair this screen so it can be re-paired",
+    "unpairConfirm": "Unpair this screen? It will stop playing and need to be paired again with a new code before it can show content.",
     "nameWarning": {
       "title": "Give this screen a name",
       "body": "\"{name}\" is easy to mix up with other screens later — rename it now, or skip to keep this name.",
@@ -292,6 +297,7 @@
     "deleteConfirm": "Delete layout?",
     "clickToEdit": "Click to edit layout",
     "editLayout": "Edit layout",
+    "currentlyEditing": "Currently editing",
     "noPlaylistBadge": "no playlist",
     "screenCount": "{count, plural, one {# screen} other {# screens}}",
     "duplicate": "Duplicate layout",
@@ -498,14 +504,14 @@
       "ADD_ITEM": "Added item",
       "REMOVE_ITEM": "Removed item"
     },
-    "detailStopped": "Playback stopped",
-    "detailResumed": "Playback resumed"
+    "detailStopped": "Playback paused",
+    "detailResumed": "Playback resumed",
+    "detailUnpaired": "Unpaired — needs re-pairing",
+    "detailPlaylistCleared": "Cleared default playlist"
   },
   "reports": {
     "title": "Reports",
-    "subtitle": "Proof-of-play history and fleet health across your screens",
-    "tabProofOfPlay": "Proof-of-play",
-    "tabFleet": "Fleet",
+    "subtitle": "Proof-of-play history across your screens",
     "screen": "Screen",
     "allScreens": "All screens",
     "fromDate": "From date",
@@ -527,8 +533,14 @@
     "playsPerScreen": "Plays per screen"
   },
   "fleet": {
+    "title": "Dashboard",
+    "subtitle": "Fleet health and content overview across your organization",
     "totalScreens": "Total screens",
     "avgUptime": "Avg. uptime (7d)",
+    "totalPlaylists": "Playlists",
+    "totalAssets": "Assets",
+    "storageUsed": "Storage used",
+    "screensWithCrashes": "Screens with crashes (7d)",
     "offlineAlert": "{count, plural, one {# screen has been offline for over 5 minutes} other {# screens have been offline for over 5 minutes}}",
     "loading": "Loading fleet status…",
     "empty": "No screens yet.",

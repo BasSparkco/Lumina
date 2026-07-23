@@ -108,14 +108,28 @@ export const api = {
   checkPairing: (screenId: string) => request<{ paired: false } | { paired: true; token: string }>(`/player/check?screenId=${screenId}`),
   getPlaylist: () => request<Playlist | null>('/player/playlist'),
   getState: () => request<PlayerState>('/player/state'),
-  heartbeat: (currentAssetId: string | null) =>
-    request('/player/heartbeat', { method: 'POST', body: JSON.stringify({ currentAssetId }) }),
+  heartbeat: (currentAssetId: string | null, hasContent?: boolean) =>
+    request('/player/heartbeat', { method: 'POST', body: JSON.stringify({ currentAssetId, hasContent }) }),
   getWeather: (lat: number, lon: number) =>
     request<WeatherData | null>(`/feeds/weather?lat=${lat}&lon=${lon}`),
   getCurrency: (base = 'USD') =>
     request<CurrencyData | null>(`/feeds/currency?base=${base}`),
   getTicker: (url: string) =>
     request<TickerData | null>(`/feeds/ticker?url=${encodeURIComponent(url)}`),
+  // Raw fetch, not the shared `request()` helper — that always sends
+  // `Content-Type: application/json`, which would stomp the multipart boundary the browser
+  // needs to set itself for a FormData body.
+  uploadScreenshot: async (blob: Blob): Promise<void> => {
+    const token = localStorage.getItem('player_token');
+    const form = new FormData();
+    form.append('file', blob, 'screenshot.jpg');
+    const res = await fetch(`${BASE}/player/screenshot`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Screenshot upload failed: ${res.status}`);
+  },
 };
 
 export interface WeatherData {
