@@ -92,6 +92,7 @@ export interface PlayerState {
   prayerMethod: string;
   athanEnabled: boolean;
   stopped: boolean;
+  showClock: boolean;
   emergencyActive: boolean;
   emergencyPlaylist: Playlist | null;
   layout: { id: string; name: string; zones: Zone[] } | null;

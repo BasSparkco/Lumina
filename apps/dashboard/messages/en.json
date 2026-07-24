@@ -112,6 +112,7 @@
     "layoutZones": "Layout (zones)",
     "fullscreenNoLayout": "— Fullscreen (no layout) —",
     "timezone": "Timezone (used to resolve schedules for this screen)",
+    "showClock": "Show clock on screen",
     "volume": "Volume",
     "hideFaith": "Hide faith settings",
     "configureFaith": "Configure faith settings",
@@ -506,6 +507,8 @@
     },
     "detailStopped": "Playback paused",
     "detailResumed": "Playback resumed",
+    "detailClockOn": "Clock enabled",
+    "detailClockOff": "Clock disabled",
     "detailUnpaired": "Unpaired — needs re-pairing",
     "detailPlaylistCleared": "Cleared default playlist"
   },

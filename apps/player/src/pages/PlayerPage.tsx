@@ -202,7 +202,7 @@ export default function PlayerPage() {
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (
-      <FullscreenContainer>
+      <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
         <ZonePlayer playlist={state.emergencyPlaylist} volume={state.volume} onAssetChange={id => { currentAssetRef.current = id; }} />
       </FullscreenContainer>
     );
@@ -211,7 +211,7 @@ export default function PlayerPage() {
   // Multi-zone layout mode
   if (state.layout && state.layout.zones.length > 0) {
     return (
-      <FullscreenContainer>
+      <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
         {state.layout.zones.map(zone => (
           <div
             key={zone.id}
@@ -238,7 +238,7 @@ export default function PlayerPage() {
   }
 
   return (
-    <FullscreenContainer>
+    <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
       <ZonePlayer
         playlist={activePlaylist}
         volume={state.volume}
@@ -288,10 +288,31 @@ function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: Playe
   }
 }
 
-function FullscreenContainer({ children }: { children?: React.ReactNode }) {
+function FullscreenContainer({ children, showClock, timezone }: { children?: React.ReactNode; showClock?: boolean; timezone?: string }) {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
       {children}
+      {showClock && timezone && <ClockOverlay timezone={timezone} />}
+    </div>
+  );
+}
+
+function ClockOverlay({ timezone }: { timezone: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone });
+  return (
+    <div
+      style={{
+        position: 'absolute', top: 16, right: 16, zIndex: 9999,
+        color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '6px 16px', borderRadius: 8,
+        fontFamily: 'system-ui, sans-serif', fontSize: '1.75rem', fontWeight: 600, letterSpacing: '0.02em',
+      }}
+    >
+      {time}
     </div>
   );
 }

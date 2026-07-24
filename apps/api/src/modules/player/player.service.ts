@@ -140,6 +140,7 @@ export class PlayerService {
       prayerMethod: screen.prayerMethod,
       athanEnabled: screen.athanEnabled,
       stopped: screen.stopped,
+      showClock: screen.showClock,
       emergencyActive: screen.emergencyActive,
       emergencyPlaylist: screen.emergencyPlaylist
         ? this.hydratePlaylist(screen.emergencyPlaylist)

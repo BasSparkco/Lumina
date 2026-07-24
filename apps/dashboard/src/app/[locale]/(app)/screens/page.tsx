@@ -378,6 +378,19 @@ export default function ScreensPage() {
     },
   });
 
+  const showClockMut = useMutation({
+    mutationFn: ({ id, showClock }: { id: string; showClock: boolean }) =>
+      screensApi.setShowClock(id, showClock),
+    onSuccess: (updated, { showClock }) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: showClock ? ta('detailClockOn') : ta('detailClockOff'),
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
   const createGroupMut = useMutation({
     mutationFn: () => screenGroupsApi.create(newGroupName.trim()),
     onSuccess: (created) => {
@@ -701,6 +714,17 @@ export default function ScreensPage() {
                   onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz })}
                 />
               </div>
+
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={screen.showClock}
+                  disabled={!canEditContent || (showClockMut.isPending && showClockMut.variables?.id === screen.id)}
+                  onChange={e => showClockMut.mutate({ id: screen.id, showClock: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-indigo-500"
+                />
+                <Clock className="w-3.5 h-3.5" /> {t('showClock')}
+              </label>
 
               <VolumeControl screen={screen} disabled={!canEditContent} />
 

@@ -152,6 +152,13 @@ export class ScreensService {
     return updated;
   }
 
+  async setShowClock(orgId: string, screenId: string, showClock: boolean) {
+    await this.findOne(orgId, screenId);
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { showClock } });
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
+  }
+
   async updatePrayerConfig(
     orgId: string,
     screenId: string,

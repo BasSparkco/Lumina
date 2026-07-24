@@ -104,6 +104,7 @@ model Screen {
   athanEnabled        Boolean      @default(false)
   emergencyActive     Boolean      @default(false)
   stopped             Boolean      @default(false)
+  showClock           Boolean      @default(false)
   // Item 10 (volume control) — 0-100, null = inherit the screen's group's volume, or 100 if
   // there's no group or the group's own volume is unset.
   volume              Int?

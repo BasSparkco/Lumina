@@ -102,6 +102,15 @@ export class ScreensController {
     return this.screens.setStopped(user.orgId, id, dto.stopped);
   }
 
+  @Put(':id/show-clock')
+  setShowClock(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: { showClock: boolean },
+  ) {
+    return this.screens.setShowClock(user.orgId, id, dto.showClock);
+  }
+
   @Put(':id/prayer')
   updatePrayer(
     @CurrentUser() user: JwtUser,

@@ -69,6 +69,8 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/stop`, { method: 'PUT', body: JSON.stringify({ stopped }) }),
   setVolume: (id: string, volume: number | null) =>
     req<Screen>(`/screens/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
+  setShowClock: (id: string, showClock: boolean) =>
+    req<Screen>(`/screens/${id}/show-clock`, { method: 'PUT', body: JSON.stringify({ showClock }) }),
   updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string }) =>
     req<Screen>(`/screens/${id}/prayer`, { method: 'PUT', body: JSON.stringify(data) }),
   captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
@@ -194,7 +196,7 @@ export interface PowerScheduleEntry extends CreatePowerScheduleInput {
 export interface Screen {
   id: string; name: string; status: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null;
   paired: boolean; playlistId: string | null; playlist?: { id: string; name: string } | null;
-  layoutId: string | null; emergencyActive: boolean; stopped: boolean;
+  layoutId: string | null; emergencyActive: boolean; stopped: boolean; showClock: boolean;
   latitude: number | null; longitude: number | null;
   prayerMethod: string; athanEnabled: boolean; timezone: string;
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
