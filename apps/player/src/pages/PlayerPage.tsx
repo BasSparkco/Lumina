@@ -6,10 +6,9 @@ import { connectSocket, disconnectSocket } from '../lib/socket';
 import { resolveSchedule, msUntilNextTransition } from '../lib/scheduler';
 import { usePlayerStore } from '../store/playerStore';
 import ZonePlayer from '../components/ZonePlayer';
-import PrayerZoneWidget, { type PrayerMethod } from '../components/PrayerZoneWidget';
-import WeatherWidget from '../components/WeatherWidget';
-import CurrencyWidget from '../components/CurrencyWidget';
-import TickerWidget from '../components/TickerWidget';
+import ThemeRenderer from '../components/ThemeRenderer';
+import LiveWidget from '../components/LiveWidget';
+import Splash from '../components/Splash';
 
 const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
@@ -45,6 +44,7 @@ export default function PlayerPage() {
   // Schedule resolution: pick the right playlist from schedule rules
   const resolvePlaylist = useCallback((s: PlayerState): Playlist | null => {
     if (s.emergencyActive && s.emergencyPlaylist) return s.emergencyPlaylist;
+    if (s.theme) return null; // theme mode — elements handle their own media
     if (s.layout) return null; // layout mode — zones handle their own playlists
     const matchedId = resolveSchedule(s.scheduleRules, new Date());
     if (matchedId) {
@@ -108,14 +108,23 @@ export default function PlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  if (!loaded) return <Splash text="Loading…" />;
-  if (!state) return <Splash text="No content assigned" />;
+  if (!loaded) return <FullscreenContainer><Splash text="Loading…" /></FullscreenContainer>;
+  if (!state) return <FullscreenContainer><Splash text="No content assigned" /></FullscreenContainer>;
 
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (
       <FullscreenContainer>
         <ZonePlayer playlist={state.emergencyPlaylist} onAssetChange={id => { currentAssetRef.current = id; }} />
+      </FullscreenContainer>
+    );
+  }
+
+  // Theme mode — styled template (text/images/colors), takes precedence over a plain layout
+  if (state.theme) {
+    return (
+      <FullscreenContainer>
+        <ThemeRenderer theme={state.theme} state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
       </FullscreenContainer>
     );
   }
@@ -146,7 +155,7 @@ export default function PlayerPage() {
 
   // Single-playlist mode (schedule-resolved)
   if (!activePlaylist || activePlaylist.items.length === 0) {
-    return <Splash text="No content scheduled right now" />;
+    return <FullscreenContainer><Splash text="No content scheduled right now" /></FullscreenContainer>;
   }
 
   return (
@@ -160,57 +169,18 @@ export default function PlayerPage() {
 }
 
 function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: PlayerState; onAssetChange: (id: string) => void }) {
-  const cfg = zone.widgetConfig ?? {};
-  const lat = (cfg.latitude as number | undefined) ?? state.latitude;
-  const lon = (cfg.longitude as number | undefined) ?? state.longitude;
-  const lang = (cfg.lang as 'en' | 'ar' | undefined) ?? 'en';
-
-  switch (zone.zoneType) {
-    case 'PRAYER':
-      if (lat == null || lon == null) return <Splash text="Prayer zone: no location set" />;
-      return (
-        <PrayerZoneWidget
-          latitude={lat}
-          longitude={lon}
-          method={((cfg.method as string | undefined) ?? state.prayerMethod) as PrayerMethod}
-          athanEnabled={(cfg.athanEnabled as boolean | undefined) ?? state.athanEnabled}
-          athanUrl={(cfg.athanUrl as string | undefined)}
-          lang={lang}
-        />
-      );
-    case 'WEATHER':
-      if (lat == null || lon == null) return <Splash text="Weather zone: no location set" />;
-      return <WeatherWidget latitude={lat} longitude={lon} lang={lang} />;
-    case 'CURRENCY':
-      return (
-        <CurrencyWidget
-          base={(cfg.base as string | undefined) ?? 'USD'}
-          currencies={cfg.currencies as string[] | undefined}
-          lang={lang}
-        />
-      );
-    case 'TICKER':
-      if (!cfg.feedUrl) return <Splash text="Ticker zone: no RSS URL set" />;
-      return <TickerWidget feedUrl={cfg.feedUrl as string} lang={lang} />;
-    default:
-      return zone.playlist
-        ? <ZonePlayer playlist={zone.playlist} onAssetChange={onAssetChange} />
-        : null;
+  if (zone.zoneType === 'PRAYER' || zone.zoneType === 'WEATHER' || zone.zoneType === 'CURRENCY' || zone.zoneType === 'TICKER') {
+    return <LiveWidget widgetType={zone.zoneType} widgetConfig={zone.widgetConfig ?? {}} state={state} />;
   }
+  return zone.playlist
+    ? <ZonePlayer playlist={zone.playlist} onAssetChange={onAssetChange} />
+    : null;
 }
 
 function FullscreenContainer({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
       {children}
-    </div>
-  );
-}
-
-function Splash({ text }: { text: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#000', color: '#444', fontFamily: 'system-ui, sans-serif', fontSize: '1.25rem' }}>
-      {text}
     </div>
   );
 }

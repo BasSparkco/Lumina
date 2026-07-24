@@ -14,6 +14,7 @@ import { PlaylistsModule } from './modules/playlists/playlists.module';
 import { PlayerModule } from './modules/player/player.module';
 import { WsModule } from './modules/ws/ws.module';
 import { LayoutsModule } from './modules/layouts/layouts.module';
+import { ThemesModule } from './modules/themes/themes.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
 import { FeedsModule } from './modules/feeds/feeds.module';
 import { OrgModule } from './modules/org/org.module';
@@ -82,6 +83,7 @@ loadEnvFile();
     PlayerModule,
     WsModule,
     LayoutsModule,
+    ThemesModule,
     SchedulesModule,
     FeedsModule,
     OrgModule,

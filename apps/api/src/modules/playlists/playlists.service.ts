@@ -36,7 +36,18 @@ export class PlaylistsService {
     });
     if (!playlist) throw new NotFoundException('Playlist not found');
 
-    const itemsWithUrls = playlist.items.map((item: (typeof playlist.items)[number]) => ({
+    const itemsWithUrls = playlist.items.map((item: (typeof playlist.items)[number]) => this.shapeItem(item));
+
+    return { ...playlist, items: itemsWithUrls };
+  }
+
+  // Callers (addItem, findOne) need the same asset shape — sizeBytes coerced from bigint,
+  // and storage keys resolved to fetchable URLs — so the frontend's PlaylistItem type is
+  // satisfied everywhere an item comes back, not just on a full playlist fetch.
+  private shapeItem<T extends { asset: { storageKey: string; thumbnailKey: string | null; sizeBytes: bigint } }>(
+    item: T,
+  ) {
+    return {
       ...item,
       asset: {
         ...item.asset,
@@ -46,9 +57,7 @@ export class PlaylistsService {
           ? this.storage.publicUrl(item.asset.thumbnailKey)
           : null,
       },
-    }));
-
-    return { ...playlist, items: itemsWithUrls };
+    };
   }
 
   async rename(orgId: string, id: string, name: string) {
@@ -77,7 +86,7 @@ export class PlaylistsService {
     await this.prisma.playlist.delete({ where: { id } });
   }
 
-  async addItem(orgId: string, playlistId: string, assetId: string, durationSecs: number, muted?: boolean) {
+  async addItem(orgId: string, playlistId: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) {
     await this.assertOwns(orgId, playlistId);
     const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
@@ -88,17 +97,29 @@ export class PlaylistsService {
     });
     const position = (last?.position ?? -1) + 1;
 
-    return this.prisma.playlistItem.create({
-      data: { playlistId, assetId, position, durationSecs, ...(muted !== undefined && { muted }) },
+    const created = await this.prisma.playlistItem.create({
+      data: {
+        playlistId, assetId, position, durationSecs,
+        ...(muted !== undefined && { muted }),
+        ...(playFullVideo !== undefined && { playFullVideo }),
+      },
+      include: { asset: true },
     });
+    return this.shapeItem(created);
   }
 
-  async updateItem(orgId: string, playlistId: string, itemId: string, durationSecs: number, muted?: boolean) {
+  async updateItem(orgId: string, playlistId: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) {
     await this.assertOwns(orgId, playlistId);
-    return this.prisma.playlistItem.update({
+    const updated = await this.prisma.playlistItem.update({
       where: { id: itemId },
-      data: { durationSecs, ...(muted !== undefined && { muted }) },
+      data: {
+        durationSecs,
+        ...(muted !== undefined && { muted }),
+        ...(playFullVideo !== undefined && { playFullVideo }),
+      },
+      include: { asset: true },
     });
+    return this.shapeItem(updated);
   }
 
   async removeItem(orgId: string, playlistId: string, itemId: string) {

@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -14,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 import { memoryStorage } from 'multer';
+import type { AssetCategory } from '@lumina/db';
 import { AssetsService } from './assets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -46,6 +48,18 @@ export class AssetsController {
   @Get()
   list(@CurrentUser() user: JwtUser) {
     return this.assets.list(user.orgId);
+  }
+
+  // Must be registered before `:id` below — a literal path segment ('library') only wins over
+  // a route param when Nest sees it first.
+  @Get('library')
+  listLibrary(@Query('category') category?: AssetCategory, @Query('search') search?: string) {
+    return this.assets.listLibrary(category, search);
+  }
+
+  @Post('library/:id/use')
+  useFromLibrary(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.assets.copyFromLibrary(user.orgId, id);
   }
 
   @Get(':id')

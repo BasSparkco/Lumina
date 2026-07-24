@@ -2,7 +2,7 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ImageIcon, Film, Music, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw, Send } from 'lucide-react';
+import { ImageIcon, Film, Music, Trash2, ChevronUp, ChevronDown, Plus, ArrowLeft, RefreshCw, Send, Volume2, VolumeX } from 'lucide-react';
 import { playlistsApi, assetsApi, type Playlist, type PlaylistItem, type Asset } from '@/lib/api';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord } from '@/lib/mocks/approvals';
 import { useLocale, useTranslations } from 'next-intl';
@@ -16,6 +16,12 @@ function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
   if (b < 1024 ** 2) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1024 ** 2).toFixed(1)} MB`;
+}
+
+function formatDuration(secs: number) {
+  const m = Math.floor(secs / 60);
+  const s = Math.round(secs % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 export default function PlaylistPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,8 +76,8 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list, enabled: showAssetPicker });
 
   const addMut = useMutation({
-    mutationFn: ({ assetId, dur }: { assetId: string; dur: number }) =>
-      playlistsApi.addItem(id, assetId, dur),
+    mutationFn: ({ assetId, dur, playFullVideo }: { assetId: string; dur: number; playFullVideo?: boolean }) =>
+      playlistsApi.addItem(id, assetId, dur, undefined, playFullVideo),
     onSuccess: (created, { assetId }) => {
       const assetName = assets.find((a: Asset) => a.id === assetId)?.name ?? '';
       logAction({
@@ -101,6 +107,18 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
+  const muteMut = useMutation({
+    mutationFn: ({ item, muted }: { item: PlaylistItem; muted: boolean }) =>
+      playlistsApi.updateItem(id, item.id, item.durationSecs, muted),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
+  const fullVideoMut = useMutation({
+    mutationFn: ({ item, playFullVideo }: { item: PlaylistItem; playFullVideo: boolean }) =>
+      playlistsApi.updateItem(id, item.id, item.durationSecs, item.muted, playFullVideo),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
   const reorderMut = useMutation({
     mutationFn: (ids: string[]) => playlistsApi.reorder(id, ids),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
@@ -123,6 +141,10 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
 
   if (isLoading) return <div className="p-8 text-sm text-gray-400">{t('loading')}</div>;
   if (!playlist) return <div className="p-8 text-sm text-red-500">{t('notFound')}</div>;
+
+  // A single-item playlist just loops that one item forever — there's nothing to advance to,
+  // so the per-item duration is meaningless and only clutters the panel.
+  const showDuration = playlist.items.length > 1;
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
@@ -177,7 +199,11 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
             <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('pickAsset')}</h2>
             <div className="overflow-y-auto flex-1 space-y-1">
               {assets.filter((a: Asset) => a.status === 'READY').map((a: Asset) => (
-                <button key={a.id} onClick={() => addMut.mutate({ assetId: a.id, dur: defaultDuration })}
+                <button key={a.id} onClick={() => addMut.mutate(
+                  a.type === 'VIDEO'
+                    ? { assetId: a.id, dur: a.durationSecs ? Math.ceil(a.durationSecs) : defaultDuration, playFullVideo: true }
+                    : { assetId: a.id, dur: defaultDuration },
+                )}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
                   {a.thumbnailUrl
                     ? <img src={a.thumbnailUrl} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
@@ -238,12 +264,57 @@ export default function PlaylistPage({ params }: { params: Promise<{ id: string 
               <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{typeIcon[item.asset.type]} {item.asset.type}</p>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
-              <input type="number" min={1} max={3600} value={item.durationSecs} disabled={!canEditContent}
-                onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value) })}
-                className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
-              <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
-            </div>
+            {showDuration && item.asset.type !== 'VIDEO' && (
+              <div className="flex items-center gap-1 shrink-0">
+                <input type="number" min={1} max={3600} value={item.durationSecs} disabled={!canEditContent}
+                  onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value) })}
+                  className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
+                <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
+              </div>
+            )}
+
+            {showDuration && item.asset.type === 'VIDEO' && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {item.asset.durationSecs != null && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500" title={t('videoDuration')}>
+                    {formatDuration(item.asset.durationSecs)}
+                  </span>
+                )}
+                <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-xs">
+                  <button type="button" disabled={!canEditContent}
+                    onClick={() => fullVideoMut.mutate({ item, playFullVideo: true })}
+                    className={`px-2 py-1 ${item.playFullVideo ? 'bg-indigo-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                    {t('playFullVideo')}
+                  </button>
+                  <button type="button" disabled={!canEditContent}
+                    onClick={() => fullVideoMut.mutate({ item, playFullVideo: false })}
+                    className={`px-2 py-1 border-s border-gray-200 dark:border-gray-700 ${!item.playFullVideo ? 'bg-indigo-600 text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                    {t('customLength')}
+                  </button>
+                </div>
+                {!item.playFullVideo && (
+                  <>
+                    <input type="number" min={1} max={3600} value={item.durationSecs} disabled={!canEditContent}
+                      onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value) })}
+                      className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
+                    <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {item.asset.type === 'VIDEO' && (
+              <button
+                onClick={() => muteMut.mutate({ item, muted: !item.muted })}
+                disabled={!canEditContent || muteMut.isPending}
+                title={item.muted ? t('unmute') : t('mute')}
+                className={`p-1.5 rounded-lg shrink-0 transition-colors ${item.muted
+                  ? 'text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                  : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950'} disabled:opacity-50`}
+              >
+                {item.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
 
             {canEditContent && (
               <button onClick={() => removeMut.mutate(item)}

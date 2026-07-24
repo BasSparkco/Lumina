@@ -37,4 +37,12 @@ export default defineConfig({
   resolve: {
     alias: { '@': '/src' },
   },
+  optimizeDeps: {
+    // @lumina/types is a symlinked workspace package, so Vite skips it in dep pre-bundling
+    // by default (it assumes linked packages are already ESM source). Its dist build is
+    // CommonJS, though, so it must be force-included to get the CJS->ESM interop transform
+    // — otherwise named imports of runtime values (schemas, resolveThemeColor) fail because
+    // the raw CJS file gets served to the browser as-is with no real `export` statements.
+    include: ['@lumina/types'],
+  },
 });

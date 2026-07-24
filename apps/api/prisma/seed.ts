@@ -1,6 +1,8 @@
-import { PrismaClient } from '@lumina/db';
+import { PrismaClient, type Prisma } from '@lumina/db';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
+import { ThemeInputSchema } from '@lumina/types';
+import { THEME_PRESETS } from './theme-presets';
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
@@ -49,6 +51,24 @@ async function main() {
         data: { name: s.name, timezone: s.timezone, organizationId: org.id, paired: true, status: 'OFFLINE' },
       });
     }
+  }
+
+  // System theme presets — organizationId: null so every org can see and duplicate them.
+  for (const preset of THEME_PRESETS) {
+    const existing = await prisma.theme.findFirst({ where: { organizationId: null, name: preset.name } });
+    if (existing) continue;
+    const validated = ThemeInputSchema.parse(preset);
+    await prisma.theme.create({
+      data: {
+        name: validated.name,
+        category: validated.category,
+        aspectRatio: validated.aspectRatio,
+        palette: validated.palette,
+        typography: validated.typography,
+        elements: validated.elements as unknown as Prisma.InputJsonValue,
+        organizationId: null,
+      },
+    });
   }
 
   console.log('Seed complete. Logins: admin@demo.com / changeme (OWNER), viewer@demo.com / changeme (VIEWER)');

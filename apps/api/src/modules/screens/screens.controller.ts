@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 import { ScreensService } from './screens.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
-import { AssignPlaylistDto } from './dto/assign-playlist.dto';
+import { SetContentDto } from './dto/set-content.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -49,9 +49,9 @@ export class ScreensController {
     return this.screens.rename(user.orgId, id, dto.name);
   }
 
-  @Post(':id/assign')
-  assign(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: AssignPlaylistDto) {
-    return this.screens.assignPlaylist(user.orgId, id, dto.playlistId);
+  @Put(':id/content')
+  setContent(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetContentDto) {
+    return this.screens.setContent(user.orgId, id, dto);
   }
 
   @Post('pair')
@@ -82,7 +82,7 @@ export class ScreensController {
   updatePrayer(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
+    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean },
   ) {
     return this.screens.updatePrayerConfig(user.orgId, id, dto);
   }
