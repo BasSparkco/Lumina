@@ -18,6 +18,8 @@ ARG VITE_WS_URL
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_WS_URL=$VITE_WS_URL
 
+# player consumes @lumina/types' compiled dist output, so it must be built first.
+RUN pnpm --filter @lumina/types build
 RUN pnpm --filter player build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
