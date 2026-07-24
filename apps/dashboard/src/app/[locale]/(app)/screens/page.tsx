@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2 } from 'lucide-react';
-import { screensApi, playlistsApi, layoutsApi, type Screen } from '@/lib/api';
+import { screensApi, playlistsApi, layoutsApi, themesApi, assetsApi, type Screen, type ScreenContentType, type PlaylistSummary, type Layout, type Theme, type Asset } from '@/lib/api';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
@@ -205,6 +205,419 @@ function VolumeControl({ screen, disabled }: { screen: Screen; disabled: boolean
   );
 }
 
+interface ScreenCardProps {
+  screen: Screen;
+  live: 'ONLINE' | 'OFFLINE';
+  playlists: PlaylistSummary[];
+  layouts: Layout[];
+  themes: Theme[];
+  assets: Asset[];
+  groups: ScreenGroup[];
+  groupId: string | null;
+  canEditContent: boolean;
+  faithEnabled: boolean;
+  renamingId: string | null;
+  renameValue: string;
+  setRenameValue: (v: string) => void;
+  startRename: (screen: Screen) => void;
+  commitRename: (screen: Screen) => void;
+  setRenamingId: (id: string | null) => void;
+  renamePending: boolean;
+  expandedPrayer: string | null;
+  setExpandedPrayer: (id: string | null) => void;
+  expandedScreenshot: string | null;
+  setExpandedScreenshot: (id: string | null) => void;
+  expandedCrash: string | null;
+  setExpandedCrash: (id: string | null) => void;
+  onSetContent: (v: { id: string; contentType: ScreenContentType | null; assetId?: string | null; playlistId?: string | null; themeId?: string | null }) => Promise<Screen>;
+  onSetLayout: (v: { id: string; layoutId: string | null }) => Promise<Screen>;
+  onSetTimezone: (v: { id: string; timezone: string; timezoneEnabled: boolean }) => Promise<Screen>;
+  onAssignGroup: (v: { screen: Screen; groupId: string | null }) => Promise<void>;
+  onPublish: (id: string) => Promise<unknown>;
+  onReload: (id: string) => void;
+  reloadPending: boolean;
+  onToggleEmergency: (v: { id: string; active: boolean }) => void;
+  emergencyPending: boolean;
+  onToggleStop: (v: { id: string; stopped: boolean }) => void;
+  stopPending: boolean;
+  onSetShowClock: (v: { id: string; showClock: boolean }) => void;
+  showClockPending: boolean;
+  onUnpair: (screen: Screen) => void;
+  unpairPending: boolean;
+  onRemove: (screen: Screen) => void;
+  confirmDelete: (msg: string) => boolean;
+}
+
+// The id of whichever source is active for the current content type — null covers "— None —"
+// and every type but the active one, so a single field can drive the picker below the select.
+function contentIdOf(screen: Screen): string | null {
+  switch (screen.contentType) {
+    case 'VIDEO':
+    case 'IMAGE': return screen.assetId;
+    case 'PLAYLIST': return screen.playlistId;
+    case 'THEME': return screen.themeId;
+    default: return null;
+  }
+}
+
+function ScreenCard({
+  screen, live, playlists, layouts, themes, assets, groups, groupId, canEditContent, faithEnabled,
+  renamingId, renameValue, setRenameValue, startRename, commitRename, setRenamingId, renamePending,
+  expandedPrayer, setExpandedPrayer, expandedScreenshot, setExpandedScreenshot, expandedCrash, setExpandedCrash,
+  onSetContent, onSetLayout, onSetTimezone, onAssignGroup, onPublish,
+  onReload, reloadPending, onToggleEmergency, emergencyPending,
+  onToggleStop, stopPending, onSetShowClock, showClockPending, onUnpair, unpairPending,
+  onRemove, confirmDelete,
+}: ScreenCardProps) {
+  const t = useTranslations('screens');
+  const tc = useTranslations('common');
+
+  const [contentType, setContentType] = useState<ScreenContentType | null>(screen.contentType);
+  const [contentId, setContentId] = useState<string | null>(contentIdOf(screen));
+  const [layoutId, setLayoutId] = useState(screen.layoutId);
+  const [timezone, setTimezone] = useState(screen.timezone);
+  const [timezoneEnabled, setTimezoneEnabled] = useState(screen.timezoneEnabled);
+  const [localGroupId, setLocalGroupId] = useState(groupId);
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  const [baseline, setBaseline] = useState({
+    contentType: screen.contentType, contentId: contentIdOf(screen), layoutId: screen.layoutId,
+    timezone: screen.timezone, timezoneEnabled: screen.timezoneEnabled, groupId,
+  });
+
+  // "Adjusting state when a prop changes" (react.dev) — done during render, not in an effect,
+  // so it resolves in the same commit instead of causing an extra render pass. Only pulls in
+  // server values when there's nothing staged locally, so a background refetch (e.g. from
+  // another screen's mutation invalidating ['screens']) never silently discards edits the
+  // user hasn't published yet.
+  const serverContentId = contentIdOf(screen);
+  const serverChanged =
+    screen.contentType !== baseline.contentType ||
+    serverContentId !== baseline.contentId ||
+    screen.layoutId !== baseline.layoutId ||
+    screen.timezone !== baseline.timezone ||
+    screen.timezoneEnabled !== baseline.timezoneEnabled ||
+    groupId !== baseline.groupId;
+  if (serverChanged) {
+    const isDirtyNow =
+      contentType !== baseline.contentType ||
+      contentId !== baseline.contentId ||
+      layoutId !== baseline.layoutId ||
+      timezone !== baseline.timezone ||
+      timezoneEnabled !== baseline.timezoneEnabled ||
+      localGroupId !== baseline.groupId;
+    setBaseline({
+      contentType: screen.contentType, contentId: serverContentId, layoutId: screen.layoutId,
+      timezone: screen.timezone, timezoneEnabled: screen.timezoneEnabled, groupId,
+    });
+    if (!isDirtyNow) {
+      setContentType(screen.contentType);
+      setContentId(serverContentId);
+      setLayoutId(screen.layoutId);
+      setTimezone(screen.timezone);
+      setTimezoneEnabled(screen.timezoneEnabled);
+      setLocalGroupId(groupId);
+    }
+  }
+
+  const isDirty =
+    contentType !== baseline.contentType ||
+    contentId !== baseline.contentId ||
+    layoutId !== baseline.layoutId ||
+    timezone !== baseline.timezone ||
+    timezoneEnabled !== baseline.timezoneEnabled ||
+    localGroupId !== baseline.groupId;
+
+  function changeContentType(next: ScreenContentType | '') {
+    setContentType(next || null);
+    setContentId(null);
+  }
+
+  async function handlePublish() {
+    setIsPublishing(true);
+    try {
+      if (isDirty) {
+        const tasks: Promise<unknown>[] = [];
+        if (contentType !== baseline.contentType || contentId !== baseline.contentId) {
+          tasks.push(onSetContent({
+            id: screen.id,
+            contentType,
+            assetId: contentType === 'VIDEO' || contentType === 'IMAGE' ? contentId : undefined,
+            playlistId: contentType === 'PLAYLIST' ? contentId : undefined,
+            themeId: contentType === 'THEME' ? contentId : undefined,
+          }));
+        }
+        if (layoutId !== baseline.layoutId) tasks.push(onSetLayout({ id: screen.id, layoutId }));
+        if (timezone !== baseline.timezone || timezoneEnabled !== baseline.timezoneEnabled) {
+          tasks.push(onSetTimezone({ id: screen.id, timezone, timezoneEnabled }));
+        }
+        if (localGroupId !== baseline.groupId) tasks.push(onAssignGroup({ screen, groupId: localGroupId }));
+        await Promise.all(tasks);
+      }
+      await onPublish(screen.id);
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  const videoAssets = assets.filter(a => a.type === 'VIDEO' && a.status === 'READY');
+  const imageAssets = assets.filter(a => a.type === 'IMAGE' && a.status === 'READY');
+
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col gap-3">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <Tv2 className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+          {renamingId === screen.id ? (
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onBlur={() => commitRename(screen)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitRename(screen);
+                if (e.key === 'Escape') setRenamingId(null);
+              }}
+              disabled={renamePending}
+              className="font-medium text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          ) : (
+            <span
+              onClick={() => startRename(screen)}
+              title={canEditContent ? tc('clickToRename') : undefined}
+              className={`font-medium text-gray-900 dark:text-gray-100 text-sm truncate ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+              {screen.name}
+            </span>
+          )}
+        </div>
+        <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${live === 'ONLINE' ? 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${live === 'ONLINE' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+          {live === 'ONLINE' ? t('online') : t('offline')}
+        </span>
+      </div>
+
+      {!screen.hasContent && (
+        <div title={t('awaitingContentTitle')}
+          className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-2 py-1.5">
+          <FileQuestion className="w-3 h-3" /> {t('awaitingContent')}
+        </div>
+      )}
+
+      <div>
+        <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType')}</label>
+        <select
+          value={contentType ?? ''} disabled={!canEditContent}
+          onChange={e => changeContentType(e.target.value as ScreenContentType | '')}
+          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 mb-1.5">
+          <option value="">{t('none')}</option>
+          <option value="VIDEO">{t('streamingTypes.VIDEO')}</option>
+          <option value="IMAGE">{t('streamingTypes.IMAGE')}</option>
+          <option value="PLAYLIST">{t('streamingTypes.PLAYLIST')}</option>
+          <option value="THEME">{t('streamingTypes.THEME')}</option>
+        </select>
+        {contentType === 'VIDEO' && (
+          <select
+            value={contentId ?? ''} disabled={!canEditContent}
+            onChange={e => setContentId(e.target.value || null)}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+            <option value="">{t('noAsset')}</option>
+            {videoAssets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
+        {contentType === 'IMAGE' && (
+          <select
+            value={contentId ?? ''} disabled={!canEditContent}
+            onChange={e => setContentId(e.target.value || null)}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+            <option value="">{t('noAsset')}</option>
+            {imageAssets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
+        {contentType === 'PLAYLIST' && (
+          <select
+            value={contentId ?? ''} disabled={!canEditContent}
+            onChange={e => setContentId(e.target.value || null)}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+            <option value="">{t('none')}</option>
+            {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        )}
+        {contentType === 'THEME' && (
+          <select
+            value={contentId ?? ''} disabled={!canEditContent}
+            onChange={e => setContentId(e.target.value || null)}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+            <option value="">{t('noTheme')}</option>
+            {themes.map(th => <option key={th.id} value={th.id}>{th.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('layoutZones')}</label>
+        <select
+          value={layoutId ?? ''} disabled={!canEditContent}
+          onChange={e => setLayoutId(e.target.value || null)}
+          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+          <option value="">{t('fullscreenNoLayout')}</option>
+          {layouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500 mb-1 cursor-pointer">
+          <input type="checkbox" checked={timezoneEnabled} disabled={!canEditContent}
+            onChange={e => setTimezoneEnabled(e.target.checked)}
+            className="w-3.5 h-3.5 accent-indigo-500" />
+          <Clock className="w-3 h-3" /> {t('timezoneEnable')}
+        </label>
+        {timezoneEnabled && (
+          <TimezoneSelect
+            value={timezone} disabled={!canEditContent}
+            onChange={tz => setTimezone(tz)}
+          />
+        )}
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+          <FolderKanban className="w-3 h-3" /> {t('groups.label')}
+        </label>
+        <select
+          value={localGroupId ?? ''} disabled={!canEditContent}
+          onChange={e => setLocalGroupId(e.target.value || null)}
+          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+          <option value="">{t('groups.noGroup')}</option>
+          {groups.map((g: ScreenGroup) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+      </div>
+
+      <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={screen.showClock}
+          disabled={!canEditContent || showClockPending}
+          onChange={e => onSetShowClock({ id: screen.id, showClock: e.target.checked })}
+          className="w-3.5 h-3.5 accent-indigo-500"
+        />
+        <Clock className="w-3.5 h-3.5" /> {t('showClock')}
+      </label>
+
+      <VolumeControl screen={screen} disabled={!canEditContent} />
+
+      {/* Prayer settings */}
+      {faithEnabled && (
+        <button
+          onClick={() => setExpandedPrayer(expandedPrayer === screen.id ? null : screen.id)}
+          className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium">
+          <Moon className="w-3.5 h-3.5" />
+          {expandedPrayer === screen.id ? t('hideFaith') : t('configureFaith')}
+          {screen.latitude && screen.longitude && (
+            <span className="ml-auto text-amber-500 opacity-70">{t('set')}</span>
+          )}
+        </button>
+      )}
+      {faithEnabled && expandedPrayer === screen.id && <PrayerPanel screen={screen} />}
+
+      {/* Remote diagnostics: live-preview screenshot + crash history */}
+      <button
+        onClick={() => setExpandedScreenshot(expandedScreenshot === screen.id ? null : screen.id)}
+        className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+        <Camera className="w-3.5 h-3.5" />
+        {expandedScreenshot === screen.id ? t('screenshot.hide') : t('screenshot.show')}
+        {screen.screenshotUrl && <span className="ml-auto text-emerald-500 opacity-70">{t('set')}</span>}
+      </button>
+      {expandedScreenshot === screen.id && <ScreenshotPanel screen={screen} />}
+
+      <button
+        onClick={() => setExpandedCrash(expandedCrash === screen.id ? null : screen.id)}
+        className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+        <Bug className="w-3.5 h-3.5" />
+        {expandedCrash === screen.id ? t('crashHistory.hide') : t('crashHistory.show')}
+      </button>
+      {expandedCrash === screen.id && <CrashHistoryPanel screen={screen} />}
+
+      {screen.stopped && (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-2 py-1.5">
+          <Pause className="w-3 h-3 fill-current" /> {t('stoppedBanner')}
+        </div>
+      )}
+
+      {isDirty && (
+        <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+          {t('unsavedChanges')}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {canEditContent && (
+        <div className="flex gap-2">
+          <button
+            onClick={() => { void handlePublish(); }}
+            disabled={isPublishing}
+            title={t('publishTitle')}
+            className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 ${
+              isDirty
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                : 'border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950'
+            }`}>
+            <Send className="w-3 h-3" /> {isPublishing ? t('publishing') : t('publish')}
+          </button>
+          <button
+            onClick={() => onToggleStop({ id: screen.id, stopped: !screen.stopped })}
+            disabled={stopPending}
+            title={screen.stopped ? t('resumeStreamTitle') : t('pauseStreamTitle')}
+            className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
+              screen.stopped
+                ? 'border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950'
+                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}>
+            {screen.stopped ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+          </button>
+          <button
+            onClick={() => onToggleEmergency({ id: screen.id, active: !screen.emergencyActive })}
+            disabled={emergencyPending}
+            title={screen.emergencyActive ? t('deactivateEmergency') : t('activateEmergency')}
+            className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
+              screen.emergencyActive
+                ? 'border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950'
+                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}>
+            <AlertTriangle className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => onReload(screen.id)}
+            disabled={reloadPending}
+            title={t('reloadTitle')}
+            className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+            <RefreshCw className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => { if (confirmDelete(t('unpairConfirm'))) onUnpair(screen); }}
+            disabled={unpairPending}
+            title={t('unpairTitle')}
+            className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
+            <Unplug className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex justify-between items-center pt-1 border-t border-gray-100 dark:border-gray-800">
+        <span className="text-xs text-gray-400 dark:text-gray-500">
+          {screen.lastSeenAt ? t('lastSeen', { when: new Date(screen.lastSeenAt).toLocaleString() }) : t('neverSeen')}
+        </span>
+        {canEditContent && (
+          <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) onRemove(screen); }}
+            className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ScreensPage() {
   const qc = useQueryClient();
   const router = useRouter();
@@ -222,6 +635,8 @@ export default function ScreensPage() {
   const { data: currentPlan = 'FREE' } = useQuery({ queryKey: ['billingPlan'], queryFn: billingApi.getCurrentPlan });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: layouts = [] } = useQuery({ queryKey: ['layouts'], queryFn: layoutsApi.list });
+  const { data: themes = [] } = useQuery({ queryKey: ['themes'], queryFn: themesApi.list });
+  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
   const { data: groupAssignments = {} } = useQuery({ queryKey: ['screenGroupAssignments'], queryFn: screenGroupsApi.getAssignments });
   const liveStatuses = useScreenSocket();
@@ -317,13 +732,18 @@ export default function ScreensPage() {
     },
   });
 
-  const assignMut = useMutation({
-    mutationFn: ({ id, playlistId }: { id: string; playlistId: string | null }) => screensApi.assign(id, playlistId),
-    onSuccess: (updated, { playlistId }) => {
+  const contentMut = useMutation({
+    mutationFn: ({ id, contentType, assetId, playlistId, themeId }: { id: string; contentType: ScreenContentType | null; assetId?: string | null; playlistId?: string | null; themeId?: string | null }) =>
+      screensApi.setContent(id, { contentType, assetId, playlistId, themeId }),
+    onSuccess: (updated, { contentType, assetId, playlistId, themeId }) => {
+      const detail =
+        contentType === 'VIDEO' || contentType === 'IMAGE' ? assets.find(a => a.id === assetId)?.name
+        : contentType === 'PLAYLIST' ? playlists.find(p => p.id === playlistId)?.name
+        : contentType === 'THEME' ? themes.find(th => th.id === themeId)?.name
+        : undefined;
       logAction({
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: playlistId ? playlists.find(p => p.id === playlistId)?.name : ta('detailPlaylistCleared'),
+        userName: user?.name ?? '', userEmail: user?.email ?? '', detail,
       });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -367,12 +787,12 @@ export default function ScreensPage() {
     },
   });
   const timezoneMut = useMutation({
-    mutationFn: ({ id, timezone }: { id: string; timezone: string }) =>
-      screensApi.updatePrayer(id, { timezone }),
-    onSuccess: (updated, { timezone }) => {
+    mutationFn: ({ id, timezone, timezoneEnabled }: { id: string; timezone: string; timezoneEnabled: boolean }) =>
+      screensApi.updatePrayer(id, { timezone, timezoneEnabled }),
+    onSuccess: (updated, { timezone, timezoneEnabled }) => {
       logAction({
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: timezone,
+        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: timezoneEnabled ? timezone : undefined,
       });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -641,207 +1061,51 @@ export default function ScreensPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {visibleScreens.map((screen: Screen) => {
-          const live = statusFor(screen);
-          return (
-            <div key={screen.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col gap-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Tv2 className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
-                  {renamingId === screen.id ? (
-                    <input
-                      autoFocus
-                      value={renameValue}
-                      onChange={e => setRenameValue(e.target.value)}
-                      onBlur={() => commitRename(screen)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') commitRename(screen);
-                        if (e.key === 'Escape') setRenamingId(null);
-                      }}
-                      disabled={renameMut.isPending}
-                      className="font-medium text-sm text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    />
-                  ) : (
-                    <span
-                      onClick={() => startRename(screen)}
-                      title={canEditContent ? tc('clickToRename') : undefined}
-                      className={`font-medium text-gray-900 dark:text-gray-100 text-sm truncate ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
-                      {screen.name}
-                    </span>
-                  )}
-                </div>
-                <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${live === 'ONLINE' ? 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${live === 'ONLINE' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-                  {live === 'ONLINE' ? t('online') : t('offline')}
-                </span>
-              </div>
-
-              {!screen.hasContent && (
-                <div title={t('awaitingContentTitle')}
-                  className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-2 py-1.5">
-                  <FileQuestion className="w-3 h-3" /> {t('awaitingContent')}
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('defaultPlaylist')}</label>
-                <select
-                  value={screen.playlistId ?? ''} disabled={!canEditContent}
-                  onChange={e => assignMut.mutate({ id: screen.id, playlistId: e.target.value || null })}
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-                  <option value="">{t('none')}</option>
-                  {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('layoutZones')}</label>
-                <select
-                  value={screen.layoutId ?? ''} disabled={!canEditContent}
-                  onChange={e => layoutMut.mutate({ id: screen.id, layoutId: e.target.value || null })}
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-                  <option value="">{t('fullscreenNoLayout')}</option>
-                  {layouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {t('timezone')}
-                </label>
-                <TimezoneSelect
-                  value={screen.timezone} disabled={!canEditContent}
-                  onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz })}
-                />
-              </div>
-
-              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={screen.showClock}
-                  disabled={!canEditContent || (showClockMut.isPending && showClockMut.variables?.id === screen.id)}
-                  onChange={e => showClockMut.mutate({ id: screen.id, showClock: e.target.checked })}
-                  className="w-3.5 h-3.5 accent-indigo-500"
-                />
-                <Clock className="w-3.5 h-3.5" /> {t('showClock')}
-              </label>
-
-              <VolumeControl screen={screen} disabled={!canEditContent} />
-
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
-                  <FolderKanban className="w-3 h-3" /> {t('groups.label')}
-                </label>
-                <select
-                  value={groupAssignments[screen.id] ?? ''} disabled={!canEditContent}
-                  onChange={e => assignGroupMut.mutate({ screen, groupId: e.target.value || null })}
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-                  <option value="">{t('groups.noGroup')}</option>
-                  {groups.map((g: ScreenGroup) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-              </div>
-
-              {/* Prayer settings */}
-              {faithEnabled && (
-                <button
-                  onClick={() => setExpandedPrayer(expandedPrayer === screen.id ? null : screen.id)}
-                  className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium">
-                  <Moon className="w-3.5 h-3.5" />
-                  {expandedPrayer === screen.id ? t('hideFaith') : t('configureFaith')}
-                  {screen.latitude && screen.longitude && (
-                    <span className="ml-auto text-amber-500 opacity-70">{t('set')}</span>
-                  )}
-                </button>
-              )}
-              {faithEnabled && expandedPrayer === screen.id && <PrayerPanel screen={screen} />}
-
-              {/* Remote diagnostics: live-preview screenshot + crash history */}
-              <button
-                onClick={() => setExpandedScreenshot(expandedScreenshot === screen.id ? null : screen.id)}
-                className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
-                <Camera className="w-3.5 h-3.5" />
-                {expandedScreenshot === screen.id ? t('screenshot.hide') : t('screenshot.show')}
-                {screen.screenshotUrl && <span className="ml-auto text-emerald-500 opacity-70">{t('set')}</span>}
-              </button>
-              {expandedScreenshot === screen.id && <ScreenshotPanel screen={screen} />}
-
-              <button
-                onClick={() => setExpandedCrash(expandedCrash === screen.id ? null : screen.id)}
-                className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
-                <Bug className="w-3.5 h-3.5" />
-                {expandedCrash === screen.id ? t('crashHistory.hide') : t('crashHistory.show')}
-              </button>
-              {expandedCrash === screen.id && <CrashHistoryPanel screen={screen} />}
-
-              {screen.stopped && (
-                <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-2 py-1.5">
-                  <Pause className="w-3 h-3 fill-current" /> {t('stoppedBanner')}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              {canEditContent && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => publishMut.mutate(screen.id)}
-                    disabled={publishMut.isPending && publishMut.variables === screen.id}
-                    title={t('publishTitle')}
-                    className="flex-1 flex items-center justify-center gap-1 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50">
-                    <Send className="w-3 h-3" /> {t('publish')}
-                  </button>
-                  <button
-                    onClick={() => stopMut.mutate({ id: screen.id, stopped: !screen.stopped })}
-                    disabled={stopMut.isPending && stopMut.variables?.id === screen.id}
-                    title={screen.stopped ? t('resumeStreamTitle') : t('pauseStreamTitle')}
-                    className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
-                      screen.stopped
-                        ? 'border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}>
-                    {screen.stopped ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-                  </button>
-                  <button
-                    onClick={() => emergencyMut.mutate({ id: screen.id, active: !screen.emergencyActive })}
-                    disabled={emergencyMut.isPending && emergencyMut.variables?.id === screen.id}
-                    title={screen.emergencyActive ? t('deactivateEmergency') : t('activateEmergency')}
-                    className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
-                      screen.emergencyActive
-                        ? 'border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}>
-                    <AlertTriangle className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => reloadMut.mutate(screen.id)}
-                    disabled={reloadMut.isPending && reloadMut.variables === screen.id}
-                    title={t('reloadTitle')}
-                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
-                    <RefreshCw className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => { if (confirmDelete(t('unpairConfirm'))) unpairMut.mutate(screen); }}
-                    disabled={unpairMut.isPending && unpairMut.variables?.id === screen.id}
-                    title={t('unpairTitle')}
-                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
-                    <Unplug className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-
-              <div className="flex justify-between items-center pt-1 border-t border-gray-100 dark:border-gray-800">
-                <span className="text-xs text-gray-400 dark:text-gray-500">
-                  {screen.lastSeenAt ? t('lastSeen', { when: formatDateTime(screen.lastSeenAt, dateFormat) }) : t('neverSeen')}
-                </span>
-                {canEditContent && (
-                  <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(screen); }}
-                    className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {visibleScreens.map((screen: Screen) => (
+          <ScreenCard
+            key={screen.id}
+            screen={screen}
+            live={statusFor(screen)}
+            playlists={playlists}
+            layouts={layouts}
+            themes={themes}
+            assets={assets}
+            groups={groups}
+            groupId={groupAssignments[screen.id] ?? null}
+            canEditContent={canEditContent}
+            faithEnabled={faithEnabled}
+            renamingId={renamingId}
+            renameValue={renameValue}
+            setRenameValue={setRenameValue}
+            startRename={startRename}
+            commitRename={commitRename}
+            setRenamingId={setRenamingId}
+            renamePending={renameMut.isPending}
+            expandedPrayer={expandedPrayer}
+            setExpandedPrayer={setExpandedPrayer}
+            expandedScreenshot={expandedScreenshot}
+            setExpandedScreenshot={setExpandedScreenshot}
+            expandedCrash={expandedCrash}
+            setExpandedCrash={setExpandedCrash}
+            onSetContent={v => contentMut.mutateAsync(v)}
+            onSetLayout={v => layoutMut.mutateAsync(v)}
+            onSetTimezone={v => timezoneMut.mutateAsync(v)}
+            onAssignGroup={v => assignGroupMut.mutateAsync(v)}
+            onPublish={id => publishMut.mutateAsync(id)}
+            onReload={id => reloadMut.mutate(id)}
+            reloadPending={reloadMut.isPending}
+            onToggleEmergency={v => emergencyMut.mutate(v)}
+            emergencyPending={emergencyMut.isPending}
+            onToggleStop={v => stopMut.mutate(v)}
+            stopPending={stopMut.isPending}
+            onSetShowClock={v => showClockMut.mutate(v)}
+            showClockPending={showClockMut.isPending}
+            onUnpair={s => unpairMut.mutate(s)}
+            unpairPending={unpairMut.isPending}
+            onRemove={s => removeMut.mutate(s)}
+            confirmDelete={confirmDelete}
+          />
+        ))}
       </div>
     </div>
   );

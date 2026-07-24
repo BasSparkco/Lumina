@@ -17,6 +17,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* Curated theme-editor font list (see FONT_OPTIONS in the themes page) — loaded here
+            so the editor preview, card thumbnails, and the played-out screen all render the
+            same chosen font instead of a system fallback. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700;900&family=Open+Sans:wght@400;600;700;800&family=Lato:wght@400;700;900&family=Montserrat:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&family=Nunito:wght@400;600;700;800;900&family=Playfair+Display:wght@400;600;700;800;900&family=Merriweather:wght@400;700;900&family=Oswald:wght@400;500;600;700&family=Raleway:wght@400;500;600;700;800;900&family=Noto+Sans+Arabic:wght@400;500;600;700;800;900&display=swap"
+        />
       </head>
       <body className="dark:bg-gray-950">
         <ThemeProvider>{children}</ThemeProvider>

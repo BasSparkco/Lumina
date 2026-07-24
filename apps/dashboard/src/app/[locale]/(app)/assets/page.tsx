@@ -2,8 +2,8 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil } from 'lucide-react';
-import { assetsApi, type Asset, type TextFontFamily, type TextSize } from '@/lib/api';
+import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Library, CopyPlus, Search, Check } from 'lucide-react';
+import { assetsApi, type Asset, type TextFontFamily, type TextSize, type AssetCategory } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
@@ -33,6 +33,8 @@ const FONT_SIZE_PREVIEW: Record<TextSize, string> = {
   LARGE: '1.7rem',
   XLARGE: '2.1rem',
 };
+
+const CATEGORY_VALUES: AssetCategory[] = ['BACKGROUND', 'ICON', 'ILLUSTRATION', 'STOCK_PHOTO', 'LOGO', 'VIDEO_LOOP', 'AUDIO_JINGLE', 'GENERIC'];
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -163,8 +165,32 @@ export default function AssetsPage() {
   const [renameValue, setRenameValue] = useState('');
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [textModal, setTextModal] = useState<Asset | 'new' | null>(null);
+  const [tab, setTab] = useState<'mine' | 'library'>('mine');
+  const [libraryCategory, setLibraryCategory] = useState<AssetCategory | ''>('');
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
 
   const { data: assets = [], isLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+
+  const { data: libraryAssets = [], isLoading: libraryLoading } = useQuery({
+    queryKey: ['assets', 'library', libraryCategory, librarySearch],
+    queryFn: () => assetsApi.library({ category: libraryCategory || undefined, search: librarySearch || undefined }),
+    enabled: tab === 'library',
+  });
+
+  const useFromLibraryMut = useMutation({
+    mutationFn: (asset: Asset) => assetsApi.useFromLibrary(asset.id),
+    onSuccess: (added, source) => {
+      logAction({
+        resourceType: 'ASSET', resourceName: added.name, action: 'CREATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: ta('detailDuplicatedFrom', { name: source.name }),
+      });
+      void qc.invalidateQueries({ queryKey: ['assets'], exact: true });
+      setJustAddedId(source.id);
+      setTimeout(() => setJustAddedId(id => (id === source.id ? null : id)), 2000);
+    },
+  });
 
   function handleTextSaved(saved: Asset, previousName?: string) {
     logAction({
@@ -243,7 +269,7 @@ export default function AssetsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
         </div>
-        {canEditContent && (
+        {tab === 'mine' && canEditContent && (
           <div className="flex items-center gap-2">
             <button onClick={() => setTextModal('new')}
               className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -259,6 +285,19 @@ export default function AssetsPage() {
         )}
       </div>
 
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
+        <button onClick={() => setTab('mine')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'mine' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          <ImageIcon className="w-4 h-4" /> {t('myAssetsTab')}
+        </button>
+        <button onClick={() => setTab('library')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'library' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          <Library className="w-4 h-4" /> {t('libraryTab')}
+        </button>
+      </div>
+
+      {tab === 'mine' && (
+      <>
       {uploadError && <div className="mb-4 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 text-sm px-4 py-2 rounded-lg">{uploadError}</div>}
       {deleteError && <div className="mb-4 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 text-sm px-4 py-2 rounded-lg">{deleteError}</div>}
 
@@ -387,6 +426,64 @@ export default function AssetsPage() {
           />
         );
       })()}
+      </>
+      )}
+
+      {tab === 'library' && (
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-5">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)}
+                placeholder={t('librarySearchPlaceholder')}
+                className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+            </div>
+            <select value={libraryCategory} onChange={e => setLibraryCategory(e.target.value as AssetCategory | '')}
+              className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none">
+              <option value="">{t('allCategories')}</option>
+              {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
+            </select>
+          </div>
+
+          {libraryLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+
+          {!libraryLoading && libraryAssets.length === 0 && (
+            <div className="text-center py-16 text-gray-400">
+              <Library className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">{t('libraryEmpty')}</p>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {libraryAssets.map((asset: Asset) => (
+              <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  {asset.thumbnailUrl ? (
+                    <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
+                  )}
+                </div>
+                <div className="p-3">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{asset.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 mb-2 flex items-center gap-1">
+                    {typeIcon[asset.type]} {t(`categories.${asset.category}`)}
+                  </p>
+                  {canEditContent && (
+                    <button onClick={() => useFromLibraryMut.mutate(asset)}
+                      disabled={useFromLibraryMut.isPending}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-lg py-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50">
+                      {justAddedId === asset.id
+                        ? <><Check className="w-3.5 h-3.5" /> {t('addedToMyAssets')}</>
+                        : <><CopyPlus className="w-3.5 h-3.5" /> {t('addToMyAssets')}</>}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@
 // every change is captured, including ones made directly against the API rather than
 // through this dashboard.
 
-export type AuditResourceType = 'MEMBER' | 'PLAYLIST' | 'SCREEN' | 'ASSET' | 'LAYOUT' | 'SCHEDULE' | 'GROUP';
+export type AuditResourceType = 'MEMBER' | 'PLAYLIST' | 'SCREEN' | 'ASSET' | 'LAYOUT' | 'THEME' | 'SCHEDULE' | 'GROUP';
 export type AuditAction =
   | 'CREATE' | 'UPDATE' | 'DELETE'
   | 'INVITE' | 'ROLE_CHANGE' | 'REMOVE'

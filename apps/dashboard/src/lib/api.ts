@@ -57,8 +57,8 @@ export const screensApi = {
   unpair: (id: string) => req<Screen>(`/screens/${id}/unpair`, { method: 'POST' }),
   rename: (id: string, name: string) => req<Screen>(`/screens/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   pair: (code: string) => req<Screen>('/screens/pair', { method: 'POST', body: JSON.stringify({ code }) }),
-  assign: (id: string, playlistId: string | null) =>
-    req<Screen>(`/screens/${id}/assign`, { method: 'POST', body: JSON.stringify({ playlistId }) }),
+  setContent: (id: string, data: { contentType: ScreenContentType | null; assetId?: string | null; playlistId?: string | null; themeId?: string | null }) =>
+    req<Screen>(`/screens/${id}/content`, { method: 'PUT', body: JSON.stringify(data) }),
   publish: (id: string) => req<{ ok: boolean }>(`/screens/${id}/publish`, { method: 'POST' }),
   reload: (id: string) => req<{ ok: boolean }>(`/screens/${id}/reload`, { method: 'POST' }),
   setLayout: (id: string, layoutId: string | null) =>
@@ -71,7 +71,7 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
   setShowClock: (id: string, showClock: boolean) =>
     req<Screen>(`/screens/${id}/show-clock`, { method: 'PUT', body: JSON.stringify({ showClock }) }),
-  updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string }) =>
+  updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean }) =>
     req<Screen>(`/screens/${id}/prayer`, { method: 'PUT', body: JSON.stringify(data) }),
   captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
   crashReports: (id: string) => req<CrashReport[]>(`/screens/${id}/crash-reports`),
@@ -102,6 +102,14 @@ export const assetsApi = {
     req<Asset>('/assets/text', { method: 'POST', body: JSON.stringify({ name, content, ...style }) }),
   updateText: (id: string, dto: { name?: string; content?: string } & Partial<TextStyle>) =>
     req<Asset>(`/assets/${id}/text`, { method: 'PUT', body: JSON.stringify(dto) }),
+  library: (params?: { category?: AssetCategory; search?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.category) qs.set('category', params.category);
+    if (params?.search) qs.set('search', params.search);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<Asset[]>(`/assets/library${suffix}`);
+  },
+  useFromLibrary: (id: string) => req<Asset>(`/assets/library/${id}/use`, { method: 'POST' }),
 };
 
 // ── Playlists ────────────────────────────────────────────────────────────────
@@ -111,10 +119,10 @@ export const playlistsApi = {
   get: (id: string) => req<Playlist>(`/playlists/${id}`),
   rename: (id: string, name: string) => req<PlaylistSummary>(`/playlists/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   remove: (id: string) => req<void>(`/playlists/${id}`, { method: 'DELETE' }),
-  addItem: (id: string, assetId: string, durationSecs: number, muted?: boolean) =>
-    req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ assetId, durationSecs, muted }) }),
-  updateItem: (id: string, itemId: string, durationSecs: number, muted?: boolean) =>
-    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted }) }),
+  addItem: (id: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) =>
+    req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ assetId, durationSecs, muted, playFullVideo }) }),
+  updateItem: (id: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) =>
+    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted, playFullVideo }) }),
   removeItem: (id: string, itemId: string) => req<void>(`/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
   reorder: (id: string, ids: string[]) => req<void>(`/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
   updateConfig: (id: string, config: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder }) =>
@@ -129,6 +137,16 @@ export const layoutsApi = {
   update: (id: string, name: string, zones: ZoneInput[]) =>
     req<Layout>(`/layouts/${id}`, { method: 'PUT', body: JSON.stringify({ name, zones }) }),
   remove: (id: string) => req<void>(`/layouts/${id}`, { method: 'DELETE' }),
+};
+
+// ── Themes ──────────────────────────────────────────────────────────────────
+export const themesApi = {
+  list: () => req<Theme[]>('/themes'),
+  get: (id: string) => req<Theme>(`/themes/${id}`),
+  create: (input: ThemeInput) => req<Theme>('/themes', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id: string, input: ThemeInput) => req<Theme>(`/themes/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  duplicate: (id: string) => req<Theme>(`/themes/${id}/duplicate`, { method: 'POST' }),
+  remove: (id: string) => req<void>(`/themes/${id}`, { method: 'DELETE' }),
 };
 
 // ── Schedules ────────────────────────────────────────────────────────────────
@@ -193,12 +211,16 @@ export interface PowerScheduleEntry extends CreatePowerScheduleInput {
   id: string; createdAt: string;
   screen: { id: string; name: string } | null; group: { id: string; name: string } | null;
 }
+export type ScreenContentType = 'VIDEO' | 'IMAGE' | 'PLAYLIST' | 'THEME';
 export interface Screen {
   id: string; name: string; status: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null;
-  paired: boolean; playlistId: string | null; playlist?: { id: string; name: string } | null;
-  layoutId: string | null; emergencyActive: boolean; stopped: boolean; showClock: boolean;
+  paired: boolean;
+  contentType: ScreenContentType | null;
+  assetId: string | null;
+  playlistId: string | null; playlist?: { id: string; name: string } | null;
+  layoutId: string | null; themeId: string | null; emergencyActive: boolean; stopped: boolean; showClock: boolean;
   latitude: number | null; longitude: number | null;
-  prayerMethod: string; athanEnabled: boolean; timezone: string;
+  prayerMethod: string; athanEnabled: boolean; timezone: string; timezoneEnabled: boolean;
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
   hasContent: boolean; volume: number | null;
 }
@@ -213,16 +235,18 @@ export interface FleetStatus {
 export type TextFontFamily = 'SANS' | 'SERIF' | 'MONOSPACE' | 'ROUNDED' | 'CONDENSED' | 'IMPACT' | 'HANDWRITTEN';
 export type TextSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE';
 export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; textBackgroundColor?: string; }
+export type AssetCategory = 'BACKGROUND' | 'ICON' | 'ILLUSTRATION' | 'STOCK_PHOTO' | 'LOGO' | 'VIDEO_LOOP' | 'AUDIO_JINGLE' | 'GENERIC';
 export interface Asset {
   id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT'; mimeType: string;
   sizeBytes: number; status: string; url: string | null; thumbnailUrl: string | null;
   downloadUrl: string | null; textContent: string | null;
   textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
   textBackgroundColor: string | null;
+  category: AssetCategory; tags: string[];
   width: number | null; height: number | null; durationSecs: number | null; createdAt: string;
 }
 export interface PlaylistItem {
-  id: string; position: number; durationSecs: number; muted: boolean;
+  id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
   asset: Asset;
 }
 export type TransitionStyle = 'NONE' | 'CROSSFADE';
@@ -231,4 +255,42 @@ export interface PlaylistSummary { id: string; name: string; _count: { items: nu
 export interface Playlist extends PlaylistSummary {
   items: PlaylistItem[];
   transitionStyle: TransitionStyle; transitionDurationMs: number; playbackOrder: PlaybackOrder;
+}
+
+// ── Themes ──────────────────────────────────────────────────────────────────
+export type ThemeCategory = 'RESTAURANT_MENU' | 'RETAIL_PROMO' | 'HOTEL_LOBBY' | 'CLINIC_WAITING' | 'MOSQUE' | 'GENERIC';
+export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'PLAYLIST' | 'SHAPE' | 'WIDGET';
+export type ThemeWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+
+export interface ThemePalette {
+  primary: string; secondary: string; background: string; surface: string;
+  text: string; textMuted: string; accent: string;
+}
+export interface ThemeTypography { headingFont: string; bodyFont: string; baseSizePx: number; scale: number; }
+
+export interface ThemeElementStyle {
+  color?: string; backgroundColor?: string; fontFamily?: string;
+  fontSizePx?: number; fontWeight?: number | string; textAlign?: 'left' | 'center' | 'right';
+  direction?: 'ltr' | 'rtl' | 'auto'; borderRadius?: number; opacity?: number;
+  objectFit?: 'contain' | 'cover' | 'fill';
+}
+interface ThemeElementBase {
+  id: string; x: number; y: number; width: number; height: number; zIndex: number;
+  editable: boolean; label?: string; style: ThemeElementStyle;
+}
+export type ThemeElement =
+  | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string> } })
+  | (ThemeElementBase & { kind: 'IMAGE'; content: { assetId: string | null } })
+  | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null } })
+  | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null } })
+  | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
+  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: ThemeWidgetType; widgetConfig: Record<string, unknown> } });
+
+export interface ThemeInput {
+  name: string; category: ThemeCategory; aspectRatio?: string;
+  palette: ThemePalette; typography: ThemeTypography; elements: ThemeElement[];
+}
+export interface Theme extends Omit<ThemeInput, 'aspectRatio'> {
+  id: string; organizationId: string | null; aspectRatio: string; createdAt: string; updatedAt: string;
+  _count?: { screens: number };
 }

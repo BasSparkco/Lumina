@@ -84,6 +84,8 @@ export class PlayerService {
             },
           },
         },
+        theme: true,
+        asset: true,
         playlist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },
@@ -148,6 +150,17 @@ export class PlayerService {
       layout: screen.layout
         ? { id: screen.layout.id, name: screen.layout.name, zones: hydrateZones(screen.layout.zones) }
         : null,
+      theme: screen.theme
+        ? {
+            id: screen.theme.id,
+            name: screen.theme.name,
+            category: screen.theme.category,
+            aspectRatio: screen.theme.aspectRatio,
+            palette: screen.theme.palette,
+            typography: screen.theme.typography,
+            elements: await this.hydrateThemeElements(screen.theme.elements),
+          }
+        : null,
       scheduleRules: rules.map(r => ({
         id: r.id,
         name: r.name,
@@ -163,7 +176,12 @@ export class PlayerService {
           : null,
       })),
       resolvedPlaylistId,
-      defaultPlaylist: screen.playlist ? this.hydratePlaylist(screen.playlist) : null,
+      defaultPlaylist:
+        (screen.contentType === 'VIDEO' || screen.contentType === 'IMAGE') && screen.asset
+          ? this.hydrateAssetAsPlaylist(screen.asset)
+          : screen.playlist
+            ? this.hydratePlaylist(screen.playlist)
+            : null,
       poweredOn: power.poweredOn,
       powerScheduleRules: power.rules.map(r => ({
         id: r.id,
@@ -214,13 +232,88 @@ export class PlayerService {
     return { ok: true };
   }
 
+  /**
+   * Theme elements reference assets/playlists by id (like layout zones do). Resolve IMAGE/VIDEO
+   * elements to a signed-URL, and PLAYLIST elements to a fully hydrated playlist — everything
+   * else (TEXT/SHAPE/WIDGET) passes through untouched.
+   */
+  private async hydrateThemeElements(elements: unknown): Promise<unknown> {
+    if (!Array.isArray(elements)) return [];
+    const els = elements as { kind: string; content: Record<string, unknown> }[];
+
+    const assetIds = [...new Set(
+      els.filter(e => e.kind === 'IMAGE' || e.kind === 'VIDEO')
+        .map(e => e.content.assetId as string | null)
+        .filter((id): id is string => !!id),
+    )];
+    const playlistIds = [...new Set(
+      els.filter(e => e.kind === 'PLAYLIST')
+        .map(e => e.content.playlistId as string | null)
+        .filter((id): id is string => !!id),
+    )];
+
+    const assets = assetIds.length
+      ? await this.prisma.asset.findMany({ where: { id: { in: assetIds } } })
+      : [];
+    const assetMap = new Map(assets.map(a => [a.id, this.storage.publicUrl(a.storageKey)]));
+
+    const playlists = playlistIds.length
+      ? await this.prisma.playlist.findMany({
+          where: { id: { in: playlistIds } },
+          include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
+        })
+      : [];
+    const playlistMap = new Map(
+      await Promise.all(playlists.map(async p => [p.id, await this.hydratePlaylist(p)] as const)),
+    );
+
+    return els.map(e => {
+      if (e.kind === 'IMAGE' || e.kind === 'VIDEO') {
+        const assetId = e.content.assetId as string | null;
+        return { ...e, content: { assetId, url: assetId ? (assetMap.get(assetId) ?? null) : null } };
+      }
+      if (e.kind === 'PLAYLIST') {
+        const playlistId = e.content.playlistId as string | null;
+        return { ...e, content: { playlistId, playlist: playlistId ? (playlistMap.get(playlistId) ?? null) : null } };
+      }
+      return e;
+    });
+  }
+
+  // A screen's "Video"/"Image" streaming type assigns a single asset directly rather than a
+  // playlist — wrap it as a one-item playlist so the player can keep using the same
+  // ZonePlayer/resolvePlaylist path as every other content type.
+  private hydrateAssetAsPlaylist(asset: {
+    id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; durationSecs: number | null;
+  }) {
+    return {
+      id: `asset-${asset.id}`,
+      name: asset.name,
+      items: [{
+        id: asset.id,
+        position: 0,
+        durationSecs: asset.durationSecs ? Math.ceil(asset.durationSecs) : 10,
+        muted: true,
+        playFullVideo: true,
+        asset: {
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          mimeType: asset.mimeType,
+          url: this.storage.publicUrl(asset.storageKey),
+          thumbnailUrl: asset.thumbnailKey ? this.storage.publicUrl(asset.thumbnailKey) : null,
+        },
+      }],
+    };
+  }
+
   private hydratePlaylist(playlist: {
     id: string;
     name: string;
     transitionStyle: string;
     transitionDurationMs: number;
     playbackOrder: string;
-    items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
+    items: { id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
   }) {
     const items = playlist.items.map(item => {
       // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
@@ -231,6 +324,7 @@ export class PlayerService {
         position: item.position,
         durationSecs: item.durationSecs,
         muted: item.muted,
+        playFullVideo: item.playFullVideo,
         asset: {
           id: item.asset.id,
           name: item.asset.name,

@@ -2,13 +2,13 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { History, ChevronLeft, ChevronRight, Users, List, Monitor, ImageIcon, LayoutTemplate, CalendarClock, FolderKanban } from 'lucide-react';
+import { History, ChevronLeft, ChevronRight, Users, List, Monitor, ImageIcon, LayoutTemplate, Palette, CalendarClock, FolderKanban } from 'lucide-react';
 import { auditLogApi, AUDIT_ACTION_STYLES, type AuditResourceType, type AuditLogEntry } from '@/lib/mocks/auditLog';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
 
-const RESOURCE_TYPES: AuditResourceType[] = ['MEMBER', 'PLAYLIST', 'SCREEN', 'ASSET', 'LAYOUT', 'SCHEDULE', 'GROUP'];
+const RESOURCE_TYPES: AuditResourceType[] = ['MEMBER', 'PLAYLIST', 'SCREEN', 'ASSET', 'LAYOUT', 'THEME', 'SCHEDULE', 'GROUP'];
 
 const RESOURCE_ICONS: Record<AuditResourceType, typeof Users> = {
   MEMBER: Users,
@@ -16,6 +16,7 @@ const RESOURCE_ICONS: Record<AuditResourceType, typeof Users> = {
   SCREEN: Monitor,
   ASSET: ImageIcon,
   LAYOUT: LayoutTemplate,
+  THEME: Palette,
   SCHEDULE: CalendarClock,
   GROUP: FolderKanban,
 };

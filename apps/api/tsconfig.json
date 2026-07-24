@@ -6,12 +6,12 @@
     "outDir": "./dist",
     "declaration": false,
     "declarationMap": false,
-    "paths": {
-      "@lumina/*": ["../../packages/*/src"]
-    },
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true
   },
   "include": ["src/**/*", "prisma/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  "exclude": ["node_modules", "dist", "test"],
+  "ts-node": {
+    "files": true
+  }
 }

@@ -1,0 +1,95 @@
+import type { ThemeInput } from '@lumina/types';
+
+// System presets (organizationId: null) — one per README-called-out industry, seeded so orgs
+// have something real to duplicate and customize rather than starting from a blank canvas.
+export const THEME_PRESETS: ThemeInput[] = [
+  {
+    name: 'Café Menu — Warm',
+    category: 'RESTAURANT_MENU',
+    aspectRatio: '16:9',
+    palette: {
+      primary: '#C1440E',
+      secondary: '#2E2A25',
+      background: '#FFF8F0',
+      surface: '#FFFFFF',
+      text: '#2E2A25',
+      textMuted: '#8A7F73',
+      accent: '#E4A11B',
+    },
+    typography: { headingFont: 'Playfair Display', bodyFont: 'Inter', baseSizePx: 16, scale: 1.25 },
+    elements: [
+      { id: 'bg', kind: 'SHAPE', x: 0, y: 0, width: 100, height: 100, zIndex: 0, editable: false, content: {}, style: { backgroundColor: 'palette.background' } },
+      { id: 'logo', kind: 'IMAGE', x: 4, y: 4, width: 16, height: 12, zIndex: 2, editable: true, label: 'Logo', content: { assetId: null }, style: { objectFit: 'contain' } },
+      { id: 'title', kind: 'TEXT', x: 4, y: 18, width: 60, height: 10, zIndex: 2, editable: true, label: 'Menu title', content: { text: "Today's Specials", translations: { ar: 'أطباق اليوم' } }, style: { fontFamily: 'heading', fontSizePx: 48, fontWeight: 700, color: 'palette.primary', textAlign: 'left' } },
+      { id: 'item1_name', kind: 'TEXT', x: 4, y: 32, width: 42, height: 7, zIndex: 2, editable: true, label: 'Item 1 name', content: { text: 'Grilled Halloumi Wrap' }, style: { fontFamily: 'body', fontSizePx: 22, color: 'palette.text' } },
+      { id: 'item1_price', kind: 'TEXT', x: 50, y: 32, width: 14, height: 7, zIndex: 2, editable: true, label: 'Item 1 price', content: { text: '$8.50' }, style: { fontFamily: 'body', fontSizePx: 22, fontWeight: 600, color: 'palette.accent', textAlign: 'right' } },
+      { id: 'item2_name', kind: 'TEXT', x: 4, y: 40, width: 42, height: 7, zIndex: 2, editable: true, label: 'Item 2 name', content: { text: 'Slow-Roasted Lamb Plate' }, style: { fontFamily: 'body', fontSizePx: 22, color: 'palette.text' } },
+      { id: 'item2_price', kind: 'TEXT', x: 50, y: 40, width: 14, height: 7, zIndex: 2, editable: true, label: 'Item 2 price', content: { text: '$14.00' }, style: { fontFamily: 'body', fontSizePx: 22, fontWeight: 600, color: 'palette.accent', textAlign: 'right' } },
+      { id: 'hero', kind: 'PLAYLIST', x: 66, y: 18, width: 30, height: 76, zIndex: 1, editable: true, label: 'Featured media', content: { playlistId: null }, style: { objectFit: 'cover', borderRadius: 12 } },
+    ],
+  },
+  {
+    name: 'Retail Promo — Bold',
+    category: 'RETAIL_PROMO',
+    aspectRatio: '16:9',
+    palette: {
+      primary: '#111111',
+      secondary: '#444444',
+      background: '#111111',
+      surface: '#1C1C1C',
+      text: '#FFFFFF',
+      textMuted: '#B3B3B3',
+      accent: '#FFD400',
+    },
+    typography: { headingFont: 'Archivo Black', bodyFont: 'Inter', baseSizePx: 16, scale: 1.4 },
+    elements: [
+      { id: 'bg', kind: 'SHAPE', x: 0, y: 0, width: 100, height: 100, zIndex: 0, editable: false, content: {}, style: { backgroundColor: 'palette.background' } },
+      { id: 'hero', kind: 'PLAYLIST', x: 0, y: 0, width: 62, height: 100, zIndex: 1, editable: true, label: 'Product media', content: { playlistId: null }, style: { objectFit: 'cover' } },
+      { id: 'headline', kind: 'TEXT', x: 66, y: 12, width: 30, height: 18, zIndex: 2, editable: true, label: 'Promo headline', content: { text: 'SUMMER SALE' }, style: { fontFamily: 'heading', fontSizePx: 56, fontWeight: 900, color: 'palette.accent', textAlign: 'left' } },
+      { id: 'subline', kind: 'TEXT', x: 66, y: 32, width: 30, height: 12, zIndex: 2, editable: true, label: 'Promo subline', content: { text: 'Up to 40% off storewide' }, style: { fontFamily: 'body', fontSizePx: 24, color: 'palette.text', textAlign: 'left' } },
+      { id: 'logo', kind: 'IMAGE', x: 66, y: 80, width: 20, height: 14, zIndex: 2, editable: true, label: 'Logo', content: { assetId: null }, style: { objectFit: 'contain' } },
+    ],
+  },
+  {
+    name: 'Hotel Lobby — Elegant',
+    category: 'HOTEL_LOBBY',
+    aspectRatio: '16:9',
+    palette: {
+      primary: '#8C7A5B',
+      secondary: '#1F2A24',
+      background: '#0E1512',
+      surface: '#1F2A24',
+      text: '#F4F1EA',
+      textMuted: '#B9AF9C',
+      accent: '#C9A24B',
+    },
+    typography: { headingFont: 'Cormorant Garamond', bodyFont: 'Inter', baseSizePx: 16, scale: 1.3 },
+    elements: [
+      { id: 'bg', kind: 'SHAPE', x: 0, y: 0, width: 100, height: 100, zIndex: 0, editable: false, content: {}, style: { backgroundColor: 'palette.background' } },
+      { id: 'hero', kind: 'PLAYLIST', x: 0, y: 0, width: 100, height: 70, zIndex: 1, editable: true, label: 'Ambience media', content: { playlistId: null }, style: { objectFit: 'cover' } },
+      { id: 'welcome', kind: 'TEXT', x: 6, y: 74, width: 60, height: 14, zIndex: 2, editable: true, label: 'Welcome message', content: { text: 'Welcome to Lumina Grand Hotel' }, style: { fontFamily: 'heading', fontSizePx: 40, fontWeight: 500, color: 'palette.accent', textAlign: 'left' } },
+      { id: 'weather', kind: 'WIDGET', x: 70, y: 74, width: 24, height: 20, zIndex: 2, editable: true, label: 'Local weather', content: { widgetType: 'WEATHER', widgetConfig: {} }, style: { color: 'palette.text' } },
+    ],
+  },
+  {
+    name: 'Mosque — Prayer Wall',
+    category: 'MOSQUE',
+    aspectRatio: '16:9',
+    palette: {
+      primary: '#0B6E4F',
+      secondary: '#0A3D2E',
+      background: '#06251C',
+      surface: '#0B3B2C',
+      text: '#F5F1E3',
+      textMuted: '#B8CFC3',
+      accent: '#D4AF37',
+    },
+    typography: { headingFont: 'Amiri', bodyFont: 'Inter', baseSizePx: 16, scale: 1.3 },
+    elements: [
+      { id: 'bg', kind: 'SHAPE', x: 0, y: 0, width: 100, height: 100, zIndex: 0, editable: false, content: {}, style: { backgroundColor: 'palette.background' } },
+      { id: 'title', kind: 'TEXT', x: 0, y: 4, width: 100, height: 12, zIndex: 2, editable: true, label: 'Header', content: { text: 'Prayer Times', translations: { ar: 'مواقيت الصلاة' } }, style: { fontFamily: 'heading', fontSizePx: 44, fontWeight: 600, color: 'palette.accent', textAlign: 'center', direction: 'auto' } },
+      { id: 'prayer', kind: 'WIDGET', x: 4, y: 20, width: 60, height: 72, zIndex: 2, editable: true, label: 'Prayer times + athan', content: { widgetType: 'PRAYER', widgetConfig: {} }, style: { color: 'palette.text' } },
+      { id: 'announcements', kind: 'PLAYLIST', x: 66, y: 20, width: 30, height: 72, zIndex: 1, editable: true, label: 'Announcements', content: { playlistId: null }, style: { objectFit: 'cover', borderRadius: 8 } },
+    ],
+  },
+];

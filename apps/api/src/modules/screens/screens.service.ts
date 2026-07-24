@@ -90,16 +90,56 @@ export class ScreensService {
     return this.prisma.screen.update({ where: { id }, data: { name } });
   }
 
-  async assignPlaylist(orgId: string, screenId: string, playlistId: string | null) {
-    const screen = await this.findOne(orgId, screenId);
-    if (playlistId) {
-      const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
-      if (!playlist) throw new NotFoundException('Playlist not found');
-      if (playlist.approvalStatus !== 'APPROVED') {
-        throw new BadRequestException('Only approved playlists can be assigned to a screen');
+  /**
+   * Sets the screen's single streaming source. contentType selects which one of
+   * video/image/playlist/theme is active; only the matching id is kept, the other two are
+   * cleared so playback (and the player.service state builder) never has to guess which one
+   * of several simultaneously-set fields should win.
+   */
+  async setContent(
+    orgId: string,
+    screenId: string,
+    dto: { contentType: 'VIDEO' | 'IMAGE' | 'PLAYLIST' | 'THEME' | null; assetId?: string | null; playlistId?: string | null; themeId?: string | null },
+  ) {
+    await this.findOne(orgId, screenId);
+
+    const data: { contentType: 'VIDEO' | 'IMAGE' | 'PLAYLIST' | 'THEME' | null; assetId: string | null; playlistId: string | null; themeId: string | null } = {
+      contentType: dto.contentType,
+      assetId: null,
+      playlistId: null,
+      themeId: null,
+    };
+
+    if (dto.contentType === 'VIDEO' || dto.contentType === 'IMAGE') {
+      const assetId = dto.assetId ?? null;
+      if (assetId) {
+        const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
+        if (!asset) throw new NotFoundException('Asset not found');
+        if (asset.type !== dto.contentType) throw new BadRequestException(`Asset is not ${dto.contentType === 'VIDEO' ? 'a video' : 'an image'}`);
       }
+      data.assetId = assetId;
+    } else if (dto.contentType === 'PLAYLIST') {
+      const playlistId = dto.playlistId ?? null;
+      if (playlistId) {
+        const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
+        if (!playlist) throw new NotFoundException('Playlist not found');
+        if (playlist.approvalStatus !== 'APPROVED') {
+          throw new BadRequestException('Only approved playlists can be assigned to a screen');
+        }
+      }
+      data.playlistId = playlistId;
+    } else if (dto.contentType === 'THEME') {
+      const themeId = dto.themeId ?? null;
+      if (themeId) {
+        const theme = await this.prisma.theme.findFirst({
+          where: { id: themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
+        });
+        if (!theme) throw new NotFoundException('Theme not found');
+      }
+      data.themeId = themeId;
     }
-    const updated = await this.prisma.screen.update({ where: { id: screen.id }, data: { playlistId } });
+
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data });
     this.gateway.sendToScreen(screenId, { type: 'publish' });
     return updated;
   }
@@ -162,7 +202,7 @@ export class ScreensService {
   async updatePrayerConfig(
     orgId: string,
     screenId: string,
-    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
+    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean },
   ) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({
@@ -173,6 +213,7 @@ export class ScreensService {
         ...(dto.prayerMethod !== undefined ? { prayerMethod: dto.prayerMethod } : {}),
         ...(dto.athanEnabled !== undefined ? { athanEnabled: dto.athanEnabled } : {}),
         ...(dto.timezone !== undefined ? { timezone: dto.timezone } : {}),
+        ...(dto.timezoneEnabled !== undefined ? { timezoneEnabled: dto.timezoneEnabled } : {}),
       },
     });
     // Without this, a screen already displaying a Prayer/Weather zone keeps showing "no
