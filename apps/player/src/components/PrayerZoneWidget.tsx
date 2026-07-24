@@ -51,7 +51,8 @@ interface PrayerRow {
   time: Date;
 }
 
-const DISPLAY_PRAYERS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+type DisplayPrayer = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
+const DISPLAY_PRAYERS: DisplayPrayer[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const DEFAULT_ATHAN_URL = '/athan.mp3';
 
 function computeTimes(lat: number, lon: number, method: PrayerMethod, date: Date) {
@@ -80,7 +81,7 @@ export default function PrayerZoneWidget({ latitude, longitude, method, athanEna
     const times = computeTimes(latitude, longitude, method, date);
     return DISPLAY_PRAYERS.map(key => ({
       key,
-      time: times[key as keyof PrayerTimes] as Date,
+      time: times[key],
     }));
   }
 

@@ -116,17 +116,15 @@ export class AssetsService {
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' },
     });
-    return Promise.all(
-      assets.map(async (a: (typeof assets)[number]) => {
-        // TEXT assets have no real object behind storageKey (see createText) — a "url" built
-        // from it would 404, so skip it and let the frontend render textContent instead.
-        if (a.type === 'TEXT') return this.toDto(a, null);
-        const url = this.storage.publicUrl(a.storageKey);
-        const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
-        const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
-        return this.toDto(a, url, thumbUrl, downloadUrl);
-      }),
-    );
+    return assets.map(a => {
+      // TEXT assets have no real object behind storageKey (see createText) — a "url" built
+      // from it would 404, so skip it and let the frontend render textContent instead.
+      if (a.type === 'TEXT') return this.toDto(a, null);
+      const url = this.storage.publicUrl(a.storageKey);
+      const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
+      const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
+      return this.toDto(a, url, thumbUrl, downloadUrl);
+    });
   }
 
   async findOne(orgId: string, id: string) {

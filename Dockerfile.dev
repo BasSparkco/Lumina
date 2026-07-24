@@ -15,6 +15,10 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile
 # Prime the Prisma client into the store at build time so first container start doesn't stall.
+# prisma.config.ts requires DATABASE_URL just to resolve — generate doesn't open a connection,
+# so this build-time value only needs to match the shape, not be reachable. Runtime containers
+# get the real value from docker-compose.dev.yml's environment: block.
+ENV DATABASE_URL="postgresql://lumina:lumina@postgres:5432/lumina"
 RUN pnpm --filter api exec prisma generate
 
 CMD ["pnpm", "dev"]

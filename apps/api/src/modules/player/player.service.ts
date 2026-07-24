@@ -118,21 +118,19 @@ export class PlayerService {
     // Item 10 (volume control) — screen's own value wins, else its group's, else full volume.
     const volume = screen.volume ?? screen.group?.volume ?? 100;
 
-    const hydrateZones = async (zones: NonNullable<typeof screen.layout>['zones']) =>
-      Promise.all(
-        zones.map(async (z: (typeof zones)[number]) => ({
-          id: z.id,
-          name: z.name,
-          x: z.x,
-          y: z.y,
-          width: z.width,
-          height: z.height,
-          zIndex: z.zIndex,
-          zoneType: z.zoneType,
-          widgetConfig: z.widgetConfig,
-          playlist: z.playlist ? await this.hydratePlaylist(z.playlist) : null,
-        })),
-      );
+    const hydrateZones = (zones: NonNullable<typeof screen.layout>['zones']) =>
+      zones.map((z: (typeof zones)[number]) => ({
+        id: z.id,
+        name: z.name,
+        x: z.x,
+        y: z.y,
+        width: z.width,
+        height: z.height,
+        zIndex: z.zIndex,
+        zoneType: z.zoneType,
+        widgetConfig: z.widgetConfig,
+        playlist: z.playlist ? this.hydratePlaylist(z.playlist) : null,
+      }));
 
     return {
       screenId,
@@ -144,29 +142,27 @@ export class PlayerService {
       stopped: screen.stopped,
       emergencyActive: screen.emergencyActive,
       emergencyPlaylist: screen.emergencyPlaylist
-        ? await this.hydratePlaylist(screen.emergencyPlaylist)
+        ? this.hydratePlaylist(screen.emergencyPlaylist)
         : null,
       layout: screen.layout
-        ? { id: screen.layout.id, name: screen.layout.name, zones: await hydrateZones(screen.layout.zones) }
+        ? { id: screen.layout.id, name: screen.layout.name, zones: hydrateZones(screen.layout.zones) }
         : null,
-      scheduleRules: await Promise.all(
-        rules.map(async r => ({
-          id: r.id,
-          name: r.name,
-          priority: r.priority,
-          startTime: r.startTime,
-          endTime: r.endTime,
-          daysOfWeek: r.daysOfWeek,
-          startDate: r.startDate?.toISOString() ?? null,
-          endDate: r.endDate?.toISOString() ?? null,
-          playlistId: r.playlistId,
-          playlist: rulePlaylistMap[r.playlistId]
-            ? await this.hydratePlaylist(rulePlaylistMap[r.playlistId]!)
-            : null,
-        })),
-      ),
+      scheduleRules: rules.map(r => ({
+        id: r.id,
+        name: r.name,
+        priority: r.priority,
+        startTime: r.startTime,
+        endTime: r.endTime,
+        daysOfWeek: r.daysOfWeek,
+        startDate: r.startDate?.toISOString() ?? null,
+        endDate: r.endDate?.toISOString() ?? null,
+        playlistId: r.playlistId,
+        playlist: rulePlaylistMap[r.playlistId]
+          ? this.hydratePlaylist(rulePlaylistMap[r.playlistId]!)
+          : null,
+      })),
       resolvedPlaylistId,
-      defaultPlaylist: screen.playlist ? await this.hydratePlaylist(screen.playlist) : null,
+      defaultPlaylist: screen.playlist ? this.hydratePlaylist(screen.playlist) : null,
       poweredOn: power.poweredOn,
       powerScheduleRules: power.rules.map(r => ({
         id: r.id,
@@ -217,7 +213,7 @@ export class PlayerService {
     return { ok: true };
   }
 
-  private async hydratePlaylist(playlist: {
+  private hydratePlaylist(playlist: {
     id: string;
     name: string;
     transitionStyle: string;
@@ -225,34 +221,32 @@ export class PlayerService {
     playbackOrder: string;
     items: { id: string; position: number; durationSecs: number; muted: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
   }) {
-    const items = await Promise.all(
-      playlist.items.map(item => {
-        // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
-        // the player renders textContent directly instead of loading a url.
-        const isText = item.asset.type === 'TEXT';
-        return {
-          id: item.id,
-          position: item.position,
-          durationSecs: item.durationSecs,
-          muted: item.muted,
-          asset: {
-            id: item.asset.id,
-            name: item.asset.name,
-            type: item.asset.type,
-            mimeType: item.asset.mimeType,
-            url: isText ? null : this.storage.publicUrl(item.asset.storageKey),
-            thumbnailUrl: !isText && item.asset.thumbnailKey
-              ? this.storage.publicUrl(item.asset.thumbnailKey)
-              : null,
-            textContent: item.asset.textContent,
-            textFontFamily: item.asset.textFontFamily,
-            textColor: item.asset.textColor,
-            textSize: item.asset.textSize,
-            textBackgroundColor: item.asset.textBackgroundColor,
-          },
-        };
-      }),
-    );
+    const items = playlist.items.map(item => {
+      // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
+      // the player renders textContent directly instead of loading a url.
+      const isText = item.asset.type === 'TEXT';
+      return {
+        id: item.id,
+        position: item.position,
+        durationSecs: item.durationSecs,
+        muted: item.muted,
+        asset: {
+          id: item.asset.id,
+          name: item.asset.name,
+          type: item.asset.type,
+          mimeType: item.asset.mimeType,
+          url: isText ? null : this.storage.publicUrl(item.asset.storageKey),
+          thumbnailUrl: !isText && item.asset.thumbnailKey
+            ? this.storage.publicUrl(item.asset.thumbnailKey)
+            : null,
+          textContent: item.asset.textContent,
+          textFontFamily: item.asset.textFontFamily,
+          textColor: item.asset.textColor,
+          textSize: item.asset.textSize,
+          textBackgroundColor: item.asset.textBackgroundColor,
+        },
+      };
+    });
     return {
       id: playlist.id,
       name: playlist.name,
