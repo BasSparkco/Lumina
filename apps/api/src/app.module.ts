@@ -45,7 +45,11 @@ function loadEnvFile() {
       if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
         value = value.slice(1, -1);
       }
-      process.env[key] = value;
+      // Real env vars (e.g. injected by docker-compose in production) must win over anything
+      // found in a bundled .env file — this only fills in gaps, never overrides.
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
     }
     break;
   }
