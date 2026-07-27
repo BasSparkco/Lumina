@@ -12,14 +12,38 @@ export class MediaController {
 
   @Get(':orgId/assets/:filename')
   @Header('Cache-Control', 'public, max-age=31536000, immutable')
-  async serve(
+  serveAsset(
     @Param('orgId') orgId: string,
     @Param('filename') filename: string,
     @Headers('range') range: string | undefined,
     @Query('download') download: string | undefined,
     @Res() res: Response,
   ) {
-    const key = `${orgId}/assets/${filename}`;
+    return this.serve(`${orgId}/assets/${filename}`, range, download, res);
+  }
+
+  // Screenshot keys (see StorageService.screenshotKey) live under a different prefix than
+  // uploaded assets and were never given a route here, so screensApi's `screenshotUrl` always
+  // 404'd — the dashboard's "live preview" img tag rendered a broken-image icon, never an
+  // actual screenshot. Deliberately not cached like assets: the key is deterministic and
+  // overwritten in place on every capture, not content-addressed, so a long-lived cache would
+  // keep showing a stale frame after "Refresh now".
+  @Get(':orgId/screenshots/:filename')
+  @Header('Cache-Control', 'no-store')
+  serveScreenshot(
+    @Param('orgId') orgId: string,
+    @Param('filename') filename: string,
+    @Res() res: Response,
+  ) {
+    return this.serve(`${orgId}/screenshots/${filename}`, undefined, undefined, res);
+  }
+
+  private async serve(
+    key: string,
+    range: string | undefined,
+    download: string | undefined,
+    res: Response,
+  ) {
     let object;
     try {
       object = await this.storage.getObject(key, range);

@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil } from 'lucide-react';
+import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2 } from 'lucide-react';
 import { assetsApi, type Asset, type TextFontFamily, type TextSize } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
@@ -189,6 +189,18 @@ export default function AssetsPage() {
     onError: (e: Error) => setDeleteError(e.message),
   });
 
+  const audioMut = useMutation({
+    mutationFn: ({ id, audioEnabled }: { id: string; audioEnabled: boolean }) => assetsApi.setAudioEnabled(id, audioEnabled),
+    onSuccess: (updated) => {
+      logAction({
+        resourceType: 'ASSET', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: updated.audioEnabled ? t('audioEnabled') : t('audioDisabled'),
+      });
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+    },
+  });
+
   const renameMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => assetsApi.rename(id, name),
     onSuccess: (renamed, { previousName }) => {
@@ -342,6 +354,14 @@ export default function AssetsPage() {
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
                     {typeIcon[asset.type]} {formatBytes(asset.sizeBytes)}
                   </p>
+                  {asset.type === 'VIDEO' && asset.status === 'READY' && asset.hasAudioTrack && (
+                    <label className={`flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-1 ${canEditContent ? 'cursor-pointer' : ''}`}>
+                      <input type="checkbox" checked={asset.audioEnabled} disabled={!canEditContent}
+                        onChange={e => audioMut.mutate({ id: asset.id, audioEnabled: e.target.checked })}
+                        className="w-3.5 h-3.5 accent-indigo-500 disabled:opacity-50" />
+                      <Volume2 className="w-3 h-3" /> {t('includeAudio')}
+                    </label>
+                  )}
                 </div>
                 <div className="flex items-center shrink-0">
                   {asset.downloadUrl && (

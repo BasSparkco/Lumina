@@ -112,20 +112,44 @@
     "layoutZones": "Layout (zones)",
     "fullscreenNoLayout": "— Fullscreen (no layout) —",
     "timezone": "Timezone (used to resolve schedules for this screen)",
+    "hideTimezone": "Hide timezone",
+    "configureTimezone": "Configure timezone",
     "volume": "Volume",
     "hideFaith": "Hide faith settings",
     "configureFaith": "Configure faith settings",
+    "hideLocation": "Hide location",
+    "configureLocation": "Configure location",
+    "streamingType": {
+      "label": "Streaming type",
+      "ASSET": "Asset",
+      "PLAYLIST": "Playlist",
+      "LAYOUT": "Layout",
+      "assetLabel": "Asset to play"
+    },
     "set": "✓ set",
     "publish": "Publish",
     "publishTitle": "Push latest content to screen",
+    "pause": "Pause",
+    "resume": "Resume",
+    "emergency": "Emergency",
+    "stopEmergency": "Stop emergency",
+    "reload": "Reload",
+    "unpair": "Unpair",
     "deactivateEmergency": "Deactivate emergency override",
     "activateEmergency": "Activate emergency override",
     "reloadTitle": "Reload screen player",
     "lastSeen": "Last seen {when}",
     "neverSeen": "Never seen",
-    "deleteConfirm": "Delete this screen?",
+    "deleteTitle": "Delete screen",
+    "deleteConfirm": "Permanently delete this screen? Unlike unpairing, this can't be undone — its history and settings are removed, and a still-connected device is told to stop playing and pair again as a new screen.",
+    "location": {
+      "title": "Screen location",
+      "save": "Save location",
+      "saving": "Saving…"
+    },
     "prayer": {
       "title": "Faith / Prayer settings",
+      "needsLocation": "Set a location above for prayer times to work.",
       "latitude": "Latitude",
       "longitude": "Longitude",
       "method": "Calculation method",
@@ -207,6 +231,9 @@
     "download": "Download",
     "deleteConfirm": "Delete this asset?",
     "deleteAsset": "Delete asset",
+    "includeAudio": "Include audio",
+    "audioEnabled": "Audio included",
+    "audioDisabled": "Audio muted",
     "newText": "New text",
     "newTextModalTitle": "New text asset",
     "newTextNamePlaceholder": "e.g. Welcome Message",
@@ -289,6 +316,8 @@
     "zoneWidthTitle": "Width (% of screen width)",
     "zoneHeightTitle": "Height (% of screen height)",
     "noPlaylist": "— No playlist —",
+    "noAsset": "— No asset —",
+    "zones": "Zones",
     "addZone": "Add zone",
     "saveLayout": "Save layout",
     "saving": "Saving…",
@@ -302,6 +331,18 @@
     "screenCount": "{count, plural, one {# screen} other {# screens}}",
     "duplicate": "Duplicate layout",
     "duplicating": "Duplicating…",
+    "undo": "Undo",
+    "redo": "Redo",
+    "mediaSource": {
+      "label": "Media source",
+      "playlist": "Playlist",
+      "asset": "Asset"
+    },
+    "audio": {
+      "priority": "Priority (mute other zones)",
+      "priorityHint": "While this zone has audio, every other zone in this layout is muted.",
+      "customVolume": "Custom volume for this zone"
+    },
     "presets": {
       "fullscreen": "Fullscreen",
       "mainTicker": "Main + Ticker",
@@ -310,7 +351,7 @@
       "mosque": "Mosque"
     },
     "zoneTypes": {
-      "MEDIA": "Media (playlist)",
+      "MEDIA": "Media (playlist or asset)",
       "PRAYER": "Prayer times",
       "WEATHER": "Weather",
       "CURRENCY": "Currency rates",
@@ -593,6 +634,9 @@
     "dateFormat": "Date format",
     "dateFormatDesc": "How dates are displayed throughout the dashboard",
     "faithFeatures": "Faith / prayer features",
-    "faithFeaturesDesc": "Show the Mosque layout preset and faith/prayer screen settings"
+    "faithFeaturesDesc": "Show the Mosque layout preset and faith/prayer screen settings",
+    "autoPublish": "Auto-publish screen changes",
+    "autoPublishDesc": "Skip the Publish button — playlist, layout, and other display changes on the Screens page go live the moment they're saved",
+    "autoPublishNoPermission": "Only admins and owners can change this"
   }
 }

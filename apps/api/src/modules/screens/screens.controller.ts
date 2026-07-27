@@ -4,6 +4,8 @@ import { IsString } from 'class-validator';
 import { ScreensService } from './screens.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
 import { AssignPlaylistDto } from './dto/assign-playlist.dto';
+import { AssignAssetDto } from './dto/assign-asset.dto';
+import { SetStreamingTypeDto } from './dto/set-streaming-type.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -57,6 +59,16 @@ export class ScreensController {
   @Post(':id/assign')
   assign(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: AssignPlaylistDto) {
     return this.screens.assignPlaylist(user.orgId, id, dto.playlistId);
+  }
+
+  @Put(':id/streaming-type')
+  setStreamingType(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetStreamingTypeDto) {
+    return this.screens.setStreamingType(user.orgId, id, dto.streamingType);
+  }
+
+  @Put(':id/asset')
+  setAsset(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: AssignAssetDto) {
+    return this.screens.setAsset(user.orgId, id, dto.assetId);
   }
 
   @Post('pair')

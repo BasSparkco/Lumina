@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2 } from 'lucide-react';
-import { screensApi, playlistsApi, layoutsApi, type Screen } from '@/lib/api';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid } from 'lucide-react';
+import { screensApi, playlistsApi, layoutsApi, orgApi, type Screen, type StreamingType } from '@/lib/api';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
@@ -15,13 +15,19 @@ import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { TimezoneSelect } from '@/components/TimezoneSelect';
+import { AssetPicker } from '@/components/AssetPicker';
 
 const PRAYER_METHOD_VALUES = [
   'UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague',
   'Karachi', 'NorthAmerica', 'MoonsightingCommittee', 'Singapore', 'Tehran', 'Turkey',
 ];
 
-function PrayerPanel({ screen }: { screen: Screen }) {
+// Latitude/longitude live here rather than in PrayerPanel below — Weather zones need a
+// location just as much as Prayer zones do (see ZoneRenderer in the player), so gating the
+// only place to set it behind the faith-features toggle silently broke Weather for anyone
+// with that toggle off. This panel is always visible; PrayerPanel only adds prayer-specific
+// settings (method, athan) on top of whatever location is set here.
+function LocationPanel({ screen }: { screen: Screen }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { canEditContent } = usePermissions();
@@ -29,14 +35,63 @@ function PrayerPanel({ screen }: { screen: Screen }) {
   const t = useTranslations('screens');
   const [lat, setLat] = useState(screen.latitude?.toString() ?? '');
   const [lon, setLon] = useState(screen.longitude?.toString() ?? '');
+
+  const locationMut = useMutation({
+    mutationFn: () =>
+      screensApi.updatePrayer(screen.id, {
+        latitude: lat ? parseFloat(lat) : undefined,
+        longitude: lon ? parseFloat(lon) : undefined,
+      }),
+    onSuccess: () => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: screen.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-2 text-gray-600 dark:text-gray-300 font-medium text-xs">
+        <MapPin className="w-3.5 h-3.5" /> {t('location.title')}
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.latitude')}</label>
+          <input type="number" step="0.0001" value={lat} onChange={e => setLat(e.target.value)} disabled={!canEditContent}
+            placeholder="e.g. 21.4225"
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.longitude')}</label>
+          <input type="number" step="0.0001" value={lon} onChange={e => setLon(e.target.value)} disabled={!canEditContent}
+            placeholder="e.g. 39.8262"
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50" />
+        </div>
+      </div>
+      {canEditContent && (
+        <button onClick={() => locationMut.mutate()} disabled={locationMut.isPending}
+          className="w-full text-xs py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium disabled:opacity-50">
+          {locationMut.isPending ? t('location.saving') : t('location.save')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PrayerPanel({ screen }: { screen: Screen }) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const { canEditContent } = usePermissions();
+  const logAction = useAuditLog();
+  const t = useTranslations('screens');
   const [method, setMethod] = useState(screen.prayerMethod ?? 'UmmAlQura');
   const [athan, setAthan] = useState(screen.athanEnabled ?? false);
 
   const prayerMut = useMutation({
     mutationFn: () =>
       screensApi.updatePrayer(screen.id, {
-        latitude: lat ? parseFloat(lat) : undefined,
-        longitude: lon ? parseFloat(lon) : undefined,
         prayerMethod: method,
         athanEnabled: athan,
       }),
@@ -58,20 +113,9 @@ function PrayerPanel({ screen }: { screen: Screen }) {
       <div className="flex items-center gap-1.5 mb-2 text-amber-700 font-medium text-xs">
         <Moon className="w-3.5 h-3.5" /> {t('prayer.title')}
       </div>
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.latitude')}</label>
-          <input type="number" step="0.0001" value={lat} onChange={e => setLat(e.target.value)} disabled={!canEditContent}
-            placeholder="e.g. 21.4225"
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-50" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.longitude')}</label>
-          <input type="number" step="0.0001" value={lon} onChange={e => setLon(e.target.value)} disabled={!canEditContent}
-            placeholder="e.g. 39.8262"
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-50" />
-        </div>
-      </div>
+      {(screen.latitude == null || screen.longitude == null) && (
+        <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">{t('prayer.needsLocation')}</p>
+      )}
       <div className="mb-2">
         <label className="text-xs text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.method')}</label>
         <select value={method} onChange={e => setMethod(e.target.value)} disabled={!canEditContent}
@@ -224,11 +268,15 @@ export default function ScreensPage() {
   const { data: layouts = [] } = useQuery({ queryKey: ['layouts'], queryFn: layoutsApi.list });
   const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
   const { data: groupAssignments = {} } = useQuery({ queryKey: ['screenGroupAssignments'], queryFn: screenGroupsApi.getAssignments });
+  const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
+  const autoPublish = orgSettings?.autoPublish ?? false;
   const liveStatuses = useScreenSocket();
 
   const [showPair, setShowPair] = useState(false);
   const [pairCode, setPairCode] = useState('');
   const [pairError, setPairError] = useState('');
+  const [expandedLocation, setExpandedLocation] = useState<string | null>(null);
+  const [expandedTimezone, setExpandedTimezone] = useState<string | null>(null);
   const [expandedPrayer, setExpandedPrayer] = useState<string | null>(null);
   const [expandedScreenshot, setExpandedScreenshot] = useState<string | null>(null);
   const [expandedCrash, setExpandedCrash] = useState<string | null>(null);
@@ -324,6 +372,30 @@ export default function ScreensPage() {
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
         userName: user?.name ?? '', userEmail: user?.email ?? '',
         detail: playlistId ? playlists.find(p => p.id === playlistId)?.name : ta('detailPlaylistCleared'),
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  const streamingTypeMut = useMutation({
+    mutationFn: ({ id, streamingType }: { id: string; streamingType: StreamingType }) =>
+      screensApi.setStreamingType(id, streamingType),
+    onSuccess: (updated, { streamingType }) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: t(`streamingType.${streamingType}`),
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  const assetMut = useMutation({
+    mutationFn: ({ id, assetId }: { id: string; assetId: string | null }) => screensApi.setAsset(id, assetId),
+    onSuccess: (updated) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
       });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -551,7 +623,7 @@ export default function ScreensPage() {
             </button>
           )
         )}
-        {activeGroupId && visibleScreens.length > 0 && canEditContent && (
+        {activeGroupId && visibleScreens.length > 0 && canEditContent && !autoPublish && (
           <button onClick={() => bulkPublishMut.mutate(visibleScreens.map(s => s.id))} disabled={bulkPublishMut.isPending}
             className="ms-auto flex items-center gap-2 text-sm px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50">
             <Send className="w-3.5 h-3.5" /> {bulkPublishMut.isPending ? t('groups.publishing') : t('groups.publishToGroup')}
@@ -627,7 +699,7 @@ export default function ScreensPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-start">
         {visibleScreens.map((screen: Screen) => {
           const live = statusFor(screen);
           return (
@@ -671,36 +743,80 @@ export default function ScreensPage() {
               )}
 
               <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('defaultPlaylist')}</label>
-                <select
-                  value={screen.playlistId ?? ''} disabled={!canEditContent}
-                  onChange={e => assignMut.mutate({ id: screen.id, playlistId: e.target.value || null })}
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-                  <option value="">{t('none')}</option>
-                  {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.label')}</label>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['ASSET', 'PLAYLIST', 'LAYOUT'] as const).map(st => {
+                    const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : LayoutGrid;
+                    return (
+                      <button key={st} type="button" disabled={!canEditContent}
+                        onClick={() => streamingTypeMut.mutate({ id: screen.id, streamingType: st })}
+                        className={`flex items-center justify-center gap-1 text-xs py-1.5 rounded-lg border font-medium disabled:opacity-50 ${
+                          screen.streamingType === st
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}>
+                        <Icon className="w-3 h-3" /> {t(`streamingType.${st}`)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('layoutZones')}</label>
-                <select
-                  value={screen.layoutId ?? ''} disabled={!canEditContent}
-                  onChange={e => layoutMut.mutate({ id: screen.id, layoutId: e.target.value || null })}
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-                  <option value="">{t('fullscreenNoLayout')}</option>
-                  {layouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-              </div>
+              {screen.streamingType === 'ASSET' && (
+                <div>
+                  <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.assetLabel')}</label>
+                  <AssetPicker
+                    value={screen.assetId} disabled={!canEditContent} placeholder={t('none')}
+                    onChange={assetId => assetMut.mutate({ id: screen.id, assetId })}
+                  />
+                </div>
+              )}
 
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {t('timezone')}
-                </label>
-                <TimezoneSelect
-                  value={screen.timezone} disabled={!canEditContent}
-                  onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz })}
-                />
-              </div>
+              {screen.streamingType === 'PLAYLIST' && (
+                <div>
+                  <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('defaultPlaylist')}</label>
+                  <select
+                    value={screen.playlistId ?? ''} disabled={!canEditContent}
+                    onChange={e => assignMut.mutate({ id: screen.id, playlistId: e.target.value || null })}
+                    className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    <option value="">{t('none')}</option>
+                    {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {screen.streamingType === 'LAYOUT' && (
+                <div>
+                  <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('layoutZones')}</label>
+                  <select
+                    value={screen.layoutId ?? ''} disabled={!canEditContent}
+                    onChange={e => layoutMut.mutate({ id: screen.id, layoutId: e.target.value || null })}
+                    className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    <option value="">{t('fullscreenNoLayout')}</option>
+                    {layouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Timezone — collapsible, and only relevant when something actually consults it:
+                  Playlist mode's schedule rules, or Layout mode's prayer/weather zones. */}
+              {screen.streamingType !== 'ASSET' && (
+                <>
+                  <button
+                    onClick={() => setExpandedTimezone(expandedTimezone === screen.id ? null : screen.id)}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                    <Clock className="w-3.5 h-3.5" />
+                    {expandedTimezone === screen.id ? t('hideTimezone') : t('configureTimezone')}
+                    <span className="ml-auto text-gray-400 dark:text-gray-500 opacity-70 truncate max-w-[8rem]">{screen.timezone}</span>
+                  </button>
+                  {expandedTimezone === screen.id && (
+                    <TimezoneSelect
+                      value={screen.timezone} disabled={!canEditContent}
+                      onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz })}
+                    />
+                  )}
+                </>
+              )}
 
               <VolumeControl screen={screen} disabled={!canEditContent} />
 
@@ -716,6 +832,19 @@ export default function ScreensPage() {
                   {groups.map((g: ScreenGroup) => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
+
+              {/* Screen location — always available, since Weather zones need it too and
+                  shouldn't be locked behind the faith-features toggle */}
+              <button
+                onClick={() => setExpandedLocation(expandedLocation === screen.id ? null : screen.id)}
+                className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                <MapPin className="w-3.5 h-3.5" />
+                {expandedLocation === screen.id ? t('hideLocation') : t('configureLocation')}
+                {screen.latitude != null && screen.longitude != null && (
+                  <span className="ml-auto text-emerald-500 opacity-70">{t('set')}</span>
+                )}
+              </button>
+              {expandedLocation === screen.id && <LocationPanel screen={screen} />}
 
               {/* Prayer settings */}
               {faithEnabled && (
@@ -757,49 +886,53 @@ export default function ScreensPage() {
 
               {/* Action buttons */}
               {canEditContent && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => publishMut.mutate(screen.id)}
-                    disabled={publishMut.isPending && publishMut.variables === screen.id}
-                    title={t('publishTitle')}
-                    className="flex-1 flex items-center justify-center gap-1 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50">
-                    <Send className="w-3 h-3" /> {t('publish')}
-                  </button>
+                <div className="flex flex-wrap gap-2">
+                  {!autoPublish && (
+                    <button
+                      onClick={() => publishMut.mutate(screen.id)}
+                      disabled={publishMut.isPending && publishMut.variables === screen.id}
+                      title={t('publishTitle')}
+                      className="flex-1 flex items-center justify-center gap-1 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50">
+                      <Send className="w-3 h-3" /> {t('publish')}
+                    </button>
+                  )}
                   <button
                     onClick={() => stopMut.mutate({ id: screen.id, stopped: !screen.stopped })}
                     disabled={stopMut.isPending && stopMut.variables?.id === screen.id}
                     title={screen.stopped ? t('resumeStreamTitle') : t('pauseStreamTitle')}
-                    className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
+                    className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs font-medium disabled:opacity-50 ${
                       screen.stopped
                         ? 'border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950'
                         : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}>
                     {screen.stopped ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+                    {screen.stopped ? t('resume') : t('pause')}
                   </button>
                   <button
                     onClick={() => emergencyMut.mutate({ id: screen.id, active: !screen.emergencyActive })}
                     disabled={emergencyMut.isPending && emergencyMut.variables?.id === screen.id}
                     title={screen.emergencyActive ? t('deactivateEmergency') : t('activateEmergency')}
-                    className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs disabled:opacity-50 ${
+                    className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-xs font-medium disabled:opacity-50 ${
                       screen.emergencyActive
                         ? 'border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950'
                         : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}>
                     <AlertTriangle className="w-3 h-3" />
+                    {screen.emergencyActive ? t('stopEmergency') : t('emergency')}
                   </button>
                   <button
                     onClick={() => reloadMut.mutate(screen.id)}
                     disabled={reloadMut.isPending && reloadMut.variables === screen.id}
                     title={t('reloadTitle')}
-                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
-                    <RefreshCw className="w-3 h-3" />
+                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                    <RefreshCw className="w-3 h-3" /> {t('reload')}
                   </button>
                   <button
                     onClick={() => { if (confirmDelete(t('unpairConfirm'))) unpairMut.mutate(screen); }}
                     disabled={unpairMut.isPending && unpairMut.variables?.id === screen.id}
                     title={t('unpairTitle')}
-                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
-                    <Unplug className="w-3 h-3" />
+                    className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-xs font-medium hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
+                    <Unplug className="w-3 h-3" /> {t('unpair')}
                   </button>
                 </div>
               )}
@@ -810,6 +943,7 @@ export default function ScreensPage() {
                 </span>
                 {canEditContent && (
                   <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(screen); }}
+                    title={t('deleteTitle')} aria-label={t('deleteTitle')}
                     className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

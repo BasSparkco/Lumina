@@ -49,6 +49,13 @@ export const authApi = {
   me: () => req<User>('/auth/me'),
 };
 
+// ── Org settings ────────────────────────────────────────────────────────────
+export const orgApi = {
+  getSettings: () => req<{ autoPublish: boolean }>('/org/settings'),
+  updateSettings: (autoPublish: boolean) =>
+    req<{ autoPublish: boolean }>('/org/settings', { method: 'PUT', body: JSON.stringify({ autoPublish }) }),
+};
+
 // ── Screens ─────────────────────────────────────────────────────────────────
 export const screensApi = {
   list: () => req<Screen[]>('/screens'),
@@ -63,6 +70,10 @@ export const screensApi = {
   reload: (id: string) => req<{ ok: boolean }>(`/screens/${id}/reload`, { method: 'POST' }),
   setLayout: (id: string, layoutId: string | null) =>
     req<Screen>(`/screens/${id}/layout`, { method: 'PUT', body: JSON.stringify({ layoutId }) }),
+  setStreamingType: (id: string, streamingType: StreamingType) =>
+    req<Screen>(`/screens/${id}/streaming-type`, { method: 'PUT', body: JSON.stringify({ streamingType }) }),
+  setAsset: (id: string, assetId: string | null) =>
+    req<Screen>(`/screens/${id}/asset`, { method: 'PUT', body: JSON.stringify({ assetId }) }),
   setEmergency: (id: string, active: boolean, playlistId?: string) =>
     req<Screen>(`/screens/${id}/emergency`, { method: 'PUT', body: JSON.stringify({ active, playlistId }) }),
   setStopped: (id: string, stopped: boolean) =>
@@ -95,6 +106,8 @@ export const assetsApi = {
   },
   get: (id: string) => req<Asset>(`/assets/${id}`),
   rename: (id: string, name: string) => req<Asset>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  setAudioEnabled: (id: string, audioEnabled: boolean) =>
+    req<Asset>(`/assets/${id}/audio`, { method: 'PUT', body: JSON.stringify({ audioEnabled }) }),
   remove: (id: string) => req<void>(`/assets/${id}`, { method: 'DELETE' }),
   createText: (name: string, content: string, style: TextStyle) =>
     req<Asset>('/assets/text', { method: 'POST', body: JSON.stringify({ name, content, ...style }) }),
@@ -120,12 +133,19 @@ export const playlistsApi = {
 };
 
 // ── Layouts ─────────────────────────────────────────────────────────────────
+// The API's ValidationPipe runs with forbidNonWhitelisted: true — any client-only field (like
+// ZoneInput._localId, used purely for stable React keys while editing) 400s the save unless
+// stripped first.
+function stripLocalId(zones: ZoneInput[]) {
+  return zones.map(({ _localId: _unused, ...z }) => z);
+}
+
 export const layoutsApi = {
   list: () => req<Layout[]>('/layouts'),
   create: (name: string, zones: ZoneInput[]) =>
-    req<Layout>('/layouts', { method: 'POST', body: JSON.stringify({ name, zones }) }),
+    req<Layout>('/layouts', { method: 'POST', body: JSON.stringify({ name, zones: stripLocalId(zones) }) }),
   update: (id: string, name: string, zones: ZoneInput[]) =>
-    req<Layout>(`/layouts/${id}`, { method: 'PUT', body: JSON.stringify({ name, zones }) }),
+    req<Layout>(`/layouts/${id}`, { method: 'PUT', body: JSON.stringify({ name, zones: stripLocalId(zones) }) }),
   remove: (id: string) => req<void>(`/layouts/${id}`, { method: 'DELETE' }),
 };
 
@@ -172,9 +192,19 @@ export const realScreenGroupsApi = {
 // ── Types ───────────────────────────────────────────────────────────────────
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
-export interface ZoneInput { name: string; x: number; y: number; width: number; height: number; zIndex?: number; zoneType?: ZoneType; widgetConfig?: Record<string, unknown>; playlistId?: string; }
-export interface ZoneRecord extends ZoneInput { id: string; playlist: { id: string; name: string } | null; }
+export interface ZoneInput {
+  name: string; x: number; y: number; width: number; height: number; zIndex?: number; zoneType?: ZoneType;
+  widgetConfig?: Record<string, unknown>;
+  // Mutually exclusive — a MEDIA zone plays either a playlist or a single asset, never both.
+  playlistId?: string; assetId?: string;
+  audioPriority?: boolean; audioVolume?: number | null;
+  // Dashboard-only, client-generated, stripped before every network call — see layouts/page.tsx.
+  // Not sent to (or returned by) the API, so it's optional and absent from ZoneRecord.
+  _localId?: string;
+}
+export interface ZoneRecord extends ZoneInput { id: string; playlist: { id: string; name: string } | null; asset: { id: string; name: string } | null; }
 export interface Layout { id: string; name: string; zones: ZoneRecord[]; _count?: { screens: number }; }
 export interface CreateScheduleInput {
   name: string; screenId: string; playlistId: string; priority?: number;
@@ -193,7 +223,8 @@ export interface PowerScheduleEntry extends CreatePowerScheduleInput {
 }
 export interface Screen {
   id: string; name: string; status: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null;
-  paired: boolean; playlistId: string | null; playlist?: { id: string; name: string } | null;
+  paired: boolean; streamingType: StreamingType;
+  assetId: string | null; playlistId: string | null; playlist?: { id: string; name: string } | null;
   layoutId: string | null; emergencyActive: boolean; stopped: boolean;
   latitude: number | null; longitude: number | null;
   prayerMethod: string; athanEnabled: boolean; timezone: string;
@@ -217,6 +248,7 @@ export interface Asset {
   downloadUrl: string | null; textContent: string | null;
   textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
   textBackgroundColor: string | null;
+  hasAudioTrack: boolean; audioEnabled: boolean;
   width: number | null; height: number | null; durationSecs: number | null; createdAt: string;
 }
 export interface PlaylistItem {

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { memoryStorage } from 'multer';
 import type { TextFontFamily, TextSize } from '@lumina/db';
 import { AssetsService } from './assets.service';
@@ -28,6 +28,7 @@ const TEXT_SIZES = ['SMALL', 'MEDIUM', 'LARGE', 'XLARGE'] as const;
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
 class RenameAssetDto { @IsString() name!: string; }
+class SetAudioEnabledDto { @IsBoolean() audioEnabled!: boolean; }
 
 class TextStyleDto {
   @IsOptional() @IsIn(TEXT_FONT_FAMILIES) textFontFamily?: TextFontFamily;
@@ -93,6 +94,11 @@ export class AssetsController {
   @Put(':id')
   rename(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: RenameAssetDto) {
     return this.assets.rename(user.orgId, id, dto.name);
+  }
+
+  @Put(':id/audio')
+  setAudioEnabled(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetAudioEnabledDto) {
+    return this.assets.setAudioEnabled(user.orgId, id, dto.audioEnabled);
   }
 
   @Delete(':id')

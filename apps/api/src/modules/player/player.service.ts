@@ -69,6 +69,7 @@ export class PlayerService {
     const screen = await this.prisma.screen.findUnique({
       where: { id: screenId },
       include: {
+        asset: true,
         emergencyPlaylist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },
@@ -80,6 +81,7 @@ export class PlayerService {
                 playlist: {
                   include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
                 },
+                asset: true,
               },
             },
           },
@@ -92,7 +94,11 @@ export class PlayerService {
     });
     if (!screen) throw new NotFoundException('Screen not found');
 
-    const rules = await this.schedules.getSchedulesForScreen(screenId);
+    // Schedule rules only ever resolve a *playlist* to swap in/out — meaningless (and, if left
+    // computed, a source of stale leakage) outside Playlist mode: a screen that used to be
+    // Playlist mode with Schedule rows still in the DB, then switched to Asset or Layout mode,
+    // would otherwise still resolve and could leak a scheduled playlist through.
+    const rules = screen.streamingType === 'PLAYLIST' ? await this.schedules.getSchedulesForScreen(screenId) : [];
 
     // Collect all unique playlist IDs needed by schedule rules
     const rulePlaylistIds = [...new Set(rules.map(r => r.playlistId))];
@@ -109,7 +115,9 @@ export class PlayerService {
     );
 
     // Resolve what's playing right now (server-side, as a hint)
-    const resolvedPlaylistId = this.schedules.resolveNow(rules, new Date(), screen.timezone);
+    const resolvedPlaylistId = screen.streamingType === 'PLAYLIST'
+      ? this.schedules.resolveNow(rules, new Date(), screen.timezone)
+      : null;
 
     // Item 6 (display power schedule) — screen-level rules override the screen's group's; no
     // rules anywhere means the feature is unset for this screen, i.e. always on.
@@ -129,11 +137,17 @@ export class PlayerService {
         zIndex: z.zIndex,
         zoneType: z.zoneType,
         widgetConfig: z.widgetConfig,
-        playlist: z.playlist ? this.hydratePlaylist(z.playlist) : null,
+        audioPriority: z.audioPriority,
+        audioVolume: z.audioVolume,
+        // A zone's MEDIA content is either a playlist or a single asset, never both (enforced
+        // in LayoutsService) — asset wins the null-coalesce below only because at most one of
+        // the two is ever actually set.
+        playlist: z.playlist ? this.hydratePlaylist(z.playlist) : z.asset ? this.hydrateAssetAsPlaylist(z.asset) : null,
       }));
 
     return {
       screenId,
+      streamingType: screen.streamingType,
       timezone: screen.timezone,
       latitude: screen.latitude,
       longitude: screen.longitude,
@@ -144,7 +158,8 @@ export class PlayerService {
       emergencyPlaylist: screen.emergencyPlaylist
         ? this.hydratePlaylist(screen.emergencyPlaylist)
         : null,
-      layout: screen.layout
+      asset: screen.streamingType === 'ASSET' && screen.asset ? this.hydrateAssetAsPlaylist(screen.asset) : null,
+      layout: screen.streamingType === 'LAYOUT' && screen.layout
         ? { id: screen.layout.id, name: screen.layout.name, zones: hydrateZones(screen.layout.zones) }
         : null,
       scheduleRules: rules.map(r => ({
@@ -162,7 +177,7 @@ export class PlayerService {
           : null,
       })),
       resolvedPlaylistId,
-      defaultPlaylist: screen.playlist ? this.hydratePlaylist(screen.playlist) : null,
+      defaultPlaylist: screen.streamingType === 'PLAYLIST' && screen.playlist ? this.hydratePlaylist(screen.playlist) : null,
       poweredOn: power.poweredOn,
       powerScheduleRules: power.rules.map(r => ({
         id: r.id,
@@ -172,6 +187,33 @@ export class PlayerService {
       })),
       volume,
     };
+  }
+
+  // A raw Asset played standalone (Screen-level ASSET streaming mode, or a Zone's asset media
+  // mode) has no PlaylistItem to carry a placement-specific duration/muted flag, so this
+  // fabricates a single-item playlist reusing hydratePlaylist's URL/thumbnail/TEXT handling —
+  // letting the player's existing single-item-playlist looping render it with no new code path.
+  // durationSecs mirrors the PlaylistItem schema default; muted follows the asset's own audio
+  // choice, since that's the only place such a choice can be recorded for a non-playlist placement.
+  private hydrateAssetAsPlaylist(asset: {
+    id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null;
+    textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null;
+    hasAudioTrack: boolean; audioEnabled: boolean;
+  }) {
+    return this.hydratePlaylist({
+      id: `asset:${asset.id}`,
+      name: asset.name,
+      transitionStyle: 'NONE',
+      transitionDurationMs: 0,
+      playbackOrder: 'SEQUENTIAL',
+      items: [{
+        id: `asset-item:${asset.id}`,
+        position: 0,
+        durationSecs: 10,
+        muted: asset.type === 'VIDEO' && asset.hasAudioTrack ? !asset.audioEnabled : true,
+        asset,
+      }],
+    });
   }
 
   async uploadScreenshot(orgId: string, screenId: string, jpeg: Buffer) {

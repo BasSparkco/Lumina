@@ -107,8 +107,13 @@ export class PlaylistsService {
     });
     const position = (last?.position ?? -1) + 1;
 
+    // When the caller doesn't specify, default to the asset's own audio choice (from upload/the
+    // assets page) rather than the DB column's blanket `true` — otherwise a video whose audio
+    // was explicitly enabled still lands muted the first time it's placed anywhere, since
+    // nothing in the dashboard ever offers to unmute a placement today.
+    const initialMuted = muted !== undefined ? muted : asset.hasAudioTrack ? !asset.audioEnabled : true;
     const item = await this.prisma.playlistItem.create({
-      data: { playlistId, assetId, position, durationSecs, ...(muted !== undefined && { muted }) },
+      data: { playlistId, assetId, position, durationSecs, muted: initialMuted },
       include: { asset: true },
     });
     return this.withAssetUrls(item);

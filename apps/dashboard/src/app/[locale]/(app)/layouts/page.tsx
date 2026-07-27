@@ -3,13 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Rnd } from 'react-rnd';
-import { LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy } from 'lucide-react';
+import { LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy, Undo2, Redo2, Volume2 } from 'lucide-react';
 import { layoutsApi, playlistsApi, type Layout, type ZoneInput, type ZoneType } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { AssetPicker } from '@/components/AssetPicker';
 
 const PREVIEW_W = 400;
 const PREVIEW_H = 225;
@@ -84,17 +85,38 @@ const ZONE_TYPE_BADGE: Record<ZoneType, string> = {
   TICKER: 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300',
 };
 
+// Client-only id used purely for stable React keys/history-diffing while editing — server zone
+// ids aren't stable across saves (layouts.service.ts fully deletes and recreates every zone row
+// on every save), so a fresh one is minted here rather than relying on `z.id`.
+function withLocalId(zone: ZoneInput): ZoneInput {
+  return zone._localId ? zone : { ...zone, _localId: crypto.randomUUID() };
+}
+
 function toZoneInputs(layout: Layout): ZoneInput[] {
-  return layout.zones.map(z => ({
+  return layout.zones.map(z => withLocalId({
     name: z.name, x: z.x, y: z.y, width: z.width, height: z.height,
     zIndex: z.zIndex,
     zoneType: z.zoneType ?? 'MEDIA',
     widgetConfig: z.widgetConfig,
     playlistId: z.playlist?.id,
+    assetId: z.asset?.id,
+    audioPriority: z.audioPriority,
+    audioVolume: z.audioVolume,
   }));
 }
 
-function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cfg: Record<string, unknown>) => void }) {
+interface WidgetConfigFieldsProps {
+  zone: ZoneInput;
+  // Discrete changes (selects, checkboxes) — each one is its own undo step.
+  onChangeCommitted: (cfg: Record<string, unknown>) => void;
+  // Continuous typing (the RSS URL field) — live-updates with no history entry per keystroke;
+  // onFocusField/onBlurField below bracket the whole edit into a single undo step instead.
+  onChange: (cfg: Record<string, unknown>) => void;
+  onFocusField: () => void;
+  onBlurField: () => void;
+}
+
+function WidgetConfigFields({ zone, onChange, onChangeCommitted, onFocusField, onBlurField }: WidgetConfigFieldsProps) {
   const cfg = zone.widgetConfig ?? {};
   const t = useTranslations('layouts.widget');
   const ts = useTranslations('screens.prayer.methods');
@@ -102,10 +124,10 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
   switch (zone.zoneType) {
     case 'PRAYER':
       return (
-        <div className="col-span-7 grid grid-cols-3 gap-2 bg-amber-50 dark:bg-amber-950/40 rounded p-2 text-xs mt-1">
+        <div className="grid grid-cols-3 gap-2 bg-amber-50 dark:bg-amber-950/40 rounded p-2 text-xs">
           <div>
             <label className="text-gray-500 block mb-0.5">{t('methodOverride')}</label>
-            <select value={(cfg.method as string) ?? ''} onChange={e => onChange({ ...cfg, method: e.target.value || undefined })}
+            <select value={(cfg.method as string) ?? ''} onChange={e => onChangeCommitted({ ...cfg, method: e.target.value || undefined })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="">{t('inheritFromScreen')}</option>
               {['UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague', 'NorthAmerica'].map(m =>
@@ -115,24 +137,24 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
           </div>
           <div>
             <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
+            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChangeCommitted({ ...cfg, lang: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="en">{t('english')}</option>
               <option value="ar">{t('arabicNative')}</option>
             </select>
           </div>
           <label className="flex items-center gap-1.5 cursor-pointer self-end">
-            <input type="checkbox" checked={!!(cfg.athanEnabled)} onChange={e => onChange({ ...cfg, athanEnabled: e.target.checked })} />
+            <input type="checkbox" checked={!!(cfg.athanEnabled)} onChange={e => onChangeCommitted({ ...cfg, athanEnabled: e.target.checked })} />
             <span className="text-gray-600">{t('athanAudio')}</span>
           </label>
         </div>
       );
     case 'WEATHER':
       return (
-        <div className="col-span-7 grid grid-cols-2 gap-2 bg-sky-50 dark:bg-sky-950/40 rounded p-2 text-xs mt-1">
+        <div className="grid grid-cols-2 gap-2 bg-sky-50 dark:bg-sky-950/40 rounded p-2 text-xs">
           <div>
             <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
+            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChangeCommitted({ ...cfg, lang: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="en">{t('english')}</option>
               <option value="ar">{t('arabic')}</option>
@@ -143,17 +165,17 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
       );
     case 'CURRENCY':
       return (
-        <div className="col-span-7 grid grid-cols-2 gap-2 bg-emerald-50 dark:bg-emerald-950/40 rounded p-2 text-xs mt-1">
+        <div className="grid grid-cols-2 gap-2 bg-emerald-50 dark:bg-emerald-950/40 rounded p-2 text-xs">
           <div>
             <label className="text-gray-500 block mb-0.5">{t('baseCurrency')}</label>
-            <select value={(cfg.base as string) ?? 'USD'} onChange={e => onChange({ ...cfg, base: e.target.value })}
+            <select value={(cfg.base as string) ?? 'USD'} onChange={e => onChangeCommitted({ ...cfg, base: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               {['USD', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChange({ ...cfg, lang: e.target.value })}
+            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChangeCommitted({ ...cfg, lang: e.target.value })}
               className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
               <option value="en">{t('english')}</option>
               <option value="ar">{t('arabic')}</option>
@@ -163,9 +185,10 @@ function WidgetConfigFields({ zone, onChange }: { zone: ZoneInput; onChange: (cf
       );
     case 'TICKER':
       return (
-        <div className="col-span-7 bg-orange-50 dark:bg-orange-950/40 rounded p-2 text-xs mt-1">
+        <div className="bg-orange-50 dark:bg-orange-950/40 rounded p-2 text-xs">
           <label className="text-gray-500 block mb-0.5">{t('rssFeedUrl')}</label>
           <input type="url" value={(cfg.feedUrl as string) ?? ''} onChange={e => onChange({ ...cfg, feedUrl: e.target.value })}
+            onFocus={onFocusField} onBlur={onBlurField}
             placeholder="https://feeds.bbcnews.com/world/rss.xml"
             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-orange-400" />
         </div>
@@ -194,6 +217,74 @@ export default function LayoutsPage() {
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // Undo/redo — scoped to the current edit session, reset whenever a different layout (or a
+  // new one) is opened. `past`/`future` hold full {name, zones} snapshots rather than diffs —
+  // simplest correct thing for a state this small, and it's already fully replaced on save
+  // anyway (see layouts.service.ts's delete-and-recreate).
+  interface EditorSnapshot { name: string; zones: ZoneInput[]; }
+  const [history, setHistory] = useState<{ past: EditorSnapshot[]; future: EditorSnapshot[] }>({ past: [], future: [] });
+  // Brackets a continuous edit (typing in a field, dragging a slider) into a single undo step:
+  // captured once on focus/mousedown, consumed once on blur/release, ignored if nothing changed.
+  const pendingCaptureRef = useRef<EditorSnapshot | null>(null);
+
+  useEffect(() => {
+    setHistory({ past: [], future: [] });
+    pendingCaptureRef.current = null;
+  }, [editing]);
+
+  function captureForHistory() {
+    if (pendingCaptureRef.current === null) pendingCaptureRef.current = { name, zones };
+  }
+  function commitCaptured() {
+    const captured = pendingCaptureRef.current;
+    pendingCaptureRef.current = null;
+    if (!captured) return;
+    setHistory(h => ({ past: [...h.past, captured], future: [] }));
+  }
+  // Discrete actions (add/delete zone, preset, dropdown picks, drag/resize stop) commit in one
+  // shot: snapshot the pre-mutation state, then apply the mutation.
+  function commit(mutator: () => void) {
+    captureForHistory();
+    mutator();
+    commitCaptured();
+  }
+  function undo() {
+    const previous = history.past[history.past.length - 1];
+    if (!previous) return;
+    setHistory({ past: history.past.slice(0, -1), future: [{ name, zones }, ...history.future] });
+    setName(previous.name);
+    setZones(previous.zones);
+  }
+  function redo() {
+    const next = history.future[0];
+    if (!next) return;
+    setHistory({ past: [...history.past, { name, zones }], future: history.future.slice(1) });
+    setName(next.name);
+    setZones(next.zones);
+  }
+  // Stable keydown listener (only resubscribes when the editor opens/closes) that still always
+  // calls the latest undo/redo — avoids either a stale closure or resubscribing on every
+  // keystroke, which re-running the effect on every zones/history change would otherwise cause.
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  undoRef.current = undo;
+  redoRef.current = redo;
+
+  useEffect(() => {
+    if (!editing) return;
+    function onKeyDown(e: KeyboardEvent) {
+      // Don't fight the browser's own per-field undo while someone's mid-edit of a text input.
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoRef.current(); else undoRef.current();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editing]);
 
   // Live preview canvas size in px — kept in sync with its actual rendered width so the
   // preview can take up most of the page instead of a fixed small box.
@@ -299,7 +390,7 @@ export default function LayoutsPage() {
   function openNew() {
     setEditing('new');
     setName('New Layout');
-    setZones(PRESET_ZONES.fullscreen);
+    setZones(PRESET_ZONES.fullscreen.map(withLocalId));
   }
 
   function openEdit(layout: Layout) {
@@ -361,10 +452,10 @@ export default function LayoutsPage() {
     const snapX = snapDragAxis(x, box.width, xs);
     const snapY = snapDragAxis(y, box.height, ys);
     const next = clampBox({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
-    updateZone(i, {
+    commit(() => updateZone(i, {
       x: clampPct(next.left / previewSize.width * 100),
       y: clampPct(next.top / previewSize.height * 100),
-    });
+    }));
     setDragBox(null);
     setGuides({ v: [], h: [] });
   }
@@ -409,12 +500,12 @@ export default function LayoutsPage() {
   function handleResizeStop(i: number, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
     const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
     const next = resolveResize(i, direction, box);
-    updateZone(i, {
+    commit(() => updateZone(i, {
       x: clampPct(next.left / previewSize.width * 100),
       y: clampPct(next.top / previewSize.height * 100),
       width: clampPct(next.width / previewSize.width * 100),
       height: clampPct(next.height / previewSize.height * 100),
-    });
+    }));
     setDragBox(null);
     setGuides({ v: [], h: [] });
   }
@@ -441,11 +532,12 @@ export default function LayoutsPage() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-8 shadow-sm">
           <div className="flex items-center justify-between mb-5">
             <input value={name} onChange={e => setName(e.target.value)}
+              onFocus={captureForHistory} onBlur={commitCaptured}
               className="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-indigo-500 focus:outline-none bg-transparent w-64"
               placeholder={t('layoutName')} />
             <div className="flex gap-2 flex-wrap">
               {visiblePresetKeys.map(preset => (
-                <button key={preset} onClick={() => setZones(PRESET_ZONES[preset])}
+                <button key={preset} onClick={() => commit(() => setZones(PRESET_ZONES[preset].map(withLocalId)))}
                   className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
                   {t(`presets.${preset}`)}
                 </button>
@@ -464,7 +556,7 @@ export default function LayoutsPage() {
                   const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
                   return (
                     <Rnd
-                      key={i}
+                      key={z._localId ?? i}
                       bounds="parent"
                       minWidth={MIN_ZONE_PX}
                       minHeight={MIN_ZONE_PX}
@@ -494,68 +586,145 @@ export default function LayoutsPage() {
               </div>
             </div>
 
-            {/* Zone list */}
-            <div className="max-w-4xl space-y-3">
-              <div className="grid grid-cols-7 gap-2 text-[10px] text-gray-400 dark:text-gray-500 px-0.5">
-                <span />
-                <span className="col-span-2">{tc('name')}</span>
-                <span title={t('zoneXTitle')}>{t('zoneX')}</span>
-                <span title={t('zoneYTitle')}>{t('zoneY')}</span>
-                <span title={t('zoneWidthTitle')}>{t('zoneWidth')}</span>
-                <span title={t('zoneHeightTitle')}>{t('zoneHeight')}</span>
+            {/* Zone cards — one per zone, mirroring the screens page's per-screen card layout
+                instead of the old flat grid-of-input-rows (confusing to line up at a glance). */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs text-gray-400 dark:text-gray-500">{t('zones')}</div>
+                <button onClick={() => commit(() => setZones(prev => [...prev, withLocalId({ name: `Zone ${prev.length + 1}`, x: 0, y: 0, width: 50, height: 50, zoneType: 'MEDIA' })]))}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> {t('addZone')}
+                </button>
               </div>
-              {zones.map((z, i) => (
-                <div key={i} className="space-y-1">
-                  <div className="grid grid-cols-7 gap-2 items-center text-xs">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ZONE_COLORS[i % ZONE_COLORS.length] }} />
-                    <input value={z.name} onChange={e => updateZone(i, { name: e.target.value })}
-                      className="col-span-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500" placeholder={tc('name')} />
-                    {(['x', 'y', 'width', 'height'] as const).map(field => (
-                      <input key={field} type="number" min={0} max={100}
-                        value={z[field]} onChange={e => updateZone(i, { [field]: parseFloat(e.target.value) })}
-                        className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        title={field} />
-                    ))}
-                    {/* Zone type */}
-                    <select value={z.zoneType ?? 'MEDIA'} onChange={e => updateZone(i, { zoneType: e.target.value as ZoneType, widgetConfig: {} })}
-                      className="col-span-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                      {/* Keep an existing PRAYER zone's own option visible even with the feature
-                          off, so its <select> doesn't silently show a value with no matching
-                          option — but don't offer PRAYER for zones that aren't already that type. */}
-                      {(visibleZoneTypes.includes(z.zoneType ?? 'MEDIA') ? visibleZoneTypes : [...visibleZoneTypes, z.zoneType ?? 'MEDIA']).map(zt => (
-                        <option key={zt} value={zt}>{t(`zoneTypes.${zt}`)}</option>
-                      ))}
-                    </select>
-                    {/* Playlist (only for MEDIA) */}
-                    {(z.zoneType ?? 'MEDIA') === 'MEDIA' ? (
-                      <select value={z.playlistId ?? ''} onChange={e => updateZone(i, { playlistId: e.target.value || undefined })}
-                        className="col-span-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                        <option value="">{t('noPlaylist')}</option>
-                        {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-start">
+                {zones.map((z, i) => (
+                  <div key={z._localId ?? i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: ZONE_COLORS[i % ZONE_COLORS.length] }} />
+                      <input value={z.name} onChange={e => updateZone(i, { name: e.target.value })}
+                        onFocus={captureForHistory} onBlur={commitCaptured}
+                        className="flex-1 min-w-0 font-medium text-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-indigo-500 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none"
+                        placeholder={tc('name')} />
+                      <button onClick={() => commit(() => setZones(prev => prev.filter((_, idx) => idx !== i)))}
+                        className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{tc('type')}</label>
+                      <select value={z.zoneType ?? 'MEDIA'}
+                        onChange={e => commit(() => updateZone(i, { zoneType: e.target.value as ZoneType, widgetConfig: {} }))}
+                        className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        {/* Keep an existing PRAYER zone's own option visible even with the feature
+                            off, so its <select> doesn't silently show a value with no matching
+                            option — but don't offer PRAYER for zones that aren't already that type. */}
+                        {(visibleZoneTypes.includes(z.zoneType ?? 'MEDIA') ? visibleZoneTypes : [...visibleZoneTypes, z.zoneType ?? 'MEDIA']).map(zt => (
+                          <option key={zt} value={zt}>{t(`zoneTypes.${zt}`)}</option>
+                        ))}
                       </select>
-                    ) : (
-                      <div className="col-span-2" />
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(['x', 'y', 'width', 'height'] as const).map(field => (
+                        <div key={field}>
+                          <label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 block"
+                            title={field === 'x' ? t('zoneXTitle') : field === 'y' ? t('zoneYTitle') : field === 'width' ? t('zoneWidthTitle') : t('zoneHeightTitle')}>
+                            {field === 'x' ? t('zoneX') : field === 'y' ? t('zoneY') : field === 'width' ? t('zoneWidth') : t('zoneHeight')}
+                          </label>
+                          <input type="number" min={0} max={100}
+                            value={z[field]} onChange={e => updateZone(i, { [field]: parseFloat(e.target.value) })}
+                            onFocus={captureForHistory} onBlur={commitCaptured}
+                            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Media source — playlist or a single asset, mutually exclusive. Whichever
+                        field is being switched away from is cleared, but the other keeps
+                        whatever it last held, so toggling back restores your previous pick. */}
+                    {(z.zoneType ?? 'MEDIA') === 'MEDIA' && (
+                      <div>
+                        <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('mediaSource.label')}</label>
+                        <div className="grid grid-cols-2 gap-1 mb-1.5">
+                          <button type="button" onClick={() => commit(() => updateZone(i, { assetId: undefined }))}
+                            className={`text-xs py-1 rounded border font-medium ${!z.assetId ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                            {t('mediaSource.playlist')}
+                          </button>
+                          <button type="button" onClick={() => commit(() => updateZone(i, { playlistId: undefined }))}
+                            className={`text-xs py-1 rounded border font-medium ${z.assetId ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                            {t('mediaSource.asset')}
+                          </button>
+                        </div>
+                        {z.assetId ? (
+                          <AssetPicker value={z.assetId ?? null} placeholder={t('noAsset')}
+                            onChange={assetId => commit(() => updateZone(i, { assetId: assetId ?? undefined }))} />
+                        ) : (
+                          <select value={z.playlistId ?? ''} onChange={e => commit(() => updateZone(i, { playlistId: e.target.value || undefined }))}
+                            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <option value="">{t('noPlaylist')}</option>
+                            {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        )}
+                      </div>
                     )}
-                    <button onClick={() => setZones(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-gray-400 dark:text-gray-500 hover:text-red-500"><X className="w-3 h-3" /></button>
+
+                    {/* Audio balancing across zones — default (both unset) is every zone's own
+                        audio plays at the screen's volume simultaneously. */}
+                    {(z.zoneType ?? 'MEDIA') === 'MEDIA' && (
+                      <div className="border border-gray-100 dark:border-gray-800 rounded-lg p-2 space-y-1.5">
+                        <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+                          <input type="checkbox" checked={!!z.audioPriority}
+                            onChange={e => commit(() => setZones(prev => prev.map((zn, idx) =>
+                              idx === i ? { ...zn, audioPriority: e.target.checked } : (e.target.checked ? { ...zn, audioPriority: false } : zn)
+                            )))}
+                            className="w-3.5 h-3.5 accent-indigo-500" />
+                          {t('audio.priority')}
+                        </label>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">{t('audio.priorityHint')}</p>
+                        <label className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+                          <input type="checkbox" checked={z.audioVolume != null}
+                            onChange={e => commit(() => updateZone(i, { audioVolume: e.target.checked ? 100 : null }))}
+                            className="w-3.5 h-3.5 accent-indigo-500" />
+                          {t('audio.customVolume')}
+                        </label>
+                        {z.audioVolume != null && (
+                          <div className="flex items-center gap-2">
+                            <Volume2 className="w-3 h-3 text-gray-400 shrink-0" />
+                            <input type="range" min={0} max={100} value={z.audioVolume ?? 100}
+                              onFocus={captureForHistory}
+                              onChange={e => updateZone(i, { audioVolume: Number(e.target.value) })}
+                              onMouseUp={commitCaptured} onTouchEnd={commitCaptured}
+                              className="flex-1 accent-indigo-600" />
+                            <span className="text-xs text-gray-500 dark:text-gray-400 w-8 text-end">{z.audioVolume}%</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Widget-specific config */}
+                    {z.zoneType && z.zoneType !== 'MEDIA' && (
+                      <WidgetConfigFields
+                        zone={z}
+                        onChange={cfg => updateZone(i, { widgetConfig: cfg })}
+                        onChangeCommitted={cfg => commit(() => updateZone(i, { widgetConfig: cfg }))}
+                        onFocusField={captureForHistory}
+                        onBlurField={commitCaptured}
+                      />
+                    )}
                   </div>
-                  {/* Widget-specific config */}
-                  {z.zoneType && z.zoneType !== 'MEDIA' && (
-                    <WidgetConfigFields
-                      zone={z}
-                      onChange={cfg => updateZone(i, { widgetConfig: cfg })}
-                    />
-                  )}
-                </div>
-              ))}
-              <button onClick={() => setZones(prev => [...prev, { name: `Zone ${prev.length + 1}`, x: 0, y: 0, width: 50, height: 50, zoneType: 'MEDIA' }])}
-                className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                <Plus className="w-3 h-3" /> {t('addZone')}
-              </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button onClick={undo} disabled={history.past.length === 0} title={`${t('undo')} (Ctrl+Z)`}
+              className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30">
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button onClick={redo} disabled={history.future.length === 0} title={`${t('redo')} (Ctrl+Shift+Z)`}
+              className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 me-auto">
+              <Redo2 className="w-4 h-4" />
+            </button>
             <button onClick={() => setEditing(null)}
               className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
               {tc('cancel')}

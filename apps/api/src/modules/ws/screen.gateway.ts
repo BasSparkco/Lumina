@@ -17,7 +17,8 @@ export type PlayerCommand =
   | { type: 'reload' }
   | { type: 'clear-cache' }
   | { type: 'capture-screenshot' }
-  | { type: 'unpair'; pairingCode: string };
+  | { type: 'unpair'; pairingCode: string }
+  | { type: 'deleted' };
 
 interface ScreenSocketData {
   screenId?: string;

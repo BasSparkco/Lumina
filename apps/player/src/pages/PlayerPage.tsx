@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
-import { api, type Playlist, type PlayerState, type Zone } from '../lib/api';
+import { api, ApiError, type Playlist, type PlayerState, type Zone } from '../lib/api';
 import { cache } from '../lib/db';
 import { connectSocket, disconnectSocket } from '../lib/socket';
 import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/scheduler';
@@ -16,7 +16,7 @@ const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
 
 type PlayerCommand =
-  | { type: 'publish' | 'reload' | 'clear-cache' | 'capture-screenshot' }
+  | { type: 'publish' | 'reload' | 'clear-cache' | 'capture-screenshot' | 'deleted' }
   | { type: 'unpair'; pairingCode: string };
 
 // Whether a given zone actually has something to show, mirroring each widget's own "nothing
@@ -70,7 +70,7 @@ async function captureAndUploadScreenshot() {
 }
 
 export default function PlayerPage() {
-  const { token, unpair } = usePlayerStore();
+  const { token, unpair, forget } = usePlayerStore();
   const navigate = useNavigate();
   const [state, setState] = useState<PlayerState | null>(null);
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
@@ -90,18 +90,33 @@ export default function PlayerPage() {
       await cache.saveState(fresh);
       setState(fresh);
       return fresh;
-    } catch {
+    } catch (err) {
+      // A 404 here is definitive — the screen row is gone (deleted while this player was
+      // offline, or reconnecting after) — not a network hiccup, so don't fall back to cached
+      // content forever; drop credentials and go re-pair as a new screen, same as the
+      // `deleted` websocket command below handles for a player that was online at the time.
+      if (err instanceof ApiError && err.status === 404) {
+        await cache.clear();
+        forget();
+        void navigate('/');
+        return null;
+      }
       const cached = await cache.getState();
       if (cached) setState(cached);
       return cached ?? null;
     } finally {
       setLoaded(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Schedule resolution: pick the right playlist from schedule rules
   const resolvePlaylist = useCallback((s: PlayerState): Playlist | null => {
     if (s.emergencyActive && s.emergencyPlaylist) return s.emergencyPlaylist;
+    // Asset-streaming mode: the backend already wraps the single asset as a one-item playlist
+    // (see hydrateAssetAsPlaylist), so the existing single-playlist render path below handles
+    // it unchanged — no separate render branch needed.
+    if (s.streamingType === 'ASSET') return s.asset;
     if (s.layout) return null; // layout mode — zones handle their own playlists
     const matchedId = resolveSchedule(s.scheduleRules, new Date());
     if (matchedId) {
@@ -167,6 +182,10 @@ export default function PlayerPage() {
         await cache.clear();
         unpair(cmd.pairingCode);
         void navigate('/');
+      } else if (cmd.type === 'deleted') {
+        await cache.clear();
+        forget();
+        void navigate('/');
       }
     });
 
@@ -210,6 +229,10 @@ export default function PlayerPage() {
 
   // Multi-zone layout mode
   if (state.layout && state.layout.zones.length > 0) {
+    // At most one zone should ever have audioPriority (the dashboard enforces this as a
+    // single-select when editing a layout) — while it's set, every other zone gets forced
+    // silent regardless of its own muted/volume settings.
+    const priorityZone = state.layout.zones.find(z => z.audioPriority) ?? null;
     return (
       <FullscreenContainer>
         {state.layout.zones.map(zone => (
@@ -225,7 +248,13 @@ export default function PlayerPage() {
               overflow: 'hidden',
             }}
           >
-            <ZoneRenderer zone={zone} state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
+            <ZoneRenderer
+              zone={zone}
+              state={state}
+              onAssetChange={id => { currentAssetRef.current = id; }}
+              volume={zone.audioVolume ?? state.volume}
+              forceMuted={priorityZone !== null && priorityZone.id !== zone.id}
+            />
           </div>
         ))}
       </FullscreenContainer>
@@ -248,7 +277,9 @@ export default function PlayerPage() {
   );
 }
 
-function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: PlayerState; onAssetChange: (id: string) => void }) {
+function ZoneRenderer({ zone, state, onAssetChange, volume, forceMuted }: {
+  zone: Zone; state: PlayerState; onAssetChange: (id: string) => void; volume: number; forceMuted: boolean;
+}) {
   const cfg = zone.widgetConfig ?? {};
   const lat = (cfg.latitude as number | undefined) ?? state.latitude;
   const lon = (cfg.longitude as number | undefined) ?? state.longitude;
@@ -283,7 +314,7 @@ function ZoneRenderer({ zone, state, onAssetChange }: { zone: Zone; state: Playe
       return <TickerWidget feedUrl={cfg.feedUrl as string} lang={lang} />;
     default:
       return zone.playlist
-        ? <ZonePlayer playlist={zone.playlist} volume={state.volume} onAssetChange={onAssetChange} />
+        ? <ZonePlayer playlist={zone.playlist} volume={volume} forceMuted={forceMuted} onAssetChange={onAssetChange} />
         : null;
   }
 }

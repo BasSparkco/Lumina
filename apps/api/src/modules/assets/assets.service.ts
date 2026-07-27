@@ -144,28 +144,43 @@ export class AssetsService {
     return this.toDto(await this.prisma.asset.update({ where: { id }, data: { name } }), null);
   }
 
+  async setAudioEnabled(orgId: string, id: string, audioEnabled: boolean) {
+    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
+    if (!asset) throw new NotFoundException('Asset not found');
+    if (asset.type !== 'VIDEO' || !asset.hasAudioTrack) {
+      throw new BadRequestException('Only videos with a detected audio track have an audio choice');
+    }
+    return this.toDto(await this.prisma.asset.update({ where: { id }, data: { audioEnabled } }), null);
+  }
+
   async remove(orgId: string, id: string) {
     const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
 
-    // Check for playlist references *before* touching storage — Asset -> PlaylistItem has no
-    // onDelete: Cascade, so prisma.asset.delete() throws a foreign-key error for an in-use
-    // asset. Previously that check ran last, after the storage files were already deleted:
-    // the delete would fail here, but the actual file was already gone, leaving a DB row
-    // with dead storageKey/thumbnailKey references (a broken preview that a real refresh
-    // wouldn't fix, since the row was never actually removed).
+    // Check for playlist/screen/zone references *before* touching storage — Asset -> PlaylistItem
+    // has no onDelete: Cascade (Screen.assetId/Zone.assetId are ON DELETE SET NULL, so those
+    // wouldn't fail the delete outright, but silently orphaning a screen/zone that's actively
+    // streaming this asset is exactly the footgun this check exists to prevent). Previously the
+    // playlist check ran last, after the storage files were already deleted: the delete would
+    // fail here, but the actual file was already gone, leaving a DB row with dead storageKey/
+    // thumbnailKey references (a broken preview that a real refresh wouldn't fix, since the row
+    // was never actually removed).
     // Count distinct playlists, not raw item rows — the same asset can appear more than once
     // within a single playlist, which would otherwise inflate this above the actual number of
     // playlists the "Remove it from those playlists" message below is telling the user to check.
-    const usedInPlaylists = await this.prisma.playlistItem.findMany({
-      where: { assetId: id },
-      select: { playlistId: true },
-      distinct: ['playlistId'],
-    });
-    const usageCount = usedInPlaylists.length;
+    const [usedInPlaylists, screenCount, zoneCount] = await Promise.all([
+      this.prisma.playlistItem.findMany({
+        where: { assetId: id },
+        select: { playlistId: true },
+        distinct: ['playlistId'],
+      }),
+      this.prisma.screen.count({ where: { assetId: id } }),
+      this.prisma.zone.count({ where: { assetId: id } }),
+    ]);
+    const usageCount = usedInPlaylists.length + screenCount + zoneCount;
     if (usageCount > 0) {
       throw new BadRequestException(
-        `This asset is used in ${usageCount} playlist${usageCount === 1 ? '' : 's'}. Remove it from those playlists before deleting.`,
+        `This asset is in use (${usageCount} reference${usageCount === 1 ? '' : 's'} across playlists, screens, or layout zones). Remove those references before deleting.`,
       );
     }
 
@@ -179,7 +194,7 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; status: string; organizationId: string; createdAt: Date },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; organizationId: string; createdAt: Date },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
@@ -198,6 +213,8 @@ export class AssetsService {
       textColor: asset.textColor,
       textSize: asset.textSize,
       textBackgroundColor: asset.textBackgroundColor,
+      hasAudioTrack: asset.hasAudioTrack,
+      audioEnabled: asset.audioEnabled,
       status: asset.status,
       url,
       thumbnailUrl: thumbUrl ?? null,

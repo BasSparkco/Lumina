@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { StreamingType } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
@@ -15,6 +16,20 @@ export class ScreensService {
     private readonly gateway: ScreenGateway,
     private readonly storage: StorageService,
   ) {}
+
+  // Screen setting changes push to the screen immediately only when the org has opted into
+  // auto-publish; otherwise they're saved but held back until the explicit Publish button
+  // (publishToScreen, below) fires the same 'publish' push.
+  private async isAutoPublishEnabled(orgId: string) {
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { autoPublish: true } });
+    return org?.autoPublish ?? false;
+  }
+
+  private async pushIfAutoPublish(orgId: string, screenId: string) {
+    if (await this.isAutoPublishEnabled(orgId)) {
+      this.gateway.sendToScreen(screenId, { type: 'publish' });
+    }
+  }
 
   private withScreenshotUrl<T extends { id: string; organizationId: string | null; screenshotUpdatedAt: Date | null }>(screen: T) {
     return {
@@ -56,6 +71,12 @@ export class ScreensService {
   async remove(orgId: string, id: string) {
     const screen = await this.findOne(orgId, id);
     if (screen.screenshotUpdatedAt) await this.storage.delete(this.storage.screenshotKey(orgId, id));
+    // Unlike `unpair`, this row (and any pairing code re-pairing could hand back) is gone for
+    // good, so there's nothing to hand the device to resume into — just tell it to drop its
+    // credentials and go request a brand new pairing. Without this the player never learns its
+    // screen was deleted: its JWT keeps verifying (10y expiry, no DB check on the socket or
+    // JWT guard), so it silently loops its last cached playlist forever.
+    this.gateway.sendToScreen(id, { type: 'deleted' });
     await this.prisma.screen.delete({ where: { id } });
   }
 
@@ -99,8 +120,35 @@ export class ScreensService {
         throw new BadRequestException('Only approved playlists can be assigned to a screen');
       }
     }
-    const updated = await this.prisma.screen.update({ where: { id: screen.id }, data: { playlistId } });
-    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    // A screen shows either its playlist or its layout, never a leftover mix of both — picking
+    // one here clears the other so the dropdowns (and the player) never disagree about which
+    // is active.
+    const updated = await this.prisma.screen.update({
+      where: { id: screen.id },
+      data: { playlistId, ...(playlistId ? { layoutId: null } : {}) },
+    });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return updated;
+  }
+
+  // Unlike assignPlaylist/setLayout, this never touches playlistId/layoutId/assetId — those stay
+  // exactly as they were, so switching types and back restores whatever was last chosen in each.
+  async setStreamingType(orgId: string, screenId: string, streamingType: StreamingType) {
+    await this.findOne(orgId, screenId);
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { streamingType } });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return updated;
+  }
+
+  async setAsset(orgId: string, screenId: string, assetId: string | null) {
+    await this.findOne(orgId, screenId);
+    if (assetId) {
+      const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
+      if (!asset) throw new NotFoundException('Asset not found');
+      if (asset.status !== 'READY') throw new BadRequestException('Only ready assets can be assigned to a screen');
+    }
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { assetId } });
+    await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 
@@ -141,14 +189,14 @@ export class ScreensService {
       where: { id: screenId },
       data: { emergencyActive: active, ...(playlistId ? { emergencyPlaylistId: playlistId } : {}) },
     });
-    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 
   async setStopped(orgId: string, screenId: string, stopped: boolean) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { stopped } });
-    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 
@@ -171,7 +219,7 @@ export class ScreensService {
     // Without this, a screen already displaying a Prayer/Weather zone keeps showing "no
     // location set" (or stale times) until its next periodic 60s state refresh — every other
     // screen setter below pushes live, this one silently didn't.
-    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 
@@ -181,11 +229,13 @@ export class ScreensService {
       const layout = await this.prisma.layout.findFirst({ where: { id: layoutId, organizationId: orgId } });
       if (!layout) throw new NotFoundException('Layout not found');
     }
+    // Mirrors assignPlaylist: choosing a layout clears the screen's playlist so the two never
+    // both claim to be "what's showing" at once.
     const updated = await this.prisma.screen.update({
       where: { id: screenId },
-      data: { layoutId },
+      data: { layoutId, ...(layoutId ? { playlistId: null } : {}) },
     });
-    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 
@@ -193,7 +243,7 @@ export class ScreensService {
     await this.findOne(orgId, screenId);
     const clamped = volume === null ? null : Math.max(0, Math.min(100, Math.round(volume)));
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { volume: clamped } });
-    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 

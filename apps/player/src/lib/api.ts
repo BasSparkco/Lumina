@@ -1,5 +1,14 @@
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
+// Carries the HTTP status so callers can tell "screen was deleted" (404 — a definitive,
+// permanent answer) apart from a network hiccup or a transient server error (which should
+// just keep playing on cached state, not wipe local credentials).
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('player_token');
   const res = await fetch(`${BASE}${path}`, {
@@ -12,7 +21,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string };
-    throw new Error(err.message ?? res.statusText);
+    throw new ApiError(res.status, err.message ?? res.statusText);
   }
   return res.json() as Promise<T>;
 }
@@ -81,11 +90,18 @@ export interface Zone {
   zIndex: number;
   zoneType: ZoneType;
   widgetConfig: Record<string, unknown> | null;
+  // At most one of these is ever set (enforced server-side) — a MEDIA zone plays either a
+  // playlist or a single asset, the latter arriving already wrapped as a one-item Playlist.
   playlist: Playlist | null;
+  audioPriority: boolean;
+  audioVolume: number | null;
 }
+
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT';
 
 export interface PlayerState {
   screenId: string;
+  streamingType: StreamingType;
   timezone: string;
   latitude: number | null;
   longitude: number | null;
@@ -94,6 +110,9 @@ export interface PlayerState {
   stopped: boolean;
   emergencyActive: boolean;
   emergencyPlaylist: Playlist | null;
+  // Screen-level ASSET streaming mode's single asset, already wrapped as a one-item Playlist —
+  // only non-null when streamingType is 'ASSET'.
+  asset: Playlist | null;
   layout: { id: string; name: string; zones: Zone[] } | null;
   scheduleRules: ScheduleRule[];
   resolvedPlaylistId: string | null;

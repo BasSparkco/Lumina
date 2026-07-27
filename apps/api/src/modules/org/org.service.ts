@@ -96,6 +96,16 @@ export class OrgService {
     await this.prisma.user.delete({ where: { id: memberId } });
   }
 
+  async getSettings(orgId: string) {
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { autoPublish: true } });
+    if (!org) throw new NotFoundException('Organization not found');
+    return org;
+  }
+
+  async updateSettings(orgId: string, autoPublish: boolean) {
+    return this.prisma.organization.update({ where: { id: orgId }, data: { autoPublish }, select: { autoPublish: true } });
+  }
+
   private async getMember(orgId: string, memberId: string) {
     const member = await this.prisma.user.findFirst({ where: { id: memberId, organizationId: orgId } });
     if (!member) throw new NotFoundException('Member not found');

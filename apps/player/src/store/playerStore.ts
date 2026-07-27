@@ -17,6 +17,7 @@ interface PlayerState {
   setPlaylist: (p: Playlist | null) => void;
   nextItem: () => void;
   unpair: (pairingCode: string) => void;
+  forget: () => void;
   clearPendingPairingCode: () => void;
 }
 
@@ -53,6 +54,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   unpair(pairingCode) {
     localStorage.removeItem('player_token');
     set({ token: null, playlist: null, currentIndex: 0, pendingPairingCode: pairingCode });
+  },
+
+  // Unlike `unpair`, the underlying screen row is gone — there's no old screenId left to
+  // re-pair back into, so this also drops screenId, forcing PairingPage down its `api.init()`
+  // path to mint a brand new screen entity instead of polling a dead id forever.
+  forget() {
+    localStorage.removeItem('player_token');
+    localStorage.removeItem('screen_id');
+    set({ token: null, screenId: null, playlist: null, currentIndex: 0, pendingPairingCode: null });
   },
 
   clearPendingPairingCode() {

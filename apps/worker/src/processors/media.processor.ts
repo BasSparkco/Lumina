@@ -109,6 +109,7 @@ export class MediaProcessor extends WorkerHost {
           width: probe.width,
           height: probe.height,
           durationSecs: probe.durationSecs,
+          hasAudioTrack: probe.hasAudioTrack,
         },
       });
     } finally {
@@ -148,7 +149,7 @@ export class MediaProcessor extends WorkerHost {
     });
   }
 
-  private probeVideo(file: string): Promise<{ width: number; height: number; durationSecs: number }> {
+  private probeVideo(file: string): Promise<{ width: number; height: number; durationSecs: number; hasAudioTrack: boolean }> {
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(file, (err, meta) => {
         if (err) { reject(err instanceof Error ? err : new Error(String(err))); return; }
@@ -157,6 +158,7 @@ export class MediaProcessor extends WorkerHost {
           width: stream?.width ?? 0,
           height: stream?.height ?? 0,
           durationSecs: Math.round(meta.format.duration ?? 0),
+          hasAudioTrack: meta.streams.some(s => s.codec_type === 'audio'),
         });
       });
     });

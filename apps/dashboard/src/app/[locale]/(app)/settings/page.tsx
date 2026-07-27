@@ -1,13 +1,16 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
-import { Moon, Sun, SettingsIcon, Clock, Globe, Timer, ShieldQuestion, CalendarDays } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Moon, Sun, SettingsIcon, Clock, Globe, Timer, ShieldQuestion, CalendarDays, Send } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useTimeFormat } from '@/hooks/useTimeFormat';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useDefaultItemDuration } from '@/hooks/useDefaultItemDuration';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useDateFormat } from '@/hooks/useDateFormat';
+import { usePermissions } from '@/hooks/usePermissions';
+import { orgApi } from '@/lib/api';
 import { Toggle } from '@/components/Toggle';
 
 function SettingRow({ icon, title, description, control }: { icon: React.ReactNode; title: string; description: string; control: React.ReactNode }) {
@@ -28,17 +31,26 @@ function SettingRow({ icon, title, description, control }: { icon: React.ReactNo
 }
 
 export default function SettingsPage() {
+  const qc = useQueryClient();
   const { theme, toggleTheme } = useTheme();
   const { format, setFormat } = useTimeFormat();
   const { enabled: confirmBeforeDelete, setEnabled: setConfirmBeforeDelete } = useConfirmBeforeDelete();
   const { duration, setDuration } = useDefaultItemDuration();
   const { enabled: faithFeatures, setEnabled: setFaithFeatures } = useFaithFeatures();
   const { format: dateFormat, setFormat: setDateFormat } = useDateFormat();
+  const { canManageMembers } = usePermissions();
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const isDark = theme === 'dark';
   const t = useTranslations('settings');
+
+  const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
+  const autoPublish = orgSettings?.autoPublish ?? false;
+  const autoPublishMut = useMutation({
+    mutationFn: (value: boolean) => orgApi.updateSettings(value),
+    onSuccess: (updated) => qc.setQueryData(['orgSettings'], updated),
+  });
 
   function switchLocale(next: string) {
     router.push(pathname.replace(`/${locale}`, `/${next}`));
@@ -119,6 +131,20 @@ export default function SettingsPage() {
         title={t('faithFeatures')}
         description={t('faithFeaturesDesc')}
         control={<Toggle checked={faithFeatures} onChange={setFaithFeatures} />}
+      />
+
+      <SettingRow
+        icon={<Send className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+        title={t('autoPublish')}
+        description={t('autoPublishDesc')}
+        control={
+          <div title={canManageMembers ? undefined : t('autoPublishNoPermission')} className={canManageMembers ? undefined : 'opacity-50 cursor-not-allowed'}>
+            <Toggle
+              checked={autoPublish}
+              onChange={v => { if (canManageMembers) autoPublishMut.mutate(v); }}
+            />
+          </div>
+        }
       />
 
       <SettingRow

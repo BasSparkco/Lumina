@@ -5,6 +5,10 @@ interface Props {
   playlist: Playlist;
   onAssetChange?: (assetId: string) => void;
   volume?: number; // 0-100, screen/group-resolved; defaults to full volume
+  // Set when a sibling zone in the same layout has audio priority and this isn't it — ORed
+  // with the item's own `muted` flag, never overrides it the other way (an item explicitly
+  // muted stays muted regardless of priority).
+  forceMuted?: boolean;
 }
 
 const FONT_FAMILY_STACKS: Record<string, string> = {
@@ -24,7 +28,7 @@ const FONT_SIZE_CLAMPS: Record<string, string> = {
   XLARGE: 'clamp(2.5rem, 9vw, 9rem)',
 };
 
-export default function ZonePlayer({ playlist, onAssetChange, volume = 100 }: Props) {
+export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forceMuted = false }: Props) {
   const [index, setIndex] = useState(0);
   const [item, setItem] = useState<PlaylistItem | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,7 +142,7 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100 }: Pr
           ref={videoRef}
           src={item.asset.url ?? undefined}
           autoPlay
-          muted={item.muted}
+          muted={item.muted || forceMuted}
           loop={playlist.items.length === 1}
           playsInline
           crossOrigin="anonymous"

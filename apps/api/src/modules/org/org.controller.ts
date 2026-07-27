@@ -4,6 +4,7 @@ import { OrgService } from './org.service';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+import { UpdateOrgSettingsDto } from './dto/update-org-settings.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -57,5 +58,20 @@ export class OrgController {
   @Roles('OWNER', 'ADMIN')
   removeMember(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.org.removeMember(user.orgId, id, user.sub);
+  }
+
+  @Get('settings')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  getSettings(@CurrentUser() user: JwtUser) {
+    return this.org.getSettings(user.orgId);
+  }
+
+  @Put('settings')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN')
+  updateSettings(@CurrentUser() user: JwtUser, @Body() dto: UpdateOrgSettingsDto) {
+    return this.org.updateSettings(user.orgId, dto.autoPublish);
   }
 }
