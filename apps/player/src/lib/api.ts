@@ -38,6 +38,7 @@ export interface PlaylistItem {
   position: number;
   durationSecs: number;
   muted: boolean;
+  playFullVideo: boolean;
   asset: {
     id: string;
     name: string;
@@ -97,7 +98,74 @@ export interface Zone {
   audioVolume: number | null;
 }
 
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
+
+export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'PLAYLIST' | 'SHAPE' | 'WIDGET';
+
+export interface ThemePalette {
+  primary: string;
+  secondary: string;
+  background: string;
+  surface: string;
+  text: string;
+  textMuted: string;
+  accent: string;
+}
+
+export interface ThemeTypography {
+  headingFont: string;
+  bodyFont: string;
+  baseSizePx: number;
+  scale: number;
+}
+
+export interface ThemeElementStyle {
+  color?: string;
+  backgroundColor?: string;
+  fontFamily?: string;
+  fontSizePx?: number;
+  fontWeight?: number | string;
+  textAlign?: 'left' | 'center' | 'right';
+  direction?: 'ltr' | 'rtl' | 'auto';
+  borderRadius?: number;
+  opacity?: number;
+  objectFit?: 'contain' | 'cover' | 'fill';
+}
+
+interface ThemeElementBase {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  // Degrees, clockwise, about the element's own center — defaults to 0 (unrotated) for
+  // elements saved before this field existed.
+  rotation?: number;
+  editable: boolean;
+  label?: string;
+  style: ThemeElementStyle;
+}
+
+// Content shapes as hydrated by the API — assetId/playlistId refs are resolved to a usable
+// url/playlist alongside the raw id (mirrors how layout zones get their playlist hydrated).
+export type HydratedThemeElement =
+  | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string> } })
+  | (ThemeElementBase & { kind: 'IMAGE'; content: { assetId: string | null; url: string | null } })
+  | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null; url: string | null } })
+  | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null; playlist: Playlist | null } })
+  | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
+  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER'; widgetConfig: Record<string, unknown> } });
+
+export interface HydratedTheme {
+  id: string;
+  name: string;
+  category: string;
+  aspectRatio: string;
+  palette: ThemePalette;
+  typography: ThemeTypography;
+  elements: HydratedThemeElement[];
+}
 
 export interface PlayerState {
   screenId: string;
@@ -108,12 +176,14 @@ export interface PlayerState {
   prayerMethod: string;
   athanEnabled: boolean;
   stopped: boolean;
+  showClock: boolean;
   emergencyActive: boolean;
   emergencyPlaylist: Playlist | null;
   // Screen-level ASSET streaming mode's single asset, already wrapped as a one-item Playlist —
   // only non-null when streamingType is 'ASSET'.
   asset: Playlist | null;
   layout: { id: string; name: string; zones: Zone[] } | null;
+  theme: HydratedTheme | null;
   scheduleRules: ScheduleRule[];
   resolvedPlaylistId: string | null;
   defaultPlaylist: Playlist | null;

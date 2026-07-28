@@ -15,10 +15,12 @@ class AddItemDto {
   @IsString() assetId!: string;
   @IsInt() @Min(1) durationSecs = 10;
   @IsBoolean() @IsOptional() muted?: boolean;
+  @IsBoolean() @IsOptional() playFullVideo?: boolean;
 }
 class UpdateItemDto {
   @IsInt() @Min(1) durationSecs!: number;
   @IsBoolean() @IsOptional() muted?: boolean;
+  @IsBoolean() @IsOptional() playFullVideo?: boolean;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) ids!: string[]; }
 class UpdateConfigDto {
@@ -63,7 +65,7 @@ export class PlaylistsController {
 
   @Post(':id/items')
   addItem(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: AddItemDto) {
-    return this.playlists.addItem(user.orgId, id, dto.assetId, dto.durationSecs, dto.muted);
+    return this.playlists.addItem(user.orgId, id, dto.assetId, dto.durationSecs, dto.muted, dto.playFullVideo);
   }
 
   @Put(':id/items/:itemId')
@@ -73,7 +75,7 @@ export class PlaylistsController {
     @Param('itemId') itemId: string,
     @Body() dto: UpdateItemDto,
   ) {
-    return this.playlists.updateItem(user.orgId, id, itemId, dto.durationSecs, dto.muted);
+    return this.playlists.updateItem(user.orgId, id, itemId, dto.durationSecs, dto.muted, dto.playFullVideo);
   }
 
   @Delete(':id/items/:itemId')

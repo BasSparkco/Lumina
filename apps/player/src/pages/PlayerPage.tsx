@@ -7,10 +7,12 @@ import { connectSocket, disconnectSocket } from '../lib/socket';
 import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/scheduler';
 import { usePlayerStore } from '../store/playerStore';
 import ZonePlayer from '../components/ZonePlayer';
+import ThemeRenderer from '../components/ThemeRenderer';
 import PrayerZoneWidget, { type PrayerMethod } from '../components/PrayerZoneWidget';
 import WeatherWidget from '../components/WeatherWidget';
 import CurrencyWidget from '../components/CurrencyWidget';
 import TickerWidget from '../components/TickerWidget';
+import Splash from '../components/Splash';
 
 const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
@@ -117,6 +119,7 @@ export default function PlayerPage() {
     // (see hydrateAssetAsPlaylist), so the existing single-playlist render path below handles
     // it unchanged — no separate render branch needed.
     if (s.streamingType === 'ASSET') return s.asset;
+    if (s.theme) return null; // theme mode — elements handle their own media
     if (s.layout) return null; // layout mode — zones handle their own playlists
     const matchedId = resolveSchedule(s.scheduleRules, new Date());
     if (matchedId) {
@@ -206,8 +209,8 @@ export default function PlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  if (!loaded) return <Splash text="Loading…" />;
-  if (!state) return <Splash text="No content assigned" />;
+  if (!loaded) return <FullscreenContainer><Splash text="Loading…" /></FullscreenContainer>;
+  if (!state) return <FullscreenContainer><Splash text="No content assigned" /></FullscreenContainer>;
 
   // Outside its power-on window — highest priority of all, above even an explicit stop or
   // emergency override, since it represents the physical display being off. A real off screen
@@ -221,8 +224,17 @@ export default function PlayerPage() {
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (
-      <FullscreenContainer>
+      <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
         <ZonePlayer playlist={state.emergencyPlaylist} volume={state.volume} onAssetChange={id => { currentAssetRef.current = id; }} />
+      </FullscreenContainer>
+    );
+  }
+
+  // Theme mode — styled template (text/images/colors), takes precedence over a plain layout
+  if (state.theme) {
+    return (
+      <FullscreenContainer>
+        <ThemeRenderer theme={state.theme} state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
       </FullscreenContainer>
     );
   }
@@ -234,7 +246,7 @@ export default function PlayerPage() {
     // silent regardless of its own muted/volume settings.
     const priorityZone = state.layout.zones.find(z => z.audioPriority) ?? null;
     return (
-      <FullscreenContainer>
+      <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
         {state.layout.zones.map(zone => (
           <div
             key={zone.id}
@@ -263,11 +275,11 @@ export default function PlayerPage() {
 
   // Single-playlist mode (schedule-resolved)
   if (!activePlaylist || activePlaylist.items.length === 0) {
-    return <Splash text="No content scheduled right now" />;
+    return <FullscreenContainer><Splash text="No content scheduled right now" /></FullscreenContainer>;
   }
 
   return (
-    <FullscreenContainer>
+    <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
       <ZonePlayer
         playlist={activePlaylist}
         volume={state.volume}
@@ -319,18 +331,31 @@ function ZoneRenderer({ zone, state, onAssetChange, volume, forceMuted }: {
   }
 }
 
-function FullscreenContainer({ children }: { children?: React.ReactNode }) {
+function FullscreenContainer({ children, showClock, timezone }: { children?: React.ReactNode; showClock?: boolean; timezone?: string }) {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
       {children}
+      {showClock && timezone && <ClockOverlay timezone={timezone} />}
     </div>
   );
 }
 
-function Splash({ text }: { text: string }) {
+function ClockOverlay({ timezone }: { timezone: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: timezone });
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#000', color: '#444', fontFamily: 'system-ui, sans-serif', fontSize: '1.25rem' }}>
-      {text}
+    <div
+      style={{
+        position: 'absolute', top: 16, right: 16, zIndex: 9999,
+        color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '6px 16px', borderRadius: 8,
+        fontFamily: 'system-ui, sans-serif', fontSize: '1.75rem', fontWeight: 600, letterSpacing: '0.02em',
+      }}
+    >
+      {time}
     </div>
   );
 }

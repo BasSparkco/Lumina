@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@lumina/types": "workspace:*",
     "adhan": "^4.4.4",
     "html2canvas": "^1.4.1",
     "idb": "^8.0.3",

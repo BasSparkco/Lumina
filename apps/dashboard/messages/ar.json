@@ -8,6 +8,7 @@
     "assets": "الأصول",
     "playlists": "قوائم التشغيل",
     "layouts": "التخطيطات",
+    "themes": "السمات",
     "schedules": "الجداول",
     "powerSchedule": "طاقة الشاشة",
     "members": "الأعضاء",
@@ -107,14 +108,15 @@
     "empty": "لا توجد شاشات بعد. افتح المشغّل على أحد الأجهزة وقم بإقرانه.",
     "online": "متصل",
     "offline": "غير متصل",
-    "defaultPlaylist": "قائمة التشغيل الافتراضية",
     "none": "— لا شيء —",
     "layoutZones": "التخطيط (المناطق)",
     "fullscreenNoLayout": "— ملء الشاشة (بدون تخطيط) —",
     "timezone": "المنطقة الزمنية (تُستخدم لتحديد مواعيد الجداول لهذه الشاشة)",
     "hideTimezone": "إخفاء المنطقة الزمنية",
     "configureTimezone": "ضبط المنطقة الزمنية",
+    "showClock": "إظهار الساعة على الشاشة",
     "volume": "مستوى الصوت",
+    "timezoneEnable": "منطقة زمنية مخصصة",
     "hideFaith": "إخفاء إعدادات العبادة",
     "configureFaith": "ضبط إعدادات العبادة",
     "hideLocation": "إخفاء الموقع",
@@ -124,7 +126,9 @@
       "ASSET": "أصل",
       "PLAYLIST": "قائمة تشغيل",
       "LAYOUT": "تخطيط",
-      "assetLabel": "الأصل المراد تشغيله"
+      "THEME": "سمة",
+      "assetLabel": "الأصل المراد تشغيله",
+      "themeLabel": "السمة المراد عرضها"
     },
     "set": "✓ تم الضبط",
     "publish": "نشر",
@@ -259,6 +263,23 @@
       "color": "اللون",
       "backgroundColor": "لون الخلفية",
       "preview": "معاينة"
+    },
+    "myAssetsTab": "أصولي",
+    "libraryTab": "المكتبة",
+    "librarySearchPlaceholder": "ابحث في المكتبة…",
+    "allCategories": "كل الفئات",
+    "libraryEmpty": "لا توجد أصول في المكتبة تطابق بحثك.",
+    "addToMyAssets": "أضف إلى أصولي",
+    "addedToMyAssets": "تمت الإضافة",
+    "categories": {
+      "BACKGROUND": "خلفية",
+      "ICON": "أيقونة",
+      "ILLUSTRATION": "رسم توضيحي",
+      "STOCK_PHOTO": "صورة جاهزة",
+      "LOGO": "شعار",
+      "VIDEO_LOOP": "فيديو متكرر",
+      "AUDIO_JINGLE": "مقطع صوتي",
+      "GENERIC": "عام"
     }
   },
   "playlists": {
@@ -299,7 +320,12 @@
       "label": "الترتيب",
       "sequential": "متسلسل",
       "shuffle": "عشوائي"
-    }
+    },
+    "mute": "كتم الصوت في المشغل",
+    "unmute": "تشغيل الصوت في المشغل",
+    "playFullVideo": "الفيديو كاملاً",
+    "customLength": "مدة مخصصة",
+    "videoDuration": "مدة الفيديو"
   },
   "layouts": {
     "title": "التخطيطات",
@@ -368,6 +394,113 @@
       "locationInherited": "الموقع موروث من إعدادات الشاشة",
       "baseCurrency": "العملة الأساسية",
       "rssFeedUrl": "رابط تغذية RSS"
+    }
+  },
+  "themes": {
+    "title": "السمات",
+    "subtitle": "اختر قالبًا جاهزًا حسب المجال أو صمّم قالبك الخاص — نصوص وصور وألوان وأدوات حية في لوحة واحدة",
+    "newTheme": "سمة جديدة",
+    "presetsSection": "قوالب جاهزة",
+    "yourThemes": "سماتك",
+    "customize": "تخصيص وتعديل",
+    "customizeHint": "ينشئ نسخة خاصة بك قابلة للتعديل — لن يتم نشر أي شيء حتى تحفظه على شاشة",
+    "duplicate": "نسخ السمة",
+    "loading": "جارٍ تحميل السمات…",
+    "empty": "لا توجد سمات بعد. ابدأ من قالب جاهز أو أنشئ سمة فارغة.",
+    "deleteConfirm": "هل تريد حذف السمة؟",
+    "screenCount": "{count, plural, zero {لا شاشات} one {شاشة واحدة} two {شاشتان} few {# شاشات} many {# شاشة} other {# شاشة}}",
+    "themeName": "اسم السمة",
+    "clickToEdit": "اضغط لتعديل السمة",
+    "editTheme": "تعديل السمة",
+    "preview": "معاينة",
+    "palette": "الألوان",
+    "typography": "الطباعة",
+    "headingFont": "خط العناوين",
+    "bodyFont": "خط النص",
+    "baseSize": "الحجم الأساسي (بكسل)",
+    "scale": "مقياس الحجم",
+    "elements": "العناصر",
+    "addElement": "إضافة عنصر",
+    "elementLabel": "التسمية",
+    "editableShort": "قابل للتعديل",
+    "editableHint": "هل يمكن لمستخدمي المؤسسة تعديل محتوى هذا العنصر",
+    "editingNow": "قيد التعديل",
+    "clickToEditHint": "انقر هذا العنصر لتعديل موضعه ومحتواه وطباعته",
+    "shapeHint": "كتلة لونية زخرفية — بلا محتوى، مجرد مستطيل مموضع ومنسّق.",
+    "text": "النص",
+    "translationAr": "الترجمة العربية (اختياري)",
+    "image": "أصل الصورة",
+    "video": "أصل الفيديو",
+    "playlistContent": "قائمة التشغيل",
+    "noAsset": "— بدون أصل —",
+    "noPlaylist": "— بدون قائمة تشغيل —",
+    "widgetType": "الأداة",
+    "color": "لون النص",
+    "backgroundColor": "لون الخلفية",
+    "fontFamily": "الخط",
+    "fontFamilyHeadingOption": "خط العنوان (افتراضي القالب)",
+    "fontFamilyBodyOption": "خط النص (افتراضي القالب)",
+    "fontSizePx": "حجم النص (بكسل)",
+    "fontWeight": "الوزن",
+    "textAlign": "المحاذاة",
+    "direction": "الاتجاه",
+    "borderRadius": "استدارة الحواف",
+    "opacity": "الشفافية",
+    "objectFit": "طريقة الملاءمة",
+    "saveTheme": "حفظ السمة",
+    "saving": "جارٍ الحفظ…",
+    "field": {
+      "x": "X",
+      "y": "Y",
+      "width": "العرض",
+      "height": "الارتفاع",
+      "zIndex": "الطبقة"
+    },
+    "align": {
+      "left": "يسار",
+      "center": "وسط",
+      "right": "يمين"
+    },
+    "direction_": {
+      "auto": "تلقائي",
+      "ltr": "من اليسار لليمين",
+      "rtl": "من اليمين لليسار"
+    },
+    "fit": {
+      "contain": "احتواء",
+      "cover": "تغطية",
+      "fill": "ملء"
+    },
+    "categories": {
+      "RESTAURANT_MENU": "قائمة مطعم / مقهى",
+      "RETAIL_PROMO": "عرض ترويجي للتجزئة",
+      "HOTEL_LOBBY": "ردهة فندق",
+      "CLINIC_WAITING": "غرفة انتظار عيادة",
+      "MOSQUE": "مسجد",
+      "GENERIC": "عام"
+    },
+    "elementKinds": {
+      "TEXT": "نص",
+      "IMAGE": "صورة",
+      "VIDEO": "فيديو",
+      "PLAYLIST": "قائمة تشغيل",
+      "SHAPE": "شكل / كتلة لونية",
+      "WIDGET": "أداة حية"
+    },
+    "widgetTypes": {
+      "PRAYER": "أوقات الصلاة",
+      "WEATHER": "الطقس",
+      "CURRENCY": "أسعار العملات",
+      "TICKER": "شريط إخباري (RSS)"
+    },
+    "paletteRoles": {
+      "primary": "أساسي",
+      "secondary": "ثانوي",
+      "background": "الخلفية",
+      "surface": "السطح",
+      "text": "النص",
+      "textMuted": "نص خافت",
+      "accent": "لون مميز"
     }
   },
   "schedules": {
@@ -529,6 +662,7 @@
       "SCREEN": "شاشة",
       "ASSET": "أصل",
       "LAYOUT": "تخطيط",
+      "THEME": "سمة",
       "SCHEDULE": "جدولة",
       "GROUP": "مجموعة"
     },
@@ -547,6 +681,8 @@
     },
     "detailStopped": "تم إيقاف البث مؤقتًا",
     "detailResumed": "تم استئناف البث",
+    "detailClockOn": "تم تفعيل الساعة",
+    "detailClockOff": "تم إيقاف الساعة",
     "detailUnpaired": "تم إلغاء الإقران — يلزم إعادة الإقران",
     "detailPlaylistCleared": "تم إلغاء قائمة التشغيل الافتراضية"
   },

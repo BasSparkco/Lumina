@@ -51,8 +51,12 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
 
     if (current.asset.type === 'IMAGE' || current.asset.type === 'TEXT') {
       timerRef.current = setTimeout(advance, current.durationSecs * 1000);
+    } else if (current.asset.type === 'VIDEO' && !current.playFullVideo) {
+      // Custom clip length — cap playback at durationSecs instead of waiting for the video's
+      // own end. onEnded (below) still covers a clip shorter than durationSecs.
+      timerRef.current = setTimeout(advance, current.durationSecs * 1000);
     }
-    // VIDEO: onEnded triggers advance
+    // VIDEO with playFullVideo: onEnded (below) triggers advance, no timer
 
     // Preload next video
     const nextIdx = (index + 1) % playlist.items.length;

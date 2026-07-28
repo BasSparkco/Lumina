@@ -5,6 +5,7 @@ import { ScreensService } from './screens.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
 import { AssignPlaylistDto } from './dto/assign-playlist.dto';
 import { AssignAssetDto } from './dto/assign-asset.dto';
+import { SetThemeDto } from './dto/set-theme.dto';
 import { SetStreamingTypeDto } from './dto/set-streaming-type.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -71,6 +72,11 @@ export class ScreensController {
     return this.screens.setAsset(user.orgId, id, dto.assetId);
   }
 
+  @Put(':id/theme')
+  setTheme(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetThemeDto) {
+    return this.screens.setTheme(user.orgId, id, dto.themeId);
+  }
+
   @Post('pair')
   pair(@CurrentUser() user: JwtUser, @Body() dto: PairDto) {
     return this.screens.confirmPairing(user.orgId, dto.code);
@@ -114,11 +120,20 @@ export class ScreensController {
     return this.screens.setStopped(user.orgId, id, dto.stopped);
   }
 
+  @Put(':id/show-clock')
+  setShowClock(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: { showClock: boolean },
+  ) {
+    return this.screens.setShowClock(user.orgId, id, dto.showClock);
+  }
+
   @Put(':id/prayer')
   updatePrayer(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
+    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean },
   ) {
     return this.screens.updatePrayerConfig(user.orgId, id, dto);
   }

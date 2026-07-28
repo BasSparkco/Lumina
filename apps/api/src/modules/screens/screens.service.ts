@@ -131,8 +131,9 @@ export class ScreensService {
     return updated;
   }
 
-  // Unlike assignPlaylist/setLayout, this never touches playlistId/layoutId/assetId — those stay
-  // exactly as they were, so switching types and back restores whatever was last chosen in each.
+  // Unlike assignPlaylist/setLayout/setTheme, this never touches playlistId/layoutId/assetId/
+  // themeId — those stay exactly as they were, so switching types and back restores whatever was
+  // last chosen in each.
   async setStreamingType(orgId: string, screenId: string, streamingType: StreamingType) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { streamingType } });
@@ -148,6 +149,19 @@ export class ScreensService {
       if (asset.status !== 'READY') throw new BadRequestException('Only ready assets can be assigned to a screen');
     }
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { assetId } });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return updated;
+  }
+
+  async setTheme(orgId: string, screenId: string, themeId: string | null) {
+    await this.findOne(orgId, screenId);
+    if (themeId) {
+      const theme = await this.prisma.theme.findFirst({
+        where: { id: themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
+      });
+      if (!theme) throw new NotFoundException('Theme not found');
+    }
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { themeId } });
     await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
@@ -200,10 +214,17 @@ export class ScreensService {
     return updated;
   }
 
+  async setShowClock(orgId: string, screenId: string, showClock: boolean) {
+    await this.findOne(orgId, screenId);
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { showClock } });
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
+  }
+
   async updatePrayerConfig(
     orgId: string,
     screenId: string,
-    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string },
+    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean },
   ) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({
@@ -214,6 +235,7 @@ export class ScreensService {
         ...(dto.prayerMethod !== undefined ? { prayerMethod: dto.prayerMethod } : {}),
         ...(dto.athanEnabled !== undefined ? { athanEnabled: dto.athanEnabled } : {}),
         ...(dto.timezone !== undefined ? { timezone: dto.timezone } : {}),
+        ...(dto.timezoneEnabled !== undefined ? { timezoneEnabled: dto.timezoneEnabled } : {}),
       },
     });
     // Without this, a screen already displaying a Prayer/Weather zone keeps showing "no

@@ -1,6 +1,6 @@
 import { IsIn } from 'class-validator';
 
-const STREAMING_TYPES = ['ASSET', 'PLAYLIST', 'LAYOUT'] as const;
+const STREAMING_TYPES = ['ASSET', 'PLAYLIST', 'LAYOUT', 'THEME'] as const;
 
 export class SetStreamingTypeDto {
   @IsIn(STREAMING_TYPES)

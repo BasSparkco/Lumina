@@ -38,6 +38,7 @@ model Organization {
   proofOfPlays  ProofOfPlayLog[]
   screenAlerts  ScreenAlert[]
   crashReports  CrashReport[]
+  themes        Theme[]
 }
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
@@ -103,12 +104,14 @@ model Screen {
   lastSeenAt          DateTime?
   status              ScreenStatus @default(OFFLINE)
   timezone            String       @default("UTC")
+  timezoneEnabled     Boolean      @default(false)
   latitude            Float?
   longitude           Float?
   prayerMethod        String       @default("UmmAlQura")
   athanEnabled        Boolean      @default(false)
   emergencyActive     Boolean      @default(false)
   stopped             Boolean      @default(false)
+  showClock           Boolean      @default(false)
   // Item 10 (volume control) — 0-100, null = inherit the screen's group's volume, or 100 if
   // there's no group or the group's own volume is unset.
   volume              Int?
@@ -133,7 +136,7 @@ model Screen {
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   assetId String?
-  asset   Asset? @relation(fields: [assetId], references: [id])
+  asset   Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
 
   playlistId String?
   playlist   Playlist? @relation("DefaultPlaylist", fields: [playlistId], references: [id])
@@ -143,6 +146,9 @@ model Screen {
 
   layoutId String?
   layout   Layout? @relation(fields: [layoutId], references: [id])
+
+  themeId String?
+  theme   Theme? @relation(fields: [themeId], references: [id])
 
   groupId String?
   group   ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -163,6 +169,7 @@ enum StreamingType {
   ASSET
   PLAYLIST
   LAYOUT
+  THEME
 }
 
 model ScreenGroup {
@@ -233,6 +240,10 @@ model CrashReport {
 }
 
 // ─── Assets ──────────────────────────────────────────────────────────────────
+// organizationId null = a stock library asset, uploaded by us (developers) via the
+// seed-library script, readable by every org but not editable/deletable by them — orgs copy
+// a library asset (same storageKey, new row) into their own org to use it in playlists/themes,
+// mirroring the Theme preset pattern above.
 
 model Asset {
   id           String    @id @default(cuid())
@@ -263,17 +274,21 @@ model Asset {
   // the asset is first added to a playlist, and directly mutes/unmutes it when played standalone
   // (Screen/Zone asset streaming mode, which has no PlaylistItem to carry a per-placement flag).
   audioEnabled Boolean @default(true)
-  status       AssetStatus @default(PROCESSING)
+  status       AssetStatus   @default(PROCESSING)
+  category     AssetCategory @default(GENERIC)
+  tags         String[]      @default([])
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   playlistItems   PlaylistItem[]
   proofOfPlays    ProofOfPlayLog[]
   screens         Screen[]
   zones           Zone[]
+
+  @@index([organizationId, category])
 }
 
 enum AssetType {
@@ -304,6 +319,17 @@ enum AssetStatus {
   PROCESSING
   READY
   ERROR
+}
+
+enum AssetCategory {
+  BACKGROUND
+  ICON
+  ILLUSTRATION
+  STOCK_PHOTO
+  LOGO
+  VIDEO_LOOP
+  AUDIO_JINGLE
+  GENERIC
 }
 
 // ─── Playlists ────────────────────────────────────────────────────────────────
@@ -348,12 +374,16 @@ enum PlaybackOrder {
 }
 
 model PlaylistItem {
-  id           String   @id @default(cuid())
-  position     Int
-  durationSecs Int      @default(10)
-  muted        Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  position      Int
+  durationSecs  Int      @default(10)
+  muted         Boolean  @default(true)
+  // Video items: when true, the player ignores durationSecs and advances on the video's own
+  // "ended" event (i.e. plays the full clip). When false, durationSecs clips it short. Has no
+  // effect on non-video items.
+  playFullVideo Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   playlistId String
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
@@ -415,6 +445,38 @@ model Zone {
 
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id])
+}
+
+// ─── Themes ──────────────────────────────────────────────────────────────────
+// A Theme is a richer, JSON-defined template on top of the same percentage-positioned
+// canvas as Layout/Zone: elements carry text/image/video/playlist/widget content and
+// styling (colors, fonts), not just structure. organizationId null = a system preset,
+// readable by every org but not editable — orgs duplicate a preset to customize it.
+
+enum ThemeCategory {
+  RESTAURANT_MENU
+  RETAIL_PROMO
+  HOTEL_LOBBY
+  CLINIC_WAITING
+  MOSQUE
+  GENERIC
+}
+
+model Theme {
+  id          String        @id @default(cuid())
+  name        String
+  category    ThemeCategory @default(GENERIC)
+  aspectRatio String        @default("16:9")
+  palette     Json
+  typography  Json
+  elements    Json
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  screens Screen[]
 }
 
 // ─── Scheduling ───────────────────────────────────────────────────────────────

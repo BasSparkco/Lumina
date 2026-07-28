@@ -23,6 +23,8 @@ RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
 # @lumina/db compiles the generated (Prisma-authored) client .ts sources to plain CommonJS —
 # it must be built before api, since api only consumes @lumina/db's compiled dist output.
 RUN pnpm --filter @lumina/db build
+# api's prisma/theme-presets.ts and themes.service.ts consume @lumina/types' compiled output.
+RUN pnpm --filter @lumina/types build
 RUN pnpm --filter api build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────

@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid } from 'lucide-react';
-import { screensApi, playlistsApi, layoutsApi, orgApi, type Screen, type StreamingType } from '@/lib/api';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid, Palette } from 'lucide-react';
+import { screensApi, playlistsApi, layoutsApi, themesApi, orgApi, type Screen, type StreamingType, type PlaylistSummary, type Layout, type Theme } from '@/lib/api';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
@@ -266,6 +266,7 @@ export default function ScreensPage() {
   const { data: currentPlan = 'FREE' } = useQuery({ queryKey: ['billingPlan'], queryFn: billingApi.getCurrentPlan });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: layouts = [] } = useQuery({ queryKey: ['layouts'], queryFn: layoutsApi.list });
+  const { data: themes = [] } = useQuery({ queryKey: ['themes'], queryFn: themesApi.list });
   const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
   const { data: groupAssignments = {} } = useQuery({ queryKey: ['screenGroupAssignments'], queryFn: screenGroupsApi.getAssignments });
   const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
@@ -371,7 +372,19 @@ export default function ScreensPage() {
       logAction({
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
         userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: playlistId ? playlists.find(p => p.id === playlistId)?.name : ta('detailPlaylistCleared'),
+        detail: playlistId ? playlists.find(p => p.id === playlistId)?.name : undefined,
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  const themeMut = useMutation({
+    mutationFn: ({ id, themeId }: { id: string; themeId: string | null }) => screensApi.setTheme(id, themeId),
+    onSuccess: (updated, { themeId }) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: themeId ? themes.find(th => th.id === themeId)?.name : undefined,
       });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -439,12 +452,25 @@ export default function ScreensPage() {
     },
   });
   const timezoneMut = useMutation({
-    mutationFn: ({ id, timezone }: { id: string; timezone: string }) =>
-      screensApi.updatePrayer(id, { timezone }),
-    onSuccess: (updated, { timezone }) => {
+    mutationFn: ({ id, timezone, timezoneEnabled }: { id: string; timezone: string; timezoneEnabled: boolean }) =>
+      screensApi.updatePrayer(id, { timezone, timezoneEnabled }),
+    onSuccess: (updated, { timezone, timezoneEnabled }) => {
       logAction({
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: timezone,
+        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: timezoneEnabled ? timezone : undefined,
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  const showClockMut = useMutation({
+    mutationFn: ({ id, showClock }: { id: string; showClock: boolean }) =>
+      screensApi.setShowClock(id, showClock),
+    onSuccess: (updated, { showClock }) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: showClock ? ta('detailClockOn') : ta('detailClockOff'),
       });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -744,9 +770,9 @@ export default function ScreensPage() {
 
               <div>
                 <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.label')}</label>
-                <div className="grid grid-cols-3 gap-1">
-                  {(['ASSET', 'PLAYLIST', 'LAYOUT'] as const).map(st => {
-                    const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : LayoutGrid;
+                <div className="grid grid-cols-4 gap-1">
+                  {(['ASSET', 'PLAYLIST', 'LAYOUT', 'THEME'] as const).map(st => {
+                    const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : st === 'LAYOUT' ? LayoutGrid : Palette;
                     return (
                       <button key={st} type="button" disabled={!canEditContent}
                         onClick={() => streamingTypeMut.mutate({ id: screen.id, streamingType: st })}
@@ -794,6 +820,19 @@ export default function ScreensPage() {
                     className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
                     <option value="">{t('fullscreenNoLayout')}</option>
                     {layouts.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {screen.streamingType === 'THEME' && (
+                <div>
+                  <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.themeLabel')}</label>
+                  <select
+                    value={screen.themeId ?? ''} disabled={!canEditContent}
+                    onChange={e => themeMut.mutate({ id: screen.id, themeId: e.target.value || null })}
+                    className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    <option value="">{t('none')}</option>
+                    {themes.map(th => <option key={th.id} value={th.id}>{th.name}</option>)}
                   </select>
                 </div>
               )}
