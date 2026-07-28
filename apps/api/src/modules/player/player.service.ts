@@ -87,7 +87,6 @@ export class PlayerService {
           },
         },
         theme: true,
-        asset: true,
         playlist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },

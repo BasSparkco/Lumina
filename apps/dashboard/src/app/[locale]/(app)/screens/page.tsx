@@ -851,7 +851,7 @@ export default function ScreensPage() {
                   {expandedTimezone === screen.id && (
                     <TimezoneSelect
                       value={screen.timezone} disabled={!canEditContent}
-                      onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz })}
+                      onChange={tz => timezoneMut.mutate({ id: screen.id, timezone: tz, timezoneEnabled: true })}
                     />
                   )}
                 </>
