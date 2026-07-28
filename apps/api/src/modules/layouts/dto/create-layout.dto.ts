@@ -10,6 +10,8 @@ export class ZoneDto {
   @IsNumber() @Min(1) @Max(100) width!: number;
   @IsNumber() @Min(1) @Max(100) height!: number;
   @IsNumber() @IsOptional() zIndex?: number;
+  // Degrees, clockwise, about the zone's own center — free rotation, not just 90° steps.
+  @IsNumber() @Min(-360) @Max(360) @IsOptional() rotation?: number;
   @IsIn(ZONE_TYPES) @IsOptional() zoneType?: typeof ZONE_TYPES[number];
   @IsObject() @IsOptional() widgetConfig?: Record<string, unknown>;
   // Mutually exclusive — a MEDIA zone plays either a playlist or a single asset, never both

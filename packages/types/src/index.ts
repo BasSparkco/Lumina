@@ -3,6 +3,7 @@ export * from './asset';
 export * from './playlist';
 export * from './player';
 export * from './theme';
+export * from './fonts';
 
 // Explicit re-exports of runtime values (schemas, functions) alongside the `export *`
 // above: `export *` compiles to a dynamic re-export loop that bundlers' CJS/ESM interop
@@ -35,3 +36,4 @@ export {
   ThemeInputSchema,
   resolveThemeColor,
 } from './theme';
+export { FONT_LIBRARY, FONT_IDS, DEFAULT_FONT_ID, fontStack } from './fonts';

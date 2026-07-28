@@ -136,6 +136,7 @@ export class PlayerService {
         width: z.width,
         height: z.height,
         zIndex: z.zIndex,
+        rotation: z.rotation,
         zoneType: z.zoneType,
         widgetConfig: z.widgetConfig,
         audioPriority: z.audioPriority,

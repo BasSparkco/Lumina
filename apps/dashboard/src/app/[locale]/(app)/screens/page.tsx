@@ -859,6 +859,13 @@ export default function ScreensPage() {
 
               <VolumeControl screen={screen} disabled={!canEditContent} />
 
+              <label className={`flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 ${canEditContent ? 'cursor-pointer' : ''}`}>
+                <input type="checkbox" checked={screen.showClock} disabled={!canEditContent}
+                  onChange={e => showClockMut.mutate({ id: screen.id, showClock: e.target.checked })}
+                  className="w-3.5 h-3.5 accent-indigo-500 disabled:opacity-50" />
+                <Clock className="w-3 h-3" /> {t('showClock')}
+              </label>
+
               <div>
                 <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
                   <FolderKanban className="w-3 h-3" /> {t('groups.label')}

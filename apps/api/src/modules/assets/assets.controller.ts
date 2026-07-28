@@ -15,7 +15,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { memoryStorage } from 'multer';
-import type { AssetCategory, TextFontFamily, TextSize } from '@lumina/db';
+import type { AssetCategory, TextSize } from '@lumina/db';
+import { FONT_IDS } from '@lumina/types';
 import { AssetsService } from './assets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -24,7 +25,6 @@ import type { JwtUser } from '../../common/types/jwt-user';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 
-const TEXT_FONT_FAMILIES = ['SANS', 'SERIF', 'MONOSPACE', 'ROUNDED', 'CONDENSED', 'IMPACT', 'HANDWRITTEN'] as const;
 const TEXT_SIZES = ['SMALL', 'MEDIUM', 'LARGE', 'XLARGE'] as const;
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
@@ -32,7 +32,7 @@ class RenameAssetDto { @IsString() name!: string; }
 class SetAudioEnabledDto { @IsBoolean() audioEnabled!: boolean; }
 
 class TextStyleDto {
-  @IsOptional() @IsIn(TEXT_FONT_FAMILIES) textFontFamily?: TextFontFamily;
+  @IsOptional() @IsIn(FONT_IDS) textFontFamily?: string;
   @IsOptional() @Matches(HEX_COLOR, { message: 'textColor must be a hex color like #RRGGBB' }) textColor?: string;
   @IsOptional() @IsIn(TEXT_SIZES) textSize?: TextSize;
   @IsOptional() @Matches(HEX_COLOR, { message: 'textBackgroundColor must be a hex color like #RRGGBB' }) textBackgroundColor?: string;

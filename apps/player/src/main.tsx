@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
+import './lib/fontImports';
 import PairingPage from './pages/PairingPage';
 import PlayerPage from './pages/PlayerPage';
 

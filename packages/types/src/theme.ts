@@ -65,6 +65,9 @@ const themeElementBase = {
   width: z.number().min(0).max(100),
   height: z.number().min(0).max(100),
   zIndex: z.number().int().default(0),
+  // Degrees, clockwise, about the element's own center — 0 for elements saved before rotation
+  // existed, and for anything the editor never rotated.
+  rotation: z.number().default(0),
   editable: z.boolean().default(false),
   label: z.string().optional(),
   style: ThemeElementStyleSchema,

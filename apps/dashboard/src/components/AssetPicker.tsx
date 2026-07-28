@@ -7,16 +7,21 @@ interface AssetPickerProps {
   onChange: (assetId: string | null) => void;
   placeholder: string;
   disabled?: boolean;
+  // Restricts the list to specific asset types — defaults to image+video (the two types
+  // playable standalone). Theme IMAGE/VIDEO elements pass a single-type list so an IMAGE
+  // element can't be pointed at a video asset or vice versa.
+  types?: ('IMAGE' | 'VIDEO')[];
 }
 
-// Reused by both the screens page (screen-level ASSET streaming mode) and the layouts page
-// (zone-level asset media mode) — kept translation-agnostic via the `placeholder` prop rather
-// than assuming either caller's i18n namespace.
-export function AssetPicker({ value, onChange, placeholder, disabled }: AssetPickerProps) {
+// Reused by the screens page (screen-level ASSET streaming mode), the layouts page (zone-level
+// asset media mode), and the theme editor (IMAGE/VIDEO element content) — kept
+// translation-agnostic via the `placeholder` prop rather than assuming any one caller's i18n
+// namespace.
+export function AssetPicker({ value, onChange, placeholder, disabled, types = ['IMAGE', 'VIDEO'] }: AssetPickerProps) {
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   // No server-side type/status filter exists on GET /assets — filter here to only what's
   // actually playable standalone (images/videos that finished processing).
-  const options = assets.filter(a => (a.type === 'IMAGE' || a.type === 'VIDEO') && a.status === 'READY');
+  const options = assets.filter(a => (types as string[]).includes(a.type) && a.status === 'READY');
 
   return (
     <select

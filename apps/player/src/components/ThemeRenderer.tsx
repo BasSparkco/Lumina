@@ -1,7 +1,15 @@
-import { resolveThemeColor } from '@lumina/types';
+import { resolveThemeColor, fontStack } from '@lumina/types';
 import type { HydratedTheme, HydratedThemeElement, PlayerState } from '../lib/api';
 import ZonePlayer from './ZonePlayer';
 import LiveWidget from './LiveWidget';
+
+// style.fontFamily is either the 'heading'/'body' sentinel (defer to the theme's own
+// typography) or a font id from the shared FONT_LIBRARY chosen directly on this element.
+function resolveFontFamily(styleFontFamily: string | undefined, typography: HydratedTheme['typography']): string {
+  if (styleFontFamily === 'heading') return fontStack(typography.headingFont);
+  if (styleFontFamily === 'body') return fontStack(typography.bodyFont);
+  return fontStack(styleFontFamily ?? typography.bodyFont);
+}
 
 interface Props {
   theme: HydratedTheme;
@@ -26,6 +34,7 @@ export default function ThemeRenderer({ theme, state, onAssetChange }: Props) {
             height: `${el.height}%`,
             zIndex: el.zIndex,
             overflow: 'hidden',
+            transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
           }}
         >
           <ThemeElementView element={el} theme={theme} state={state} onAssetChange={onAssetChange} />
@@ -62,9 +71,7 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
             justifyContent: style.textAlign === 'center' ? 'center' : style.textAlign === 'right' ? 'flex-end' : 'flex-start',
             textAlign: style.textAlign ?? 'left',
             color: color ?? palette.text,
-            fontFamily: (style.fontFamily === 'heading' ? typography.headingFont
-              : style.fontFamily === 'body' ? typography.bodyFont
-              : style.fontFamily) ?? typography.bodyFont ?? 'inherit',
+            fontFamily: resolveFontFamily(style.fontFamily, typography),
             fontSize: style.fontSizePx ? `${style.fontSizePx}px` : undefined,
             fontWeight: style.fontWeight,
             opacity: style.opacity,

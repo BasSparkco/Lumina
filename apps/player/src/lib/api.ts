@@ -47,7 +47,7 @@ export interface PlaylistItem {
     url: string | null;
     thumbnailUrl: string | null;
     textContent: string | null;
-    textFontFamily: 'SANS' | 'SERIF' | 'MONOSPACE' | 'ROUNDED' | 'CONDENSED' | 'IMPACT' | 'HANDWRITTEN' | null;
+    textFontFamily: string | null;
     textColor: string | null;
     textSize: 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE' | null;
     textBackgroundColor: string | null;
@@ -89,6 +89,8 @@ export interface Zone {
   width: number;
   height: number;
   zIndex: number;
+  // Degrees, clockwise, about the zone's own center.
+  rotation: number;
   zoneType: ZoneType;
   widgetConfig: Record<string, unknown> | null;
   // At most one of these is ever set (enforced server-side) — a MEDIA zone plays either a

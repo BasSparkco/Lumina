@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AssetCategory, AssetType, TextFontFamily, TextSize } from '@lumina/db';
+import type { AssetCategory, AssetType, TextSize } from '@lumina/db';
+import { DEFAULT_FONT_ID } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 
 // Server-side defaults applied whenever a TEXT asset's style isn't specified — keeps the DB
 // column meaning "explicitly chosen" vs. "use the default," while callers (dashboard, player)
 // never have to special-case a null style themselves.
-const DEFAULT_TEXT_STYLE = { textFontFamily: 'SANS' as TextFontFamily, textColor: '#FFFFFF', textSize: 'MEDIUM' as TextSize };
+const DEFAULT_TEXT_STYLE = { textFontFamily: DEFAULT_FONT_ID, textColor: '#FFFFFF', textSize: 'MEDIUM' as TextSize };
 
 // Exported so the developer-facing library seed script (prisma/seed-library.ts) validates
 // files against the exact same mimetype allowlist as the upload endpoint.
@@ -64,7 +65,7 @@ export class AssetsService {
     orgId: string,
     name: string,
     content: string,
-    style: { textFontFamily?: TextFontFamily; textColor?: string; textSize?: TextSize; textBackgroundColor?: string } = {},
+    style: { textFontFamily?: string; textColor?: string; textSize?: TextSize; textBackgroundColor?: string } = {},
   ) {
     // No object ever gets uploaded for a TEXT asset — the content lives in `textContent` —
     // so storageKey is just a unique placeholder, never a real S3 key. remove() below skips
@@ -93,7 +94,7 @@ export class AssetsService {
   async updateText(
     orgId: string,
     id: string,
-    dto: { name?: string; content?: string; textFontFamily?: TextFontFamily; textColor?: string; textSize?: TextSize; textBackgroundColor?: string },
+    dto: { name?: string; content?: string; textFontFamily?: string; textColor?: string; textSize?: TextSize; textBackgroundColor?: string },
   ) {
     const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
@@ -252,7 +253,7 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,

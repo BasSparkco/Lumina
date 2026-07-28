@@ -262,7 +262,9 @@ model Asset {
   // Styling for TEXT assets only — null means "use the player's default" for that field,
   // so non-TEXT assets never carry these and a TEXT asset created before this field existed
   // still renders sensibly instead of blank/broken.
-  textFontFamily      TextFontFamily?
+  // Font id from the shared FONT_LIBRARY (packages/types/src/fonts.ts) — a plain string rather
+  // than an enum so the curated font list can grow without a migration each time.
+  textFontFamily      String?
   textColor           String?         // "#RRGGBB"
   textSize            TextSize?
   textBackgroundColor String?         // "#RRGGBB"; null = transparent (shows the player's black behind it)
@@ -296,16 +298,6 @@ enum AssetType {
   VIDEO
   AUDIO
   TEXT
-}
-
-enum TextFontFamily {
-  SANS
-  SERIF
-  MONOSPACE
-  ROUNDED
-  CONDENSED
-  IMPACT
-  HANDWRITTEN
 }
 
 enum TextSize {
@@ -425,6 +417,9 @@ model Zone {
   width        Float    // percentage 0–100
   height       Float    // percentage 0–100
   zIndex       Int      @default(0)
+  // Degrees, clockwise, about the zone's own center — for tilted tickers/sidebars in creative
+  // layouts. Purely visual: x/y/width/height still describe the zone's unrotated bounding box.
+  rotation     Float    @default(0)
   zoneType     ZoneType @default(MEDIA)
   widgetConfig Json?    // type-specific config (prayer method override, RSS URL, etc.)
   // Audio balancing across zones in the same layout — both null/false by default, meaning every

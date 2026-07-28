@@ -258,6 +258,7 @@ export default function PlayerPage() {
               height: `${zone.height}%`,
               zIndex: zone.zIndex,
               overflow: 'hidden',
+              transform: zone.rotation ? `rotate(${zone.rotation}deg)` : undefined,
             }}
           >
             <ZoneRenderer

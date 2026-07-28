@@ -3,28 +3,20 @@ import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check } from 'lucide-react';
-import { assetsApi, type Asset, type TextFontFamily, type TextSize, type AssetCategory } from '@/lib/api';
+import { assetsApi, type Asset, type TextSize, type AssetCategory } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { FontPicker, fontStack } from '@/components/FontPicker';
+import { DEFAULT_FONT_ID } from '@lumina/types';
 
 const typeIcon: Record<string, React.ReactNode> = {
   IMAGE: <ImageIcon className="w-4 h-4 text-blue-500" />,
   VIDEO: <Film className="w-4 h-4 text-purple-500" />,
   AUDIO: <Music className="w-4 h-4 text-green-500" />,
   TEXT: <Type className="w-4 h-4 text-amber-500" />,
-};
-
-const FONT_FAMILY_STACKS: Record<TextFontFamily, string> = {
-  SANS: 'system-ui, sans-serif',
-  SERIF: 'Georgia, "Times New Roman", serif',
-  MONOSPACE: '"Courier New", monospace',
-  ROUNDED: 'ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif',
-  CONDENSED: '"Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif',
-  IMPACT: 'Impact, "Arial Black", sans-serif',
-  HANDWRITTEN: '"Segoe Script", "Bradley Hand", "Comic Sans MS", cursive',
 };
 
 const FONT_SIZE_PREVIEW: Record<TextSize, string> = {
@@ -53,7 +45,7 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
   const tc = useTranslations('common');
   const [name, setName] = useState(asset?.name ?? '');
   const [content, setContent] = useState(asset?.textContent ?? '');
-  const [fontFamily, setFontFamily] = useState<TextFontFamily>(asset?.textFontFamily ?? 'SANS');
+  const [fontFamily, setFontFamily] = useState<string>(asset?.textFontFamily ?? DEFAULT_FONT_ID);
   const [color, setColor] = useState(asset?.textColor ?? '#FFFFFF');
   const [size, setSize] = useState<TextSize>(asset?.textSize ?? 'MEDIUM');
   const [backgroundColor, setBackgroundColor] = useState(asset?.textBackgroundColor ?? '#000000');
@@ -83,16 +75,7 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
             <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.font')}</label>
-            <select value={fontFamily} onChange={e => setFontFamily(e.target.value as TextFontFamily)}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="SANS">{t('style.fontSans')}</option>
-              <option value="SERIF">{t('style.fontSerif')}</option>
-              <option value="MONOSPACE">{t('style.fontMonospace')}</option>
-              <option value="ROUNDED">{t('style.fontRounded')}</option>
-              <option value="CONDENSED">{t('style.fontCondensed')}</option>
-              <option value="IMPACT">{t('style.fontImpact')}</option>
-              <option value="HANDWRITTEN">{t('style.fontHandwritten')}</option>
-            </select>
+            <FontPicker value={fontFamily} onChange={setFontFamily} />
           </div>
           <div>
             <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.size')}</label>
@@ -127,7 +110,7 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
         <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.preview')}</label>
         <div className="w-full aspect-video rounded-lg flex items-center justify-center p-4 mb-4 overflow-hidden" style={{ background: backgroundColor }}>
           <p style={{
-            color, fontFamily: FONT_FAMILY_STACKS[fontFamily], fontSize: FONT_SIZE_PREVIEW[size],
+            color, fontFamily: fontStack(fontFamily), fontSize: FONT_SIZE_PREVIEW[size],
             textAlign: 'center', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
           }}>
             {content || t('newTextContentPlaceholder')}
@@ -344,7 +327,7 @@ export default function AssetsPage() {
                 <p
                   style={{
                     color: asset.textColor ?? '#fff',
-                    fontFamily: FONT_FAMILY_STACKS[asset.textFontFamily ?? 'SANS'],
+                    fontFamily: fontStack(asset.textFontFamily),
                     background: asset.textBackgroundColor ?? '#000',
                   }}
                   className="w-full h-full px-3 py-2 text-xs overflow-hidden text-center flex items-center justify-center whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">

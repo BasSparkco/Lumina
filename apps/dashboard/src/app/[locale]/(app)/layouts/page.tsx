@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Rnd } from 'react-rnd';
-import { LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy, Undo2, Redo2, Volume2 } from 'lucide-react';
+import { LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy, Undo2, Redo2, Volume2, RotateCw } from 'lucide-react';
 import { layoutsApi, playlistsApi, type Layout, type ZoneInput, type ZoneType } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
@@ -16,6 +16,8 @@ const PREVIEW_W = 400;
 const PREVIEW_H = 225;
 const SNAP_THRESHOLD = 6;
 const MIN_ZONE_PX = 20;
+// Rotation drag snaps to the nearest 15° once within this many degrees.
+const SNAP_DEG = 4;
 
 const clampPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 10) / 10));
 
@@ -96,6 +98,7 @@ function toZoneInputs(layout: Layout): ZoneInput[] {
   return layout.zones.map(z => withLocalId({
     name: z.name, x: z.x, y: z.y, width: z.width, height: z.height,
     zIndex: z.zIndex,
+    rotation: z.rotation ?? 0,
     zoneType: z.zoneType ?? 'MEDIA',
     widgetConfig: z.widgetConfig,
     playlistId: z.playlist?.id,
@@ -294,6 +297,7 @@ export default function LayoutsPage() {
   // frames don't re-render the settings list below the preview — only committed on drop.
   const [dragBox, setDragBox] = useState<{ index: number } & Box | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
+  const [rotationDrag, setRotationDrag] = useState<{ index: number; deg: number } | null>(null);
 
   useEffect(() => {
     const el = previewRef.current;
@@ -510,6 +514,42 @@ export default function LayoutsPage() {
     setGuides({ v: [], h: [] });
   }
 
+  // Drag-to-rotate: mirrors the theme editor's handle — angle is measured from the zone's own
+  // (unrotated) center to the mouse, in the preview canvas's own coordinate space.
+  function startRotateZone(e: React.MouseEvent, i: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    const canvas = previewRef.current;
+    const z = zones[i];
+    if (!canvas || !z) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const box = getBoxPx(z);
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+
+    function angleFor(clientX: number, clientY: number): number {
+      const mx = clientX - canvasRect.left;
+      const my = clientY - canvasRect.top;
+      let deg = Math.atan2(my - cy, mx - cx) * (180 / Math.PI) + 90;
+      deg = ((deg % 360) + 360) % 360;
+      const nearest15 = Math.round(deg / 15) * 15;
+      if (Math.abs(deg - nearest15) <= SNAP_DEG) deg = nearest15 % 360;
+      return Math.round(deg);
+    }
+
+    function onMove(ev: MouseEvent) {
+      setRotationDrag({ index: i, deg: angleFor(ev.clientX, ev.clientY) });
+    }
+    function onUp(ev: MouseEvent) {
+      commit(() => updateZone(i, { rotation: angleFor(ev.clientX, ev.clientY) }));
+      setRotationDrag(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   const saving = createMut.isPending || updateMut.isPending;
 
   return (
@@ -554,26 +594,49 @@ export default function LayoutsPage() {
               <div ref={previewRef} style={{ width: '100%', aspectRatio: '16 / 9', background: '#111', position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
                 {previewSize.width > 0 && zones.map((z, i) => {
                   const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
+                  const liveRotation = rotationDrag && rotationDrag.index === i ? rotationDrag.deg : (z.rotation ?? 0);
                   return (
                     <Rnd
                       key={z._localId ?? i}
                       bounds="parent"
                       minWidth={MIN_ZONE_PX}
                       minHeight={MIN_ZONE_PX}
+                      cancel=".rotate-handle"
                       size={{ width: box.width, height: box.height }}
                       position={{ x: box.left, y: box.top }}
                       onDrag={(_e, d) => handleDrag(i, d.x, d.y)}
                       onDragStop={(_e, d) => handleDragStop(i, d.x, d.y)}
                       onResize={(_e, dir, ref, _delta, position) => handleResize(i, dir, ref, position)}
                       onResizeStop={(_e, dir, ref, _delta, position) => handleResizeStop(i, dir, ref, position)}
-                      style={{
+                      style={{ overflow: 'visible' }}>
+                      {/* react-rnd/react-draggable owns the root node's own `transform` (translate()
+                          for positioning) and clobbers a rotate() set alongside it — rotation lives
+                          on this separate inner wrapper instead. */}
+                      <div style={{
+                        width: '100%', height: '100%', position: 'relative',
                         background: ZONE_COLORS[i % ZONE_COLORS.length] + '55',
                         border: `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         flexDirection: 'column', gap: 2,
+                        transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
                       }}>
-                      <span style={{ fontSize: 11, color: '#fff', fontWeight: 600, textAlign: 'center' }}>{z.name}</span>
-                      <span style={{ opacity: 0.7, fontSize: 10, color: '#fff' }}>{t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`)}</span>
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+                          <span style={{ fontSize: 11, color: '#fff', fontWeight: 600, textAlign: 'center' }}>{z.name}</span>
+                          <span style={{ opacity: 0.7, fontSize: 10, color: '#fff' }}>{t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`)}</span>
+                        </div>
+                        <div
+                          className="rotate-handle"
+                          onMouseDown={e => startRotateZone(e, i)}
+                          title={t('rotateHint')}
+                          style={{
+                            position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
+                            width: 14, height: 14, borderRadius: '50%',
+                            background: ZONE_COLORS[i % ZONE_COLORS.length], border: '2px solid white',
+                            cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                          }}
+                        />
+                        <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: ZONE_COLORS[i % ZONE_COLORS.length], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                      </div>
                     </Rnd>
                   );
                 })}
@@ -623,7 +686,7 @@ export default function LayoutsPage() {
                       </select>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-1.5">
+                    <div className="grid grid-cols-5 gap-1.5">
                       {(['x', 'y', 'width', 'height'] as const).map(field => (
                         <div key={field}>
                           <label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 block"
@@ -636,6 +699,15 @@ export default function LayoutsPage() {
                             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                         </div>
                       ))}
+                      <div>
+                        <label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 flex items-center gap-0.5" title={t('zoneRotationTitle')}>
+                          <RotateCw className="w-2.5 h-2.5" /> {t('zoneRotation')}
+                        </label>
+                        <input type="number" min={-360} max={360}
+                          value={z.rotation ?? 0} onChange={e => updateZone(i, { rotation: parseInt(e.target.value, 10) || 0 })}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                      </div>
                     </div>
 
                     {/* Media source — playlist or a single asset, mutually exclusive. Whichever

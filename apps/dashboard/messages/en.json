@@ -41,6 +41,15 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "searchTimezone": "Search timezone…",
+    "searchFont": "Search fonts…",
+    "fontCategory": {
+      "SANS": "Sans-serif",
+      "SERIF": "Serif",
+      "DISPLAY": "Display",
+      "HANDWRITTEN": "Handwritten",
+      "MONOSPACE": "Monospace",
+      "ARABIC": "Arabic"
+    },
     "roles": {
       "OWNER": "Owner",
       "ADMIN": "Admin",
@@ -108,6 +117,7 @@
     "empty": "No screens yet. Open the player on a device and pair it.",
     "online": "ONLINE",
     "offline": "OFFLINE",
+    "defaultPlaylist": "Default playlist",
     "none": "— None —",
     "layoutZones": "Layout (zones)",
     "fullscreenNoLayout": "— Fullscreen (no layout) —",
@@ -341,6 +351,9 @@
     "zoneYTitle": "Top position (% of screen height)",
     "zoneWidthTitle": "Width (% of screen width)",
     "zoneHeightTitle": "Height (% of screen height)",
+    "zoneRotation": "Rotate°",
+    "zoneRotationTitle": "Rotation in degrees, clockwise, about the zone's own center",
+    "rotateHint": "Drag to rotate",
     "noPlaylist": "— No playlist —",
     "noAsset": "— No asset —",
     "zones": "Zones",
@@ -440,6 +453,8 @@
     "fontFamily": "Font",
     "fontFamilyHeadingOption": "Heading font (theme default)",
     "fontFamilyBodyOption": "Body font (theme default)",
+    "fontFamilyCustomOption": "Custom font…",
+    "rotateHint": "Drag to rotate",
     "fontSizePx": "Text size (px)",
     "fontWeight": "Weight",
     "textAlign": "Align",
@@ -454,7 +469,8 @@
       "y": "Y",
       "width": "W",
       "height": "H",
-      "zIndex": "Layer"
+      "zIndex": "Layer",
+      "rotation": "Rotate°"
     },
     "align": {
       "left": "Left",

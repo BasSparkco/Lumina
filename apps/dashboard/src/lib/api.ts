@@ -217,7 +217,10 @@ export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
 export interface ZoneInput {
-  name: string; x: number; y: number; width: number; height: number; zIndex?: number; zoneType?: ZoneType;
+  name: string; x: number; y: number; width: number; height: number; zIndex?: number;
+  // Degrees, clockwise, about the zone's own center.
+  rotation?: number;
+  zoneType?: ZoneType;
   widgetConfig?: Record<string, unknown>;
   // Mutually exclusive — a MEDIA zone plays either a playlist or a single asset, never both.
   playlistId?: string; assetId?: string;
@@ -261,7 +264,9 @@ export interface FleetStatus {
   total: number; online: number; offline: number;
   screens: { id: string; crashCount7d: number }[];
 }
-export type TextFontFamily = 'SANS' | 'SERIF' | 'MONOSPACE' | 'ROUNDED' | 'CONDENSED' | 'IMPACT' | 'HANDWRITTEN';
+// A font id from the shared FONT_LIBRARY (@lumina/types) — kept as a plain string here (not
+// re-imported) so this file's existing "duplicate the server's shape locally" convention holds.
+export type TextFontFamily = string;
 export type TextSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE';
 export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; textBackgroundColor?: string; }
 export type AssetCategory = 'BACKGROUND' | 'ICON' | 'ILLUSTRATION' | 'STOCK_PHOTO' | 'LOGO' | 'VIDEO_LOOP' | 'AUDIO_JINGLE' | 'GENERIC';
@@ -306,6 +311,8 @@ export interface ThemeElementStyle {
 }
 interface ThemeElementBase {
   id: string; x: number; y: number; width: number; height: number; zIndex: number;
+  // Degrees, clockwise, about the element's own center.
+  rotation: number;
   editable: boolean; label?: string; style: ThemeElementStyle;
 }
 export type ThemeElement =

@@ -2,10 +2,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
+import { useRef } from 'react';
 import { Rnd } from 'react-rnd';
-import { Palette, Plus, Trash2, Pencil, X, Check, Copy, Sparkles } from 'lucide-react';
+import { Palette, Plus, Trash2, Pencil, X, Check, Copy, Sparkles, RotateCw } from 'lucide-react';
 import {
-  themesApi, assetsApi, playlistsApi,
+  themesApi, playlistsApi,
   type Theme, type ThemeInput, type ThemeElement, type ThemeElementKind, type ThemeElementStyle,
   type ThemeCategory, type ThemePalette, type ThemeTypography, type ThemeWidgetType,
 } from '@/lib/api';
@@ -13,6 +14,9 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { AssetPicker } from '@/components/AssetPicker';
+import { FontPicker, fontStack } from '@/components/FontPicker';
+import { DEFAULT_FONT_ID } from '@lumina/types';
 
 const PREVIEW_W = 640;
 const PREVIEW_H = 360;
@@ -33,14 +37,10 @@ const KIND_COLORS: Record<ThemeElementKind, string> = {
   TEXT: '#6366f1', IMAGE: '#0ea5e9', VIDEO: '#8b5cf6', PLAYLIST: '#10b981', SHAPE: '#64748b', WIDGET: '#f59e0b',
 };
 
-// Curated so the picker stays a short, scannable list rather than every installed system font.
-const FONT_OPTIONS = [
-  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Nunito',
-  'Playfair Display', 'Merriweather', 'Oswald', 'Raleway', 'Noto Sans Arabic',
-  'Arial', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma',
-];
-
 const SNAP_PX = 6;
+// Rotation drag snaps to the nearest 15° once within this many degrees — mirrors the
+// position/resize edge-snapping below, so square/45°/diagonal placements are easy to hit exactly.
+const SNAP_DEG = 4;
 interface Rect { x: number; y: number; width: number; height: number }
 
 // Figma-style smart guides: snaps the active element's edges/center onto any other element's
@@ -108,7 +108,7 @@ function defaultPalette(): ThemePalette {
   return { primary: '#6366f1', secondary: '#111827', background: '#0f172a', surface: '#1e293b', text: '#f8fafc', textMuted: '#94a3b8', accent: '#f59e0b' };
 }
 function defaultTypography(): ThemeTypography {
-  return { headingFont: 'Inter', bodyFont: 'Inter', baseSizePx: 16, scale: 1.25 };
+  return { headingFont: DEFAULT_FONT_ID, bodyFont: DEFAULT_FONT_ID, baseSizePx: 16, scale: 1.25 };
 }
 function defaultContentForKind(kind: ThemeElementKind): ThemeElement['content'] {
   switch (kind) {
@@ -129,8 +129,8 @@ function blankTheme(): ThemeInput {
     palette: defaultPalette(),
     typography: defaultTypography(),
     elements: [
-      { id: 'bg', kind: 'SHAPE', x: 0, y: 0, width: 100, height: 100, zIndex: 0, editable: false, style: { backgroundColor: 'palette.background' }, content: {} },
-      { id: newElementId(), kind: 'TEXT', x: 5, y: 8, width: 60, height: 15, zIndex: 1, editable: true, label: 'Title', style: { fontFamily: 'heading', fontSizePx: 36, fontWeight: 700, color: 'palette.text' }, content: { text: 'New Theme' } },
+      { id: 'bg', kind: 'SHAPE', x: 0, y: 0, width: 100, height: 100, zIndex: 0, rotation: 0, editable: false, style: { backgroundColor: 'palette.background' }, content: {} },
+      { id: newElementId(), kind: 'TEXT', x: 5, y: 8, width: 60, height: 15, zIndex: 1, rotation: 0, editable: true, label: 'Title', style: { fontFamily: 'heading', fontSizePx: 36, fontWeight: 700, color: 'palette.text' }, content: { text: 'New Theme' } },
     ],
   };
 }
@@ -277,7 +277,6 @@ export default function ThemesPage() {
   const ta = useTranslations('auditLog');
 
   const { data: themes = [], isLoading } = useQuery({ queryKey: ['themes'], queryFn: themesApi.list });
-  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
 
   const presets = themes.filter(th => th.organizationId === null);
@@ -293,6 +292,8 @@ export default function ThemesPage() {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [dragRect, setDragRect] = useState<(Rect & { id: string }) | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
+  const [rotationDrag, setRotationDrag] = useState<{ id: string; deg: number } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -388,7 +389,7 @@ export default function ThemesPage() {
     renameMut.mutate({ theme, name: trimmed });
   }
 
-  function updateElement(id: string, patch: Partial<Pick<ThemeElement, 'x' | 'y' | 'width' | 'height' | 'zIndex' | 'label' | 'editable'>>) {
+  function updateElement(id: string, patch: Partial<Pick<ThemeElement, 'x' | 'y' | 'width' | 'height' | 'zIndex' | 'rotation' | 'label' | 'editable'>>) {
     setElements(prev => prev.map(el => (el.id === id ? { ...el, ...patch } : el)));
   }
   function updateElementKind(id: string, kind: ThemeElementKind) {
@@ -400,16 +401,50 @@ export default function ThemesPage() {
   function updateElementStyle(id: string, patch: ThemeElementStyle) {
     setElements(prev => prev.map(el => (el.id === id ? { ...el, style: { ...el.style, ...patch } } : el)));
   }
+  // Drag-to-rotate: the handle sits above the element's (unrotated) top-center. While dragging,
+  // the element's rotation tracks the angle from its own center to the mouse, measured in the
+  // canvas's own coordinate space so it works regardless of page scroll/zoom.
+  function startRotate(e: React.MouseEvent, el: ThemeElement) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedElementId(el.id);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const cx = (el.x + el.width / 2) / 100 * PREVIEW_W;
+    const cy = (el.y + el.height / 2) / 100 * PREVIEW_H;
+
+    function angleFor(clientX: number, clientY: number): number {
+      const mx = clientX - canvasRect.left;
+      const my = clientY - canvasRect.top;
+      let deg = Math.atan2(my - cy, mx - cx) * (180 / Math.PI) + 90;
+      deg = ((deg % 360) + 360) % 360;
+      const nearest15 = Math.round(deg / 15) * 15;
+      if (Math.abs(deg - nearest15) <= SNAP_DEG) deg = nearest15 % 360;
+      return Math.round(deg);
+    }
+
+    function onMove(ev: MouseEvent) {
+      setRotationDrag({ id: el.id, deg: angleFor(ev.clientX, ev.clientY) });
+    }
+    function onUp(ev: MouseEvent) {
+      updateElement(el.id, { rotation: angleFor(ev.clientX, ev.clientY) });
+      setRotationDrag(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   function addElement() {
-    setElements(prev => [...prev, { id: newElementId(), kind: 'TEXT', x: 20, y: 20, width: 40, height: 15, zIndex: prev.length, editable: true, style: { color: 'palette.text' }, content: { text: 'New text' } }]);
+    setElements(prev => [...prev, { id: newElementId(), kind: 'TEXT', x: 20, y: 20, width: 40, height: 15, zIndex: prev.length, rotation: 0, editable: true, style: { color: 'palette.text' }, content: { text: 'New text' } }]);
   }
   function removeElement(id: string) {
     setElements(prev => prev.filter(el => el.id !== id));
   }
 
   const saving = createMut.isPending || updateMut.isPending;
-  const imageAssets = assets.filter(a => a.type === 'IMAGE');
-  const videoAssets = assets.filter(a => a.type === 'VIDEO');
 
   function renderPreviewElements(els: ThemeElement[], pal: ThemePalette, scaleW: number) {
     return [...els].sort((a, b) => a.zIndex - b.zIndex).map(el => {
@@ -420,11 +455,13 @@ export default function ThemesPage() {
           position: 'absolute', left: `${el.x}%`, top: `${el.y}%`, width: `${el.width}%`, height: `${el.height}%`,
           background: bg, border: `1px solid ${border}`, borderRadius: el.style.borderRadius, overflow: 'hidden',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 2,
+          transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
         }}>
           {el.kind === 'TEXT' && (
             <span style={{
               fontSize: Math.max(6, Math.min(el.style.fontSizePx ?? 16, 40) * (scaleW / 400)),
               fontWeight: el.style.fontWeight as number | undefined,
+              fontFamily: el.style.fontFamily === 'heading' || el.style.fontFamily === 'body' ? undefined : fontStack(el.style.fontFamily),
               color: resolveColor(el.style.color, pal) ?? pal.text,
               textAlign: el.style.textAlign ?? 'left',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
@@ -478,6 +515,7 @@ export default function ThemesPage() {
               <div>
                 <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('preview')}</div>
                 <div
+                  ref={canvasRef}
                   onMouseDown={e => { if (e.target === e.currentTarget) setSelectedElementId(null); }}
                   style={{ width: PREVIEW_W, height: PREVIEW_H, background: palette.background, position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
                   {elements.map((el) => {
@@ -485,6 +523,7 @@ export default function ThemesPage() {
                     const rect = dragRect && dragRect.id === el.id
                       ? dragRect
                       : { x: (el.x / 100) * PREVIEW_W, y: (el.y / 100) * PREVIEW_H, width: (el.width / 100) * PREVIEW_W, height: (el.height / 100) * PREVIEW_H };
+                    const liveRotation = rotationDrag && rotationDrag.id === el.id ? rotationDrag.deg : el.rotation;
                     return (
                       <Rnd
                         key={el.id}
@@ -493,6 +532,7 @@ export default function ThemesPage() {
                         minHeight={16}
                         disableDragging={!isSelected}
                         enableResizing={isSelected ? undefined : false}
+                        cancel=".rotate-handle"
                         size={{ width: rect.width, height: rect.height }}
                         position={{ x: rect.x, y: rect.y }}
                         onMouseDown={() => setSelectedElementId(el.id)}
@@ -528,18 +568,42 @@ export default function ThemesPage() {
                           setDragRect(null);
                           setGuides({ v: [], h: [] });
                         }}
-                        style={{
-                          zIndex: el.zIndex,
+                        style={{ zIndex: el.zIndex, overflow: 'visible' }}>
+                        {/* react-rnd/react-draggable owns the root node's own `transform` (it uses
+                            translate() there for positioning) and will clobber a `rotate()` set
+                            alongside it — so rotation lives on this separate inner wrapper instead. */}
+                        <div style={{
+                          width: '100%', height: '100%', position: 'relative',
                           background: el.kind === 'SHAPE' ? (resolveColor(el.style.backgroundColor, palette) ?? KIND_COLORS.SHAPE + '55') : KIND_COLORS[el.kind] + '33',
                           border: isSelected ? `2px solid ${KIND_COLORS[el.kind]}` : `1px dashed ${KIND_COLORS[el.kind]}99`,
                           boxShadow: isSelected ? `0 0 0 2px ${KIND_COLORS[el.kind]}55` : undefined,
                           cursor: isSelected ? 'move' : 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2,
+                          transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
                         }}>
-                        <span style={{ fontSize: 9, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff', fontWeight: 600, textAlign: 'center', padding: '0 2px' }}>
-                          {el.label || (el.kind === 'TEXT' ? el.content.text : el.kind)}
-                        </span>
-                        <span style={{ opacity: 0.7, fontSize: 8, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff' }}>{t(`elementKinds.${el.kind}`)}</span>
+                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+                            <span style={{ fontSize: 9, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff', fontWeight: 600, textAlign: 'center', padding: '0 2px' }}>
+                              {el.label || (el.kind === 'TEXT' ? el.content.text : el.kind)}
+                            </span>
+                            <span style={{ opacity: 0.7, fontSize: 8, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff' }}>{t(`elementKinds.${el.kind}`)}</span>
+                          </div>
+                          {isSelected && (
+                            <div
+                              className="rotate-handle"
+                              onMouseDown={e => startRotate(e, el)}
+                              title={t('rotateHint')}
+                              style={{
+                                position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
+                                width: 14, height: 14, borderRadius: '50%',
+                                background: KIND_COLORS[el.kind], border: '2px solid white',
+                                cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                              }}
+                            />
+                          )}
+                          {isSelected && (
+                            <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: KIND_COLORS[el.kind], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                          )}
+                        </div>
                       </Rnd>
                     );
                   })}
@@ -573,13 +637,11 @@ export default function ThemesPage() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('headingFont')}</label>
-                    <input value={typography.headingFont} onChange={e => setTypography(prev => ({ ...prev, headingFont: e.target.value }))}
-                      className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none" />
+                    <FontPicker value={typography.headingFont} onChange={f => setTypography(prev => ({ ...prev, headingFont: f }))} />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('bodyFont')}</label>
-                    <input value={typography.bodyFont} onChange={e => setTypography(prev => ({ ...prev, bodyFont: e.target.value }))}
-                      className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none" />
+                    <FontPicker value={typography.bodyFont} onChange={f => setTypography(prev => ({ ...prev, bodyFont: f }))} />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('baseSize')}</label>
@@ -634,12 +696,16 @@ export default function ThemesPage() {
 
                   {isSelected && (
                   <>
-                  <div className="grid grid-cols-5 gap-1">
-                    {(['x', 'y', 'width', 'height', 'zIndex'] as const).map(field => (
+                  <div className="grid grid-cols-6 gap-1">
+                    {(['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const).map(field => (
                       <div key={field}>
-                        <label className="text-[9px] text-gray-400 dark:text-gray-500 block">{t(`field.${field}`)}</label>
-                        <input type="number" min={0} max={field === 'zIndex' ? undefined : 100}
-                          value={el[field]} onChange={e => updateElement(el.id, { [field]: field === 'zIndex' ? parseInt(e.target.value, 10) || 0 : parseFloat(e.target.value) || 0 })}
+                        <label className="text-[9px] text-gray-400 dark:text-gray-500 flex items-center gap-0.5">
+                          {field === 'rotation' && <RotateCw className="w-2.5 h-2.5" />} {t(`field.${field}`)}
+                        </label>
+                        <input type="number"
+                          min={field === 'zIndex' ? undefined : field === 'rotation' ? -360 : 0}
+                          max={field === 'zIndex' ? undefined : field === 'rotation' ? 360 : 100}
+                          value={el[field]} onChange={e => updateElement(el.id, { [field]: field === 'zIndex' || field === 'rotation' ? parseInt(e.target.value, 10) || 0 : parseFloat(e.target.value) || 0 })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                     ))}
@@ -664,21 +730,15 @@ export default function ThemesPage() {
                     {el.kind === 'IMAGE' && (
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('image')}</label>
-                        <select value={el.content.assetId ?? ''} onChange={e => updateElementContent(el.id, { assetId: e.target.value || null })}
-                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
-                          <option value="">{t('noAsset')}</option>
-                          {imageAssets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
+                        <AssetPicker types={['IMAGE']} value={el.content.assetId} placeholder={t('noAsset')}
+                          onChange={assetId => updateElementContent(el.id, { assetId })} />
                       </div>
                     )}
                     {el.kind === 'VIDEO' && (
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('video')}</label>
-                        <select value={el.content.assetId ?? ''} onChange={e => updateElementContent(el.id, { assetId: e.target.value || null })}
-                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
-                          <option value="">{t('noAsset')}</option>
-                          {videoAssets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
+                        <AssetPicker types={['VIDEO']} value={el.content.assetId} placeholder={t('noAsset')}
+                          onChange={assetId => updateElementContent(el.id, { assetId })} />
                       </div>
                     )}
                     {el.kind === 'PLAYLIST' && (
@@ -714,12 +774,17 @@ export default function ThemesPage() {
                       <ColorField label={t('color')} value={el.style.color} onChange={v => updateElementStyle(el.id, { color: v })} />
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('fontFamily')}</label>
-                        <select value={el.style.fontFamily ?? 'body'} onChange={e => updateElementStyle(el.id, { fontFamily: e.target.value })}
-                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none">
+                        <select
+                          value={el.style.fontFamily === 'heading' || el.style.fontFamily === 'body' ? el.style.fontFamily : 'custom'}
+                          onChange={e => updateElementStyle(el.id, { fontFamily: e.target.value === 'custom' ? DEFAULT_FONT_ID : e.target.value })}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none mb-1">
                           <option value="heading">{t('fontFamilyHeadingOption')}</option>
                           <option value="body">{t('fontFamilyBodyOption')}</option>
-                          {FONT_OPTIONS.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+                          <option value="custom">{t('fontFamilyCustomOption')}</option>
                         </select>
+                        {el.style.fontFamily !== 'heading' && el.style.fontFamily !== 'body' && (
+                          <FontPicker value={el.style.fontFamily} onChange={f => updateElementStyle(el.id, { fontFamily: f })} />
+                        )}
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('fontSizePx')}</label>

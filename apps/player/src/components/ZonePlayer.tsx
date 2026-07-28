@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { fontStack } from '@lumina/types';
 import type { Playlist, PlaylistItem } from '../lib/api';
 
 interface Props {
@@ -10,16 +11,6 @@ interface Props {
   // muted stays muted regardless of priority).
   forceMuted?: boolean;
 }
-
-const FONT_FAMILY_STACKS: Record<string, string> = {
-  SANS: 'system-ui, sans-serif',
-  SERIF: 'Georgia, "Times New Roman", serif',
-  MONOSPACE: '"Courier New", monospace',
-  ROUNDED: 'ui-rounded, "SF Pro Rounded", "Segoe UI", sans-serif',
-  CONDENSED: '"Arial Narrow", "Helvetica Neue Condensed", Arial, sans-serif',
-  IMPACT: 'Impact, "Arial Black", sans-serif',
-  HANDWRITTEN: '"Segoe Script", "Bradley Hand", "Comic Sans MS", cursive',
-};
 
 const FONT_SIZE_CLAMPS: Record<string, string> = {
   SMALL: 'clamp(1rem, 3vw, 2.5rem)',
@@ -128,7 +119,7 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
           <p
             style={{
               color: item.asset.textColor ?? '#fff',
-              fontFamily: FONT_FAMILY_STACKS[item.asset.textFontFamily ?? 'SANS'],
+              fontFamily: fontStack(item.asset.textFontFamily),
               fontSize: FONT_SIZE_CLAMPS[item.asset.textSize ?? 'MEDIUM'],
               textAlign: 'center',
               whiteSpace: 'pre-wrap',

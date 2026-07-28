@@ -6,16 +6,13 @@ ALTER TABLE "Asset" ADD COLUMN     "audioEnabled" BOOLEAN NOT NULL DEFAULT true,
 ADD COLUMN     "hasAudioTrack" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
-ALTER TABLE "Screen" ADD COLUMN     "assetId" TEXT,
-ADD COLUMN     "streamingType" "StreamingType" NOT NULL DEFAULT 'PLAYLIST';
+-- Screen.assetId already exists — added by 20260723124251_screen_streaming_type.
+ALTER TABLE "Screen" ADD COLUMN     "streamingType" "StreamingType" NOT NULL DEFAULT 'PLAYLIST';
 
 -- AlterTable
 ALTER TABLE "Zone" ADD COLUMN     "assetId" TEXT,
 ADD COLUMN     "audioPriority" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN     "audioVolume" INTEGER;
-
--- AddForeignKey
-ALTER TABLE "Screen" ADD CONSTRAINT "Screen_assetId_fkey" FOREIGN KEY ("assetId") REFERENCES "Asset"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Zone" ADD CONSTRAINT "Zone_assetId_fkey" FOREIGN KEY ("assetId") REFERENCES "Asset"("id") ON DELETE SET NULL ON UPDATE CASCADE;
