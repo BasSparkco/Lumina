@@ -355,7 +355,9 @@
     "zoneHeightTitle": "Height (% of screen height)",
     "zoneRotation": "Rotate°",
     "zoneRotationTitle": "Rotation in degrees, clockwise, about the zone's own center",
+    "zoneLayerTitle": "Stacking order — higher numbers render on top",
     "rotateHint": "Drag to rotate",
+    "resizeHint": "Drag to resize",
     "noPlaylist": "— No playlist —",
     "noAsset": "— No asset —",
     "zones": "Zones",
@@ -379,17 +381,12 @@
       "rectangle": "Rectangle",
       "rounded": "Rounded rectangle",
       "circle": "Circle",
-      "ellipse": "Ellipse",
       "triangle": "Triangle"
     },
     "editableHint": "Uncheck to lock this zone in place — dragging, resizing, and rotating are disabled",
     "lockedHint": "Locked — uncheck \"Editable\" below to unlock",
     "layer": {
-      "label": "Layer",
-      "bringToFront": "Bring to front",
-      "bringForward": "Bring forward",
-      "sendBackward": "Send backward",
-      "sendToBack": "Send to back"
+      "label": "Layer"
     },
     "mediaSource": {
       "label": "Media source",
@@ -465,14 +462,7 @@
       "rectangle": "Rectangle",
       "rounded": "Rounded rectangle",
       "circle": "Circle",
-      "ellipse": "Ellipse",
       "triangle": "Triangle"
-    },
-    "layer": {
-      "bringToFront": "Bring to front",
-      "bringForward": "Bring forward",
-      "sendBackward": "Send backward",
-      "sendToBack": "Send to back"
     },
     "undo": "Undo",
     "redo": "Redo",

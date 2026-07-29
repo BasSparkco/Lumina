@@ -40,7 +40,7 @@ export type ThemeElementKind = z.infer<typeof ThemeElementKindSchema>;
 export const ThemeWidgetTypeSchema = z.enum(['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER']);
 export type ThemeWidgetType = z.infer<typeof ThemeWidgetTypeSchema>;
 
-export const ThemeElementShapeSchema = z.enum(['rectangle', 'rounded', 'circle', 'ellipse', 'triangle']);
+export const ThemeElementShapeSchema = z.enum(['rectangle', 'rounded', 'circle', 'triangle']);
 export type ThemeElementShape = z.infer<typeof ThemeElementShapeSchema>;
 
 // Style values for color fields accept either a literal CSS color or a "palette.<role>"
@@ -160,15 +160,14 @@ export function resolveThemeColor(value: string | undefined, palette: ThemePalet
 
 /**
  * CSS clip for a shape within its (still rectangular) bounding box — shared by the dashboard
- * editors and the player renderer so all three clip content identically. 'circle' and 'ellipse'
- * use the same border-radius: 50% treatment (a circle is just an ellipse with equal width/height),
- * kept as separate options only so the picker's intent reads clearly to the person editing.
+ * editors and the player renderer so all three clip content identically. 'circle' uses
+ * border-radius: 50%, which already renders as an ellipse on a non-square box (width != height),
+ * so there's no separate 'ellipse' option — resizing a circle is how you get one.
  */
 export function shapeClipStyle(shape: ThemeElementShape | undefined): { borderRadius?: string; clipPath?: string } {
   switch (shape) {
     case 'rounded': return { borderRadius: '12%' };
-    case 'circle':
-    case 'ellipse': return { borderRadius: '50%' };
+    case 'circle': return { borderRadius: '50%' };
     case 'triangle': return { clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)' };
     case 'rectangle':
     default: return {};

@@ -214,7 +214,7 @@ export const realScreenGroupsApi = {
 
 // ── Types ───────────────────────────────────────────────────────────────────
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
-export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'ellipse' | 'triangle';
+export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }

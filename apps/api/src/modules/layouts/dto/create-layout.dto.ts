@@ -2,7 +2,7 @@ import { IsString, IsArray, ValidateNested, IsNumber, IsOptional, IsIn, IsObject
 import { Type } from 'class-transformer';
 
 const ZONE_TYPES = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'] as const;
-const ZONE_SHAPES = ['rectangle', 'rounded', 'circle', 'ellipse', 'triangle'] as const;
+const ZONE_SHAPES = ['rectangle', 'rounded', 'circle', 'triangle'] as const;
 
 export class ZoneDto {
   @IsString() name!: string;

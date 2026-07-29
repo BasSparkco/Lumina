@@ -355,7 +355,9 @@
     "zoneHeightTitle": "الارتفاع (% من ارتفاع الشاشة)",
     "zoneRotation": "الدوران°",
     "zoneRotationTitle": "زاوية الدوران بالدرجات، باتجاه عقارب الساعة، حول مركز المنطقة",
+    "zoneLayerTitle": "ترتيب الطبقات — الأرقام الأكبر تظهر في الأعلى",
     "rotateHint": "اسحب للتدوير",
+    "resizeHint": "اسحب لتغيير الحجم",
     "noPlaylist": "— بدون قائمة تشغيل —",
     "noAsset": "— بدون أصل —",
     "zones": "المناطق",
@@ -379,17 +381,12 @@
       "rectangle": "مستطيل",
       "rounded": "مستطيل مدوّر",
       "circle": "دائرة",
-      "ellipse": "بيضاوي",
       "triangle": "مثلث"
     },
     "editableHint": "ألغِ التحديد لقفل هذه المنطقة في مكانها — يتم تعطيل السحب وتغيير الحجم والتدوير",
     "lockedHint": "مقفلة — ألغِ تحديد \"قابل للتعديل\" أدناه لإلغاء القفل",
     "layer": {
-      "label": "الطبقة",
-      "bringToFront": "إحضار إلى الأمام",
-      "bringForward": "تقديم للأمام",
-      "sendBackward": "إرسال للخلف",
-      "sendToBack": "إرسال إلى الخلف"
+      "label": "الطبقة"
     },
     "mediaSource": {
       "label": "مصدر الوسائط",
@@ -465,14 +462,7 @@
       "rectangle": "مستطيل",
       "rounded": "مستطيل مدوّر",
       "circle": "دائرة",
-      "ellipse": "بيضاوي",
       "triangle": "مثلث"
-    },
-    "layer": {
-      "bringToFront": "إحضار إلى الأمام",
-      "bringForward": "تقديم للأمام",
-      "sendBackward": "إرسال للخلف",
-      "sendToBack": "إرسال إلى الخلف"
     },
     "undo": "تراجع",
     "redo": "إعادة",

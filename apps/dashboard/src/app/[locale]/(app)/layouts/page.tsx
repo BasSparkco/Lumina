@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { Rnd } from 'react-rnd';
 import {
   LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy, Undo2, Redo2, Volume2, RotateCw,
-  BringToFront, SendToBack, ChevronsUp, ChevronsDown, Lock, LockOpen,
+  Layers, Lock, LockOpen,
 } from 'lucide-react';
 import { shapeClipStyle, type ThemeElementShape } from '@lumina/types';
 import { layoutsApi, playlistsApi, type Layout, type ZoneInput, type ZoneType } from '@/lib/api';
@@ -16,30 +16,12 @@ import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { AssetPicker } from '@/components/AssetPicker';
+import {
+  RESIZE_HANDLES, RESIZE_HANDLE_AXIS, resizeHandleStyle, rotatedResizeAnchor, rotatedResizeBox,
+  type ResizeHandle,
+} from '@/lib/rotatedResize';
 
-const ZONE_SHAPES: ThemeElementShape[] = ['rectangle', 'rounded', 'circle', 'ellipse', 'triangle'];
-
-// Re-stacks one item's zIndex relative to its siblings — 'front'/'back' jump past every
-// sibling, 'forward'/'backward' swap with only the nearest neighbor in stacking order.
-function reorderZIndex<T extends { zIndex?: number }>(items: T[], index: number, action: 'front' | 'forward' | 'backward' | 'back'): T[] {
-  const z = (it: T) => it.zIndex ?? 0;
-  const current = z(items[index]!);
-  if (action === 'front' || action === 'back') {
-    const extreme = items.reduce((acc, it, i) => i === index ? acc : (action === 'front' ? Math.max(acc, z(it)) : Math.min(acc, z(it))), current);
-    const next = action === 'front' ? extreme + 1 : extreme - 1;
-    if (next === current) return items;
-    return items.map((it, i) => i === index ? { ...it, zIndex: next } : it);
-  }
-  let neighborIdx = -1;
-  items.forEach((it, i) => {
-    if (i === index) return;
-    if (action === 'forward' && z(it) > current && (neighborIdx === -1 || z(it) < z(items[neighborIdx]!))) neighborIdx = i;
-    if (action === 'backward' && z(it) < current && (neighborIdx === -1 || z(it) > z(items[neighborIdx]!))) neighborIdx = i;
-  });
-  if (neighborIdx === -1) return items;
-  const neighborZ = z(items[neighborIdx]!);
-  return items.map((it, i) => i === index ? { ...it, zIndex: neighborZ } : i === neighborIdx ? { ...it, zIndex: current } : it);
-}
+const ZONE_SHAPES: ThemeElementShape[] = ['rectangle', 'rounded', 'circle', 'triangle'];
 
 const PREVIEW_W = 400;
 const PREVIEW_H = 225;
@@ -445,10 +427,6 @@ export default function LayoutsPage() {
     setZones(prev => prev.map((z, idx) => idx === i ? { ...z, ...patch } : z));
   }
 
-  function moveZoneLayer(i: number, action: 'front' | 'forward' | 'backward' | 'back') {
-    commit(() => setZones(prev => reorderZIndex(prev, i, action)));
-  }
-
   // A locked zone (editable: false) can never be dragged/resized/rotated, regardless of
   // selection or the requireSelectToEdit setting. Otherwise interaction is gated on selection
   // only when that setting is on — off restores immediate drag/resize on first touch.
@@ -600,6 +578,46 @@ export default function LayoutsPage() {
     window.addEventListener('mouseup', onUp);
   }
 
+  // Custom resize handles for rotated zones — react-rnd's own resize handles stay anchored to
+  // the zone's unrotated bounding box, so once a zone is rotated they end up nowhere near its
+  // visible (rotated) corners/edges. These handles are rendered inside the same rotated wrapper
+  // as the shape, so they always sit at its true visual corners/edges, and the drag math in
+  // rotatedResizeBox() undoes the rotation before computing the new width/height.
+  function startResizeZone(e: React.MouseEvent, i: number, handle: ResizeHandle) {
+    e.preventDefault();
+    e.stopPropagation();
+    const canvas = previewRef.current;
+    const z = zones[i];
+    if (!canvas || !z) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const box = getBoxPx(z);
+    const rotation = z.rotation ?? 0;
+    const anchor = rotatedResizeAnchor(box, rotation, handle);
+
+    function compute(clientX: number, clientY: number): Box {
+      const mouse = { x: clientX - canvasRect.left, y: clientY - canvasRect.top };
+      return clampBox(rotatedResizeBox(rotation, handle, anchor, mouse, box, MIN_ZONE_PX));
+    }
+
+    function onMove(ev: MouseEvent) {
+      setDragBox({ index: i, ...compute(ev.clientX, ev.clientY) });
+    }
+    function onUp(ev: MouseEvent) {
+      const next = compute(ev.clientX, ev.clientY);
+      commit(() => updateZone(i, {
+        x: clampPct(next.left / previewSize.width * 100),
+        y: clampPct(next.top / previewSize.height * 100),
+        width: clampPct(next.width / previewSize.width * 100),
+        height: clampPct(next.height / previewSize.height * 100),
+      }));
+      setDragBox(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   const saving = createMut.isPending || updateMut.isPending;
 
   return (
@@ -652,6 +670,7 @@ export default function LayoutsPage() {
                   const isHovered = hoveredZoneId === key;
                   const locked = z.editable === false;
                   const interactive = zoneIsInteractive(z, isSelected);
+                  const rotation = z.rotation ?? 0;
                   const color = ZONE_COLORS[i % ZONE_COLORS.length];
                   return (
                     <Rnd
@@ -660,8 +679,11 @@ export default function LayoutsPage() {
                       minWidth={MIN_ZONE_PX}
                       minHeight={MIN_ZONE_PX}
                       disableDragging={!interactive}
-                      enableResizing={interactive ? undefined : false}
-                      cancel=".rotate-handle"
+                      // react-rnd's own resize handles are anchored to the unrotated box, which no
+                      // longer matches the visible (rotated) shape — once rotated, use the custom
+                      // rotation-aware handles rendered below instead.
+                      enableResizing={interactive && rotation === 0 ? undefined : false}
+                      cancel=".rotate-handle, .resize-handle"
                       size={{ width: box.width, height: box.height }}
                       position={{ x: box.left, y: box.top }}
                       onMouseDown={() => setSelectedZoneId(key)}
@@ -719,6 +741,20 @@ export default function LayoutsPage() {
                             <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: color, transform: 'translateX(-50%)', pointerEvents: 'none' }} />
                           </>
                         )}
+                        {interactive && rotation !== 0 && RESIZE_HANDLES.map(h => (
+                          <div
+                            key={h}
+                            className="resize-handle"
+                            onMouseDown={e => startResizeZone(e, i, h)}
+                            title={t('resizeHint')}
+                            style={{
+                              ...resizeHandleStyle(h),
+                              width: 8, height: 8, borderRadius: 2,
+                              background: color, border: '1.5px solid white',
+                              cursor: RESIZE_HANDLE_AXIS[h].cursor, boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                            }}
+                          />
+                        ))}
                       </div>
                     </Rnd>
                   );
@@ -789,21 +825,7 @@ export default function LayoutsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500">{t('layer.label')}</span>
-                      <div className="flex items-center gap-0.5">
-                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'back'); }} title={t('layer.sendToBack')}
-                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><SendToBack className="w-3.5 h-3.5" /></button>
-                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'backward'); }} title={t('layer.sendBackward')}
-                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsDown className="w-3.5 h-3.5" /></button>
-                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'forward'); }} title={t('layer.bringForward')}
-                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsUp className="w-3.5 h-3.5" /></button>
-                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'front'); }} title={t('layer.bringToFront')}
-                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><BringToFront className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-5 gap-1.5">
+                    <div className="grid grid-cols-6 gap-1.5">
                       {(['x', 'y', 'width', 'height'] as const).map(field => (
                         <div key={field}>
                           <label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 block"
@@ -816,6 +838,15 @@ export default function LayoutsPage() {
                             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                         </div>
                       ))}
+                      <div>
+                        <label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 flex items-center gap-0.5" title={t('zoneLayerTitle')}>
+                          <Layers className="w-2.5 h-2.5" /> {t('layer.label')}
+                        </label>
+                        <input type="number"
+                          value={z.zIndex ?? 0} onChange={e => updateZone(i, { zIndex: parseInt(e.target.value, 10) || 0 })}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                      </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5 flex items-center gap-0.5" title={t('zoneRotationTitle')}>
                           <RotateCw className="w-2.5 h-2.5" /> {t('zoneRotation')}

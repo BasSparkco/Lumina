@@ -80,7 +80,7 @@ export interface PowerRule {
 }
 
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
-export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'ellipse' | 'triangle';
+export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle';
 
 export interface Zone {
   id: string;

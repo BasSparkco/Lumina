@@ -415,7 +415,6 @@ enum ZoneShape {
   rectangle
   rounded
   circle
-  ellipse
   triangle
 }
 

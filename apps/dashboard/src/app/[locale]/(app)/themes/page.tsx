@@ -6,7 +6,7 @@ import { useRef } from 'react';
 import { Rnd } from 'react-rnd';
 import {
   Palette, Plus, Trash2, Pencil, X, Check, Copy, Sparkles, RotateCw, Undo2, Redo2,
-  Lock, LockOpen, BringToFront, SendToBack, ChevronsUp, ChevronsDown,
+  Lock, LockOpen,
 } from 'lucide-react';
 import {
   themesApi, playlistsApi,
@@ -33,29 +33,7 @@ const clampPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 10) / 1
 const CATEGORY_VALUES: ThemeCategory[] = ['RESTAURANT_MENU', 'RETAIL_PROMO', 'HOTEL_LOBBY', 'CLINIC_WAITING', 'MOSQUE', 'GENERIC'];
 const ASPECT_RATIOS = ['16:9', '9:16', '4:3', '1:1'] as const;
 const ELEMENT_KIND_VALUES: ThemeElementKind[] = ['TEXT', 'IMAGE', 'VIDEO', 'PLAYLIST', 'SHAPE', 'WIDGET'];
-const ELEMENT_SHAPES: ElementShape[] = ['rectangle', 'rounded', 'circle', 'ellipse', 'triangle'];
-
-// Re-stacks one element's zIndex relative to its siblings — 'front'/'back' jump past every
-// sibling, 'forward'/'backward' swap with only the nearest neighbor in stacking order.
-function reorderZIndex<T extends { zIndex: number }>(items: T[], index: number, action: 'front' | 'forward' | 'backward' | 'back'): T[] {
-  const z = (it: T) => it.zIndex;
-  const current = z(items[index]!);
-  if (action === 'front' || action === 'back') {
-    const extreme = items.reduce((acc, it, i) => i === index ? acc : (action === 'front' ? Math.max(acc, z(it)) : Math.min(acc, z(it))), current);
-    const next = action === 'front' ? extreme + 1 : extreme - 1;
-    if (next === current) return items;
-    return items.map((it, i) => i === index ? { ...it, zIndex: next } : it);
-  }
-  let neighborIdx = -1;
-  items.forEach((it, i) => {
-    if (i === index) return;
-    if (action === 'forward' && z(it) > current && (neighborIdx === -1 || z(it) < z(items[neighborIdx]!))) neighborIdx = i;
-    if (action === 'backward' && z(it) < current && (neighborIdx === -1 || z(it) > z(items[neighborIdx]!))) neighborIdx = i;
-  });
-  if (neighborIdx === -1) return items;
-  const neighborZ = z(items[neighborIdx]!);
-  return items.map((it, i) => i === index ? { ...it, zIndex: neighborZ } : i === neighborIdx ? { ...it, zIndex: current } : it);
-}
+const ELEMENT_SHAPES: ElementShape[] = ['rectangle', 'rounded', 'circle', 'triangle'];
 const WIDGET_TYPE_VALUES: ThemeWidgetType[] = ['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'];
 const PALETTE_ROLES: (keyof ThemePalette)[] = ['primary', 'secondary', 'background', 'surface', 'text', 'textMuted', 'accent'];
 const PRAYER_METHOD_VALUES = ['UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague', 'NorthAmerica'];
@@ -398,13 +376,6 @@ export default function ThemesPage() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [editing]);
-
-  function moveElementLayer(id: string, action: 'front' | 'forward' | 'backward' | 'back') {
-    commit(() => setElements(prev => {
-      const index = prev.findIndex(el => el.id === id);
-      return index === -1 ? prev : reorderZIndex(prev, index, action);
-    }));
-  }
 
   // A locked element (editable: false) can never be dragged/resized/rotated, regardless of
   // selection or the requireSelectToEdit setting — `editable` used to be set by this UI but
@@ -849,25 +820,13 @@ export default function ThemesPage() {
 
                   {isSelected && (
                   <>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('shape')}</label>
-                      <select value={el.style.shape ?? 'rectangle'}
-                        onChange={e => commit(() => updateElementStyle(el.id, { shape: e.target.value as ElementShape }))}
-                        className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
-                        {ELEMENT_SHAPES.map(s => <option key={s} value={s}>{t(`shapeTypes.${s}`)}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-0.5">
-                      <button type="button" onClick={() => moveElementLayer(el.id, 'back')} title={t('layer.sendToBack')}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><SendToBack className="w-3.5 h-3.5" /></button>
-                      <button type="button" onClick={() => moveElementLayer(el.id, 'backward')} title={t('layer.sendBackward')}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsDown className="w-3.5 h-3.5" /></button>
-                      <button type="button" onClick={() => moveElementLayer(el.id, 'forward')} title={t('layer.bringForward')}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsUp className="w-3.5 h-3.5" /></button>
-                      <button type="button" onClick={() => moveElementLayer(el.id, 'front')} title={t('layer.bringToFront')}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><BringToFront className="w-3.5 h-3.5" /></button>
-                    </div>
+                  <div>
+                    <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('shape')}</label>
+                    <select value={el.style.shape ?? 'rectangle'}
+                      onChange={e => commit(() => updateElementStyle(el.id, { shape: e.target.value as ElementShape }))}
+                      className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
+                      {ELEMENT_SHAPES.map(s => <option key={s} value={s}>{t(`shapeTypes.${s}`)}</option>)}
+                    </select>
                   </div>
                   <div className="grid grid-cols-6 gap-1">
                     {(['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const).map(field => (
