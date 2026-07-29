@@ -2,12 +2,13 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Moon, Sun, SettingsIcon, Clock, Globe, Timer, ShieldQuestion, CalendarDays, Send } from 'lucide-react';
+import { Moon, Sun, SettingsIcon, Clock, Globe, Timer, ShieldQuestion, CalendarDays, Send, MousePointerClick } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useTimeFormat } from '@/hooks/useTimeFormat';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useDefaultItemDuration } from '@/hooks/useDefaultItemDuration';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
+import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
 import { useDateFormat } from '@/hooks/useDateFormat';
 import { usePermissions } from '@/hooks/usePermissions';
 import { orgApi } from '@/lib/api';
@@ -37,6 +38,7 @@ export default function SettingsPage() {
   const { enabled: confirmBeforeDelete, setEnabled: setConfirmBeforeDelete } = useConfirmBeforeDelete();
   const { duration, setDuration } = useDefaultItemDuration();
   const { enabled: faithFeatures, setEnabled: setFaithFeatures } = useFaithFeatures();
+  const { enabled: requireSelectToEdit, setEnabled: setRequireSelectToEdit } = useRequireSelectToEdit();
   const { format: dateFormat, setFormat: setDateFormat } = useDateFormat();
   const { canManageMembers } = usePermissions();
   const locale = useLocale();
@@ -166,6 +168,13 @@ export default function SettingsPage() {
         title={t('confirmBeforeDelete')}
         description={t('confirmBeforeDeleteDesc')}
         control={<Toggle checked={confirmBeforeDelete} onChange={setConfirmBeforeDelete} />}
+      />
+
+      <SettingRow
+        icon={<MousePointerClick className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+        title={t('requireSelectToEdit')}
+        description={t('requireSelectToEditDesc')}
+        control={<Toggle checked={requireSelectToEdit} onChange={setRequireSelectToEdit} />}
       />
     </div>
   );

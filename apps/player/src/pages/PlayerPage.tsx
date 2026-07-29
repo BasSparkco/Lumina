@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
+import { shapeClipStyle } from '@lumina/types';
 import { api, ApiError, type Playlist, type PlayerState, type Zone } from '../lib/api';
 import { cache } from '../lib/db';
 import { connectSocket, disconnectSocket } from '../lib/socket';
@@ -259,6 +260,7 @@ export default function PlayerPage() {
               zIndex: zone.zIndex,
               overflow: 'hidden',
               transform: zone.rotation ? `rotate(${zone.rotation}deg)` : undefined,
+              ...shapeClipStyle(zone.shape),
             }}
           >
             <ZoneRenderer

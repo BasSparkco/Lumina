@@ -40,6 +40,9 @@ export type ThemeElementKind = z.infer<typeof ThemeElementKindSchema>;
 export const ThemeWidgetTypeSchema = z.enum(['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER']);
 export type ThemeWidgetType = z.infer<typeof ThemeWidgetTypeSchema>;
 
+export const ThemeElementShapeSchema = z.enum(['rectangle', 'rounded', 'circle', 'ellipse', 'triangle']);
+export type ThemeElementShape = z.infer<typeof ThemeElementShapeSchema>;
+
 // Style values for color fields accept either a literal CSS color or a "palette.<role>"
 // reference, resolved at render time via resolveThemeColor().
 export const ThemeElementStyleSchema = z.object({
@@ -55,6 +58,10 @@ export const ThemeElementStyleSchema = z.object({
   borderRadius: z.number().min(0).optional(),
   opacity: z.number().min(0).max(1).optional(),
   objectFit: z.enum(['contain', 'cover', 'fill']).optional(),
+  // Clips the element's content to a shape within its (still rectangular) bounding box —
+  // available on every element kind, not just SHAPE. Undefined renders as 'rectangle' (no clip)
+  // — see shapeClipStyle below.
+  shape: ThemeElementShapeSchema.optional(),
 }).default({});
 export type ThemeElementStyle = z.infer<typeof ThemeElementStyleSchema>;
 
@@ -149,4 +156,21 @@ export function resolveThemeColor(value: string | undefined, palette: ThemePalet
     return palette[key] ?? value;
   }
   return value;
+}
+
+/**
+ * CSS clip for a shape within its (still rectangular) bounding box — shared by the dashboard
+ * editors and the player renderer so all three clip content identically. 'circle' and 'ellipse'
+ * use the same border-radius: 50% treatment (a circle is just an ellipse with equal width/height),
+ * kept as separate options only so the picker's intent reads clearly to the person editing.
+ */
+export function shapeClipStyle(shape: ThemeElementShape | undefined): { borderRadius?: string; clipPath?: string } {
+  switch (shape) {
+    case 'rounded': return { borderRadius: '12%' };
+    case 'circle':
+    case 'ellipse': return { borderRadius: '50%' };
+    case 'triangle': return { clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)' };
+    case 'rectangle':
+    default: return {};
+  }
 }

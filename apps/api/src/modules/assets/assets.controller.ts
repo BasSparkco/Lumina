@@ -67,6 +67,13 @@ export class AssetsController {
     });
   }
 
+  @Post(':id/reprocess')
+  reprocess(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.assets.reprocess(user.orgId, id, async (assetId, key, type) => {
+      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type });
+    });
+  }
+
   @Post('text')
   createText(@CurrentUser() user: JwtUser, @Body() dto: CreateTextAssetDto) {
     return this.assets.createText(user.orgId, dto.name, dto.content, {

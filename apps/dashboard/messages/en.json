@@ -239,6 +239,8 @@
     "uploading": "Uploading {progress}%",
     "upload": "Upload",
     "uploadFailed": "Upload failed",
+    "processingFailed": "Processing failed",
+    "retry": "Retry",
     "loading": "Loading assets…",
     "empty": "No assets yet. Upload an image or video to get started.",
     "view": "View",
@@ -372,6 +374,23 @@
     "duplicating": "Duplicating…",
     "undo": "Undo",
     "redo": "Redo",
+    "shape": "Shape",
+    "shapeTypes": {
+      "rectangle": "Rectangle",
+      "rounded": "Rounded rectangle",
+      "circle": "Circle",
+      "ellipse": "Ellipse",
+      "triangle": "Triangle"
+    },
+    "editableHint": "Uncheck to lock this zone in place — dragging, resizing, and rotating are disabled",
+    "lockedHint": "Locked — uncheck \"Editable\" below to unlock",
+    "layer": {
+      "label": "Layer",
+      "bringToFront": "Bring to front",
+      "bringForward": "Bring forward",
+      "sendBackward": "Send backward",
+      "sendToBack": "Send to back"
+    },
     "mediaSource": {
       "label": "Media source",
       "playlist": "Playlist",
@@ -436,10 +455,27 @@
     "addElement": "Add element",
     "elementLabel": "Label",
     "editableShort": "Editable",
-    "editableHint": "Whether org users should be able to edit this element's content",
+    "editableHint": "Uncheck to lock this element in place — dragging, resizing, and rotating are disabled",
+    "lockedHint": "Locked — uncheck \"Editable\" to unlock",
     "editingNow": "Editing",
     "clickToEditHint": "Click this element to edit its position, content, and typography",
-    "shapeHint": "A decorative color block — no content, just a positioned, styled rectangle.",
+    "shapeHint": "No content of its own — just a positioned, styled color block in whatever shape you pick above.",
+    "shape": "Shape",
+    "shapeTypes": {
+      "rectangle": "Rectangle",
+      "rounded": "Rounded rectangle",
+      "circle": "Circle",
+      "ellipse": "Ellipse",
+      "triangle": "Triangle"
+    },
+    "layer": {
+      "bringToFront": "Bring to front",
+      "bringForward": "Bring forward",
+      "sendBackward": "Send backward",
+      "sendToBack": "Send to back"
+    },
+    "undo": "Undo",
+    "redo": "Redo",
     "text": "Text",
     "translationAr": "Arabic translation (optional)",
     "image": "Image asset",
@@ -789,6 +825,8 @@
     "faithFeaturesDesc": "Show the Mosque layout preset and faith/prayer screen settings",
     "autoPublish": "Auto-publish screen changes",
     "autoPublishDesc": "Skip the Publish button — playlist, layout, and other display changes on the Screens page go live the moment they're saved",
-    "autoPublishNoPermission": "Only admins and owners can change this"
+    "autoPublishNoPermission": "Only admins and owners can change this",
+    "requireSelectToEdit": "Require a click to select before editing",
+    "requireSelectToEditDesc": "In the Layouts and Themes editors, click an element once to select it before you can drag, resize, or rotate it — a guard against accidental changes"
   }
 }

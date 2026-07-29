@@ -30,10 +30,12 @@ export {
   ThemeTypographySchema,
   ThemeElementKindSchema,
   ThemeWidgetTypeSchema,
+  ThemeElementShapeSchema,
   ThemeElementStyleSchema,
   ThemeElementSchema,
   ThemeSchema,
   ThemeInputSchema,
   resolveThemeColor,
+  shapeClipStyle,
 } from './theme';
 export { FONT_LIBRARY, FONT_IDS, DEFAULT_FONT_ID, fontStack } from './fonts';

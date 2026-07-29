@@ -409,6 +409,16 @@ enum ZoneType {
   TICKER
 }
 
+// Clips a zone's rendered content to a shape within its (still rectangular) bounding box —
+// mirrors ThemeElementShape in packages/types/src/theme.ts.
+enum ZoneShape {
+  rectangle
+  rounded
+  circle
+  ellipse
+  triangle
+}
+
 model Zone {
   id           String   @id @default(cuid())
   name         String
@@ -421,6 +431,11 @@ model Zone {
   // layouts. Purely visual: x/y/width/height still describe the zone's unrotated bounding box.
   rotation     Float    @default(0)
   zoneType     ZoneType @default(MEDIA)
+  shape        ZoneShape @default(rectangle)
+  // Locks the zone in the editor canvas — false disables drag/resize/rotate regardless of
+  // selection state or the "click to select before editing" setting. Purely an editor-side
+  // guard rail; has no effect on player rendering.
+  editable     Boolean  @default(true)
   widgetConfig Json?    // type-specific config (prayer method override, RSS URL, etc.)
   // Audio balancing across zones in the same layout — both null/false by default, meaning every
   // zone's own audio (if any) just plays at the screen's global volume simultaneously.

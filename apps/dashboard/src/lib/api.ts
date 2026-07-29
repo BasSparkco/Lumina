@@ -113,6 +113,7 @@ export const assetsApi = {
   setAudioEnabled: (id: string, audioEnabled: boolean) =>
     req<Asset>(`/assets/${id}/audio`, { method: 'PUT', body: JSON.stringify({ audioEnabled }) }),
   remove: (id: string) => req<void>(`/assets/${id}`, { method: 'DELETE' }),
+  reprocess: (id: string) => req<Asset>(`/assets/${id}/reprocess`, { method: 'POST' }),
   createText: (name: string, content: string, style: TextStyle) =>
     req<Asset>('/assets/text', { method: 'POST', body: JSON.stringify({ name, content, ...style }) }),
   updateText: (id: string, dto: { name?: string; content?: string } & Partial<TextStyle>) =>
@@ -213,6 +214,7 @@ export const realScreenGroupsApi = {
 
 // ── Types ───────────────────────────────────────────────────────────────────
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'ellipse' | 'triangle';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
@@ -221,6 +223,10 @@ export interface ZoneInput {
   // Degrees, clockwise, about the zone's own center.
   rotation?: number;
   zoneType?: ZoneType;
+  shape?: ElementShape;
+  // Locks the zone in the editor canvas — false disables drag/resize/rotate regardless of
+  // selection state or the click-to-select-to-edit setting.
+  editable?: boolean;
   widgetConfig?: Record<string, unknown>;
   // Mutually exclusive — a MEDIA zone plays either a playlist or a single asset, never both.
   playlistId?: string; assetId?: string;
@@ -308,6 +314,9 @@ export interface ThemeElementStyle {
   fontSizePx?: number; fontWeight?: number | string; textAlign?: 'left' | 'center' | 'right';
   direction?: 'ltr' | 'rtl' | 'auto'; borderRadius?: number; opacity?: number;
   objectFit?: 'contain' | 'cover' | 'fill';
+  // Clips the element's content to a shape within its (still rectangular) bounding box —
+  // available on every element kind, not just SHAPE.
+  shape?: ElementShape;
 }
 interface ThemeElementBase {
   id: string; x: number; y: number; width: number; height: number; zIndex: number;

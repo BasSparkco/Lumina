@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check } from 'lucide-react';
+import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle } from 'lucide-react';
 import { assetsApi, type Asset, type TextSize, type AssetCategory } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
@@ -198,6 +198,12 @@ export default function AssetsPage() {
     onError: (e: Error) => setDeleteError(e.message),
   });
 
+  const reprocessMut = useMutation({
+    mutationFn: (asset: Asset) => assetsApi.reprocess(asset.id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['assets'] }),
+    onError: (e: Error) => setUploadError(e.message),
+  });
+
   const audioMut = useMutation({
     mutationFn: ({ id, audioEnabled }: { id: string; audioEnabled: boolean }) => assetsApi.setAudioEnabled(id, audioEnabled),
     onSuccess: (updated) => {
@@ -317,38 +323,54 @@ export default function AssetsPage() {
         {assets.map((asset: Asset) => (
           <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden group">
             {/* Thumbnail — click to view full size (images) or edit (text) */}
-            <button
-              onClick={() => { if (asset.thumbnailUrl) setViewingId(asset.id); else if (asset.type === 'TEXT' && canEditContent) setTextModal(asset); }}
-              disabled={!asset.thumbnailUrl && !(asset.type === 'TEXT' && canEditContent)}
-              className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center disabled:cursor-default">
-              {asset.thumbnailUrl ? (
-                <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
-              ) : asset.type === 'TEXT' ? (
-                <p
-                  style={{
-                    color: asset.textColor ?? '#fff',
-                    fontFamily: fontStack(asset.textFontFamily),
-                    background: asset.textBackgroundColor ?? '#000',
-                  }}
-                  className="w-full h-full px-3 py-2 text-xs overflow-hidden text-center flex items-center justify-center whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
-                  {asset.textContent}
-                </p>
-              ) : (
-                <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
-              )}
+            <div className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+              <button
+                onClick={() => { if (asset.thumbnailUrl) setViewingId(asset.id); else if (asset.type === 'TEXT' && canEditContent) setTextModal(asset); }}
+                disabled={!asset.thumbnailUrl && !(asset.type === 'TEXT' && canEditContent)}
+                className="absolute inset-0 w-full h-full flex items-center justify-center disabled:cursor-default">
+                {asset.thumbnailUrl ? (
+                  <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+                ) : asset.type === 'TEXT' ? (
+                  <p
+                    style={{
+                      color: asset.textColor ?? '#fff',
+                      fontFamily: fontStack(asset.textFontFamily),
+                      background: asset.textBackgroundColor ?? '#000',
+                    }}
+                    className="w-full h-full px-3 py-2 text-xs overflow-hidden text-center flex items-center justify-center whitespace-pre-wrap [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
+                    {asset.textContent}
+                  </p>
+                ) : (
+                  <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
+                )}
+                {(asset.thumbnailUrl || (asset.type === 'TEXT' && canEditContent)) && (
+                  <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
+                    <span className="flex items-center gap-1.5 text-white text-xs font-medium">
+                      {asset.thumbnailUrl ? <><Maximize2 className="w-3.5 h-3.5" /> {t('view')}</> : <><Pencil className="w-3.5 h-3.5" /> {tc('edit')}</>}
+                    </span>
+                  </div>
+                )}
+              </button>
               {asset.status === 'PROCESSING' && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
                   <RefreshCw className="w-5 h-5 text-white animate-spin" />
                 </div>
               )}
-              {(asset.thumbnailUrl || (asset.type === 'TEXT' && canEditContent)) && (
-                <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
-                  <span className="flex items-center gap-1.5 text-white text-xs font-medium">
-                    {asset.thumbnailUrl ? <><Maximize2 className="w-3.5 h-3.5" /> {t('view')}</> : <><Pencil className="w-3.5 h-3.5" /> {tc('edit')}</>}
-                  </span>
+              {asset.status === 'ERROR' && (
+                <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1.5 text-white">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span className="text-[11px] font-medium">{t('processingFailed')}</span>
+                  {canEditContent && (
+                    <button
+                      onClick={() => reprocessMut.mutate(asset)}
+                      disabled={reprocessMut.isPending && reprocessMut.variables?.id === asset.id}
+                      className="flex items-center gap-1 text-[11px] bg-white/15 hover:bg-white/25 rounded px-2 py-0.5 disabled:opacity-50">
+                      <RefreshCw className={`w-3 h-3 ${reprocessMut.isPending && reprocessMut.variables?.id === asset.id ? 'animate-spin' : ''}`} /> {t('retry')}
+                    </button>
+                  )}
                 </div>
               )}
-            </button>
+            </div>
             <div className="p-3">
               <div className="flex items-start justify-between gap-1">
                 <div className="min-w-0 flex-1">

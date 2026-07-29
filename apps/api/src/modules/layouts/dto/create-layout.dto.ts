@@ -2,6 +2,7 @@ import { IsString, IsArray, ValidateNested, IsNumber, IsOptional, IsIn, IsObject
 import { Type } from 'class-transformer';
 
 const ZONE_TYPES = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'] as const;
+const ZONE_SHAPES = ['rectangle', 'rounded', 'circle', 'ellipse', 'triangle'] as const;
 
 export class ZoneDto {
   @IsString() name!: string;
@@ -13,6 +14,9 @@ export class ZoneDto {
   // Degrees, clockwise, about the zone's own center — free rotation, not just 90° steps.
   @IsNumber() @Min(-360) @Max(360) @IsOptional() rotation?: number;
   @IsIn(ZONE_TYPES) @IsOptional() zoneType?: typeof ZONE_TYPES[number];
+  @IsIn(ZONE_SHAPES) @IsOptional() shape?: typeof ZONE_SHAPES[number];
+  // Locks the zone in the editor canvas — see the matching Prisma column comment.
+  @IsBoolean() @IsOptional() editable?: boolean;
   @IsObject() @IsOptional() widgetConfig?: Record<string, unknown>;
   // Mutually exclusive — a MEDIA zone plays either a playlist or a single asset, never both
   // (enforced in LayoutsService, not here, since it needs a DB lookup either way).

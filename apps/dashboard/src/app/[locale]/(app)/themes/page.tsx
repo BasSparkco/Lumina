@@ -1,22 +1,26 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { useRef } from 'react';
 import { Rnd } from 'react-rnd';
-import { Palette, Plus, Trash2, Pencil, X, Check, Copy, Sparkles, RotateCw } from 'lucide-react';
+import {
+  Palette, Plus, Trash2, Pencil, X, Check, Copy, Sparkles, RotateCw, Undo2, Redo2,
+  Lock, LockOpen, BringToFront, SendToBack, ChevronsUp, ChevronsDown,
+} from 'lucide-react';
 import {
   themesApi, playlistsApi,
   type Theme, type ThemeInput, type ThemeElement, type ThemeElementKind, type ThemeElementStyle,
-  type ThemeCategory, type ThemePalette, type ThemeTypography, type ThemeWidgetType,
+  type ThemeCategory, type ThemePalette, type ThemeTypography, type ThemeWidgetType, type ElementShape,
 } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
+import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { AssetPicker } from '@/components/AssetPicker';
 import { FontPicker, fontStack } from '@/components/FontPicker';
-import { DEFAULT_FONT_ID } from '@lumina/types';
+import { DEFAULT_FONT_ID, shapeClipStyle } from '@lumina/types';
 
 const PREVIEW_W = 640;
 const PREVIEW_H = 360;
@@ -29,6 +33,29 @@ const clampPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 10) / 1
 const CATEGORY_VALUES: ThemeCategory[] = ['RESTAURANT_MENU', 'RETAIL_PROMO', 'HOTEL_LOBBY', 'CLINIC_WAITING', 'MOSQUE', 'GENERIC'];
 const ASPECT_RATIOS = ['16:9', '9:16', '4:3', '1:1'] as const;
 const ELEMENT_KIND_VALUES: ThemeElementKind[] = ['TEXT', 'IMAGE', 'VIDEO', 'PLAYLIST', 'SHAPE', 'WIDGET'];
+const ELEMENT_SHAPES: ElementShape[] = ['rectangle', 'rounded', 'circle', 'ellipse', 'triangle'];
+
+// Re-stacks one element's zIndex relative to its siblings — 'front'/'back' jump past every
+// sibling, 'forward'/'backward' swap with only the nearest neighbor in stacking order.
+function reorderZIndex<T extends { zIndex: number }>(items: T[], index: number, action: 'front' | 'forward' | 'backward' | 'back'): T[] {
+  const z = (it: T) => it.zIndex;
+  const current = z(items[index]!);
+  if (action === 'front' || action === 'back') {
+    const extreme = items.reduce((acc, it, i) => i === index ? acc : (action === 'front' ? Math.max(acc, z(it)) : Math.min(acc, z(it))), current);
+    const next = action === 'front' ? extreme + 1 : extreme - 1;
+    if (next === current) return items;
+    return items.map((it, i) => i === index ? { ...it, zIndex: next } : it);
+  }
+  let neighborIdx = -1;
+  items.forEach((it, i) => {
+    if (i === index) return;
+    if (action === 'forward' && z(it) > current && (neighborIdx === -1 || z(it) < z(items[neighborIdx]!))) neighborIdx = i;
+    if (action === 'backward' && z(it) < current && (neighborIdx === -1 || z(it) > z(items[neighborIdx]!))) neighborIdx = i;
+  });
+  if (neighborIdx === -1) return items;
+  const neighborZ = z(items[neighborIdx]!);
+  return items.map((it, i) => i === index ? { ...it, zIndex: neighborZ } : i === neighborIdx ? { ...it, zIndex: current } : it);
+}
 const WIDGET_TYPE_VALUES: ThemeWidgetType[] = ['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'];
 const PALETTE_ROLES: (keyof ThemePalette)[] = ['primary', 'secondary', 'background', 'surface', 'text', 'textMuted', 'accent'];
 const PRAYER_METHOD_VALUES = ['UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague', 'NorthAmerica'];
@@ -163,7 +190,14 @@ function CopyHexButton({ value }: { value: string }) {
   );
 }
 
-function ColorField({ label, value, onChange }: { label: string; value: string | undefined; onChange: (v: string | undefined) => void }) {
+interface ColorFieldProps {
+  label: string; value: string | undefined; onChange: (v: string | undefined) => void;
+  // Brackets the raw color-picker drag into a single undo step (like every other continuous
+  // input in this editor) — the select below is a one-shot discrete pick, so its own onChange
+  // is left for the caller to wrap in commit() instead.
+  onFocusField?: () => void; onBlurField?: () => void;
+}
+function ColorField({ label, value, onChange, onFocusField, onBlurField }: ColorFieldProps) {
   const isPaletteRef = value?.startsWith('palette.') ?? false;
   return (
     <div>
@@ -184,7 +218,10 @@ function ColorField({ label, value, onChange }: { label: string; value: string |
         </select>
         {!isPaletteRef && value && (
           <>
-            <input type="color" value={value} onChange={e => onChange(e.target.value)} className="w-7 h-7 shrink-0 border border-gray-200 dark:border-gray-700 rounded cursor-pointer" />
+            <input type="color" value={value}
+              onFocus={onFocusField} onBlur={onBlurField}
+              onChange={e => onChange(e.target.value)}
+              className="w-7 h-7 shrink-0 border border-gray-200 dark:border-gray-700 rounded cursor-pointer" />
             <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500 shrink-0">{value}</span>
             <CopyHexButton value={value} />
           </>
@@ -297,6 +334,85 @@ export default function ThemesPage() {
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
+  const { enabled: requireSelectToEdit } = useRequireSelectToEdit();
+
+  // Undo/redo — scoped to the current edit session, reset whenever a different theme (or a
+  // new one) is opened. Mirrors the layouts editor's history mechanism (see its comment for
+  // why full snapshots rather than diffs).
+  interface EditorSnapshot { name: string; category: ThemeCategory; aspectRatio: string; palette: ThemePalette; typography: ThemeTypography; elements: ThemeElement[]; }
+  const [history, setHistory] = useState<{ past: EditorSnapshot[]; future: EditorSnapshot[] }>({ past: [], future: [] });
+  const pendingCaptureRef = useRef<EditorSnapshot | null>(null);
+
+  useEffect(() => {
+    setHistory({ past: [], future: [] });
+    pendingCaptureRef.current = null;
+  }, [editing]);
+
+  function snapshot(): EditorSnapshot { return { name, category, aspectRatio, palette, typography, elements }; }
+  function applySnapshot(s: EditorSnapshot) {
+    setName(s.name); setCategory(s.category); setAspectRatio(s.aspectRatio);
+    setPalette(s.palette); setTypography(s.typography); setElements(s.elements);
+  }
+  function captureForHistory() {
+    if (pendingCaptureRef.current === null) pendingCaptureRef.current = snapshot();
+  }
+  function commitCaptured() {
+    const captured = pendingCaptureRef.current;
+    pendingCaptureRef.current = null;
+    if (!captured) return;
+    setHistory(h => ({ past: [...h.past, captured], future: [] }));
+  }
+  function commit(mutator: () => void) {
+    captureForHistory();
+    mutator();
+    commitCaptured();
+  }
+  function undo() {
+    const previous = history.past[history.past.length - 1];
+    if (!previous) return;
+    setHistory({ past: history.past.slice(0, -1), future: [snapshot(), ...history.future] });
+    applySnapshot(previous);
+  }
+  function redo() {
+    const next = history.future[0];
+    if (!next) return;
+    setHistory({ past: [...history.past, snapshot()], future: history.future.slice(1) });
+    applySnapshot(next);
+  }
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  undoRef.current = undo;
+  redoRef.current = redo;
+
+  useEffect(() => {
+    if (!editing) return;
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoRef.current(); else undoRef.current();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editing]);
+
+  function moveElementLayer(id: string, action: 'front' | 'forward' | 'backward' | 'back') {
+    commit(() => setElements(prev => {
+      const index = prev.findIndex(el => el.id === id);
+      return index === -1 ? prev : reorderZIndex(prev, index, action);
+    }));
+  }
+
+  // A locked element (editable: false) can never be dragged/resized/rotated, regardless of
+  // selection or the requireSelectToEdit setting — `editable` used to be set by this UI but
+  // never actually gated anything in the canvas (see roadmap).
+  function elementIsInteractive(el: ThemeElement, isSelected: boolean) {
+    if (el.editable === false) return false;
+    return !requireSelectToEdit || isSelected;
+  }
 
   function openNew() {
     const blank = blankTheme();
@@ -408,6 +524,7 @@ export default function ThemesPage() {
     e.preventDefault();
     e.stopPropagation();
     setSelectedElementId(el.id);
+    captureForHistory();
     const canvas = canvasRef.current;
     if (!canvas) return;
     const canvasRect = canvas.getBoundingClientRect();
@@ -429,6 +546,7 @@ export default function ThemesPage() {
     }
     function onUp(ev: MouseEvent) {
       updateElement(el.id, { rotation: angleFor(ev.clientX, ev.clientY) });
+      commitCaptured();
       setRotationDrag(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
@@ -438,10 +556,10 @@ export default function ThemesPage() {
   }
 
   function addElement() {
-    setElements(prev => [...prev, { id: newElementId(), kind: 'TEXT', x: 20, y: 20, width: 40, height: 15, zIndex: prev.length, rotation: 0, editable: true, style: { color: 'palette.text' }, content: { text: 'New text' } }]);
+    commit(() => setElements(prev => [...prev, { id: newElementId(), kind: 'TEXT', x: 20, y: 20, width: 40, height: 15, zIndex: prev.length, rotation: 0, editable: true, style: { color: 'palette.text' }, content: { text: 'New text' } }]));
   }
   function removeElement(id: string) {
-    setElements(prev => prev.filter(el => el.id !== id));
+    commit(() => setElements(prev => prev.filter(el => el.id !== id)));
   }
 
   const saving = createMut.isPending || updateMut.isPending;
@@ -456,6 +574,7 @@ export default function ThemesPage() {
           background: bg, border: `1px solid ${border}`, borderRadius: el.style.borderRadius, overflow: 'hidden',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 2,
           transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+          ...shapeClipStyle(el.style.shape),
         }}>
           {el.kind === 'TEXT' && (
             <span style={{
@@ -495,14 +614,15 @@ export default function ThemesPage() {
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-8 shadow-sm">
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <input value={name} onChange={e => setName(e.target.value)}
+              onFocus={captureForHistory} onBlur={commitCaptured}
               className="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-indigo-500 focus:outline-none bg-transparent w-64"
               placeholder={t('themeName')} />
             <div className="flex gap-2 flex-wrap items-center">
-              <select value={category} onChange={e => setCategory(e.target.value as ThemeCategory)}
+              <select value={category} onChange={e => commit(() => setCategory(e.target.value as ThemeCategory))}
                 className="text-xs border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1.5 focus:outline-none">
                 {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
               </select>
-              <select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)}
+              <select value={aspectRatio} onChange={e => commit(() => setAspectRatio(e.target.value))}
                 className="text-xs border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1.5 focus:outline-none">
                 {ASPECT_RATIOS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -520,6 +640,8 @@ export default function ThemesPage() {
                   style={{ width: PREVIEW_W, height: PREVIEW_H, background: palette.background, position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
                   {elements.map((el) => {
                     const isSelected = el.id === selectedElementId;
+                    const isHovered = el.id === hoveredElementId;
+                    const interactive = elementIsInteractive(el, isSelected);
                     const rect = dragRect && dragRect.id === el.id
                       ? dragRect
                       : { x: (el.x / 100) * PREVIEW_W, y: (el.y / 100) * PREVIEW_H, width: (el.width / 100) * PREVIEW_W, height: (el.height / 100) * PREVIEW_H };
@@ -530,13 +652,13 @@ export default function ThemesPage() {
                         bounds="parent"
                         minWidth={16}
                         minHeight={16}
-                        disableDragging={!isSelected}
-                        enableResizing={isSelected ? undefined : false}
+                        disableDragging={!interactive}
+                        enableResizing={interactive ? undefined : false}
                         cancel=".rotate-handle"
                         size={{ width: rect.width, height: rect.height }}
                         position={{ x: rect.x, y: rect.y }}
                         onMouseDown={() => setSelectedElementId(el.id)}
-                        onDragStart={() => setSelectedElementId(el.id)}
+                        onDragStart={() => { setSelectedElementId(el.id); captureForHistory(); }}
                         onDrag={(_e, d) => {
                           const snapped = computeSnap({ x: d.x, y: d.y, width: rect.width, height: rect.height }, el.id, elements, PREVIEW_W, PREVIEW_H, 'drag');
                           setDragRect({ id: el.id, ...snapped.rect });
@@ -545,9 +667,11 @@ export default function ThemesPage() {
                         onDragStop={(_e, d) => {
                           const snapped = computeSnap({ x: d.x, y: d.y, width: rect.width, height: rect.height }, el.id, elements, PREVIEW_W, PREVIEW_H, 'drag');
                           updateElement(el.id, { x: clampPct(snapped.rect.x / PREVIEW_W * 100), y: clampPct(snapped.rect.y / PREVIEW_H * 100) });
+                          commitCaptured();
                           setDragRect(null);
                           setGuides({ v: [], h: [] });
                         }}
+                        onResizeStart={() => captureForHistory()}
                         onResize={(_e, _dir, ref, _delta, position) => {
                           const w = parseFloat(ref.style.width);
                           const h = parseFloat(ref.style.height);
@@ -565,6 +689,7 @@ export default function ThemesPage() {
                             x: clampPct(snapped.rect.x / PREVIEW_W * 100),
                             y: clampPct(snapped.rect.y / PREVIEW_H * 100),
                           });
+                          commitCaptured();
                           setDragRect(null);
                           setGuides({ v: [], h: [] });
                         }}
@@ -572,36 +697,55 @@ export default function ThemesPage() {
                         {/* react-rnd/react-draggable owns the root node's own `transform` (it uses
                             translate() there for positioning) and will clobber a `rotate()` set
                             alongside it — so rotation lives on this separate inner wrapper instead. */}
-                        <div style={{
-                          width: '100%', height: '100%', position: 'relative',
-                          background: el.kind === 'SHAPE' ? (resolveColor(el.style.backgroundColor, palette) ?? KIND_COLORS.SHAPE + '55') : KIND_COLORS[el.kind] + '33',
-                          border: isSelected ? `2px solid ${KIND_COLORS[el.kind]}` : `1px dashed ${KIND_COLORS[el.kind]}99`,
-                          boxShadow: isSelected ? `0 0 0 2px ${KIND_COLORS[el.kind]}55` : undefined,
-                          cursor: isSelected ? 'move' : 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2,
-                          transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
-                        }}>
-                          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+                        <div
+                          onMouseEnter={() => setHoveredElementId(el.id)}
+                          onMouseLeave={() => setHoveredElementId(id => id === el.id ? null : id)}
+                          style={{
+                            width: '100%', height: '100%', position: 'relative',
+                            cursor: isSelected ? 'move' : 'pointer',
+                            transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
+                          }}>
+                          {/* Shape-clipped fill — the true rectangular bounding box only shows on
+                              hover/select (below), since a circle/triangle shape would otherwise
+                              look like it has an invisible rectangular halo. */}
+                          <div style={{
+                            position: 'absolute', inset: 0,
+                            background: el.kind === 'SHAPE' ? (resolveColor(el.style.backgroundColor, palette) ?? KIND_COLORS.SHAPE + '55') : KIND_COLORS[el.kind] + '33',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden',
+                            ...shapeClipStyle(el.style.shape),
+                          }}>
                             <span style={{ fontSize: 9, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff', fontWeight: 600, textAlign: 'center', padding: '0 2px' }}>
                               {el.label || (el.kind === 'TEXT' ? el.content.text : el.kind)}
                             </span>
                             <span style={{ opacity: 0.7, fontSize: 8, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff' }}>{t(`elementKinds.${el.kind}`)}</span>
                           </div>
-                          {isSelected && (
-                            <div
-                              className="rotate-handle"
-                              onMouseDown={e => startRotate(e, el)}
-                              title={t('rotateHint')}
-                              style={{
-                                position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
-                                width: 14, height: 14, borderRadius: '50%',
-                                background: KIND_COLORS[el.kind], border: '2px solid white',
-                                cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                              }}
-                            />
+                          {(isHovered || isSelected) && (
+                            <div style={{
+                              position: 'absolute', inset: 0, pointerEvents: 'none',
+                              border: isSelected ? `2px solid ${KIND_COLORS[el.kind]}` : `1px dashed ${KIND_COLORS[el.kind]}99`,
+                              boxShadow: isSelected ? `0 0 0 2px ${KIND_COLORS[el.kind]}55` : undefined,
+                            }} />
                           )}
-                          {isSelected && (
-                            <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: KIND_COLORS[el.kind], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                          {el.editable === false && (
+                            <div title={t('lockedHint')} style={{ position: 'absolute', top: 3, insetInlineStart: 3, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 2, lineHeight: 0 }}>
+                              <Lock className="w-2.5 h-2.5" />
+                            </div>
+                          )}
+                          {interactive && (
+                            <>
+                              <div
+                                className="rotate-handle"
+                                onMouseDown={e => startRotate(e, el)}
+                                title={t('rotateHint')}
+                                style={{
+                                  position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
+                                  width: 14, height: 14, borderRadius: '50%',
+                                  background: KIND_COLORS[el.kind], border: '2px solid white',
+                                  cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                                }}
+                              />
+                              <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: KIND_COLORS[el.kind], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                            </>
                           )}
                         </div>
                       </Rnd>
@@ -623,7 +767,10 @@ export default function ThemesPage() {
                     <div key={role}>
                       <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5 truncate" title={t(`paletteRoles.${role}`)}>{t(`paletteRoles.${role}`)}</label>
                       <div className="flex items-center gap-1">
-                        <input type="color" value={palette[role]} onChange={e => setPalette(prev => ({ ...prev, [role]: e.target.value }))}
+                        <input type="color" value={palette[role]}
+                          onFocus={captureForHistory}
+                          onChange={e => setPalette(prev => ({ ...prev, [role]: e.target.value }))}
+                          onBlur={commitCaptured}
                           className="flex-1 min-w-0 h-7 border border-gray-200 dark:border-gray-700 rounded cursor-pointer" />
                         <CopyHexButton value={palette[role]} />
                       </div>
@@ -637,20 +784,24 @@ export default function ThemesPage() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('headingFont')}</label>
-                    <FontPicker value={typography.headingFont} onChange={f => setTypography(prev => ({ ...prev, headingFont: f }))} />
+                    <FontPicker value={typography.headingFont} onChange={f => commit(() => setTypography(prev => ({ ...prev, headingFont: f })))} />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('bodyFont')}</label>
-                    <FontPicker value={typography.bodyFont} onChange={f => setTypography(prev => ({ ...prev, bodyFont: f }))} />
+                    <FontPicker value={typography.bodyFont} onChange={f => commit(() => setTypography(prev => ({ ...prev, bodyFont: f })))} />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('baseSize')}</label>
-                    <input type="number" min={8} max={64} value={typography.baseSizePx} onChange={e => setTypography(prev => ({ ...prev, baseSizePx: parseInt(e.target.value, 10) || 16 }))}
+                    <input type="number" min={8} max={64} value={typography.baseSizePx}
+                      onFocus={captureForHistory} onBlur={commitCaptured}
+                      onChange={e => setTypography(prev => ({ ...prev, baseSizePx: parseInt(e.target.value, 10) || 16 }))}
                       className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none" />
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('scale')}</label>
-                    <input type="number" step={0.05} min={1} max={2} value={typography.scale} onChange={e => setTypography(prev => ({ ...prev, scale: parseFloat(e.target.value) || 1.25 }))}
+                    <input type="number" step={0.05} min={1} max={2} value={typography.scale}
+                      onFocus={captureForHistory} onBlur={commitCaptured}
+                      onChange={e => setTypography(prev => ({ ...prev, scale: parseFloat(e.target.value) || 1.25 }))}
                       className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none" />
                   </div>
                 </div>
@@ -672,20 +823,22 @@ export default function ThemesPage() {
                   }`}>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ background: KIND_COLORS[el.kind] }} />
-                    <input value={el.label ?? ''} onChange={e => updateElement(el.id, { label: e.target.value })} placeholder={t('elementLabel')}
+                    <input value={el.label ?? ''} onChange={e => updateElement(el.id, { label: e.target.value })}
+                      onFocus={captureForHistory} onBlur={commitCaptured}
+                      placeholder={t('elementLabel')}
                       className="flex-1 min-w-0 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
                     {isSelected && (
                       <span className="flex items-center gap-1 text-[9px] font-medium text-indigo-600 dark:text-indigo-400 shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> {t('editingNow')}
                       </span>
                     )}
-                    <select value={el.kind} onChange={e => updateElementKind(el.id, e.target.value as ThemeElementKind)}
+                    <select value={el.kind} onChange={e => commit(() => updateElementKind(el.id, e.target.value as ThemeElementKind))}
                       className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
                       {ELEMENT_KIND_VALUES.map(k => <option key={k} value={k}>{t(`elementKinds.${k}`)}</option>)}
                     </select>
                     <label className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 shrink-0" title={t('editableHint')}>
-                      <input type="checkbox" checked={el.editable} onChange={e => updateElement(el.id, { editable: e.target.checked })} />
-                      {t('editableShort')}
+                      <input type="checkbox" checked={el.editable} onChange={e => commit(() => updateElement(el.id, { editable: e.target.checked }))} />
+                      {el.editable ? <LockOpen className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                     </label>
                     <button onClick={e => { e.stopPropagation(); removeElement(el.id); }} className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0"><X className="w-3.5 h-3.5" /></button>
                   </div>
@@ -696,6 +849,26 @@ export default function ThemesPage() {
 
                   {isSelected && (
                   <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('shape')}</label>
+                      <select value={el.style.shape ?? 'rectangle'}
+                        onChange={e => commit(() => updateElementStyle(el.id, { shape: e.target.value as ElementShape }))}
+                        className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
+                        {ELEMENT_SHAPES.map(s => <option key={s} value={s}>{t(`shapeTypes.${s}`)}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      <button type="button" onClick={() => moveElementLayer(el.id, 'back')} title={t('layer.sendToBack')}
+                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><SendToBack className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => moveElementLayer(el.id, 'backward')} title={t('layer.sendBackward')}
+                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsDown className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => moveElementLayer(el.id, 'forward')} title={t('layer.bringForward')}
+                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsUp className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => moveElementLayer(el.id, 'front')} title={t('layer.bringToFront')}
+                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><BringToFront className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-6 gap-1">
                     {(['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const).map(field => (
                       <div key={field}>
@@ -705,7 +878,9 @@ export default function ThemesPage() {
                         <input type="number"
                           min={field === 'zIndex' ? undefined : field === 'rotation' ? -360 : 0}
                           max={field === 'zIndex' ? undefined : field === 'rotation' ? 360 : 100}
-                          value={el[field]} onChange={e => updateElement(el.id, { [field]: field === 'zIndex' || field === 'rotation' ? parseInt(e.target.value, 10) || 0 : parseFloat(e.target.value) || 0 })}
+                          value={el[field]}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          onChange={e => updateElement(el.id, { [field]: field === 'zIndex' || field === 'rotation' ? parseInt(e.target.value, 10) || 0 : parseFloat(e.target.value) || 0 })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                     ))}
@@ -717,12 +892,16 @@ export default function ThemesPage() {
                       <div className="space-y-1.5">
                         <div>
                           <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('text')}</label>
-                          <input value={el.content.text} onChange={e => updateElementContent(el.id, { text: e.target.value })}
+                          <input value={el.content.text}
+                            onFocus={captureForHistory} onBlur={commitCaptured}
+                            onChange={e => updateElementContent(el.id, { text: e.target.value })}
                             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none" />
                         </div>
                         <div>
                           <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('translationAr')}</label>
-                          <input dir="rtl" value={el.content.translations?.ar ?? ''} onChange={e => updateElementContent(el.id, { translations: { ...el.content.translations, ar: e.target.value } })}
+                          <input dir="rtl" value={el.content.translations?.ar ?? ''}
+                            onFocus={captureForHistory} onBlur={commitCaptured}
+                            onChange={e => updateElementContent(el.id, { translations: { ...el.content.translations, ar: e.target.value } })}
                             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none" />
                         </div>
                       </div>
@@ -731,20 +910,20 @@ export default function ThemesPage() {
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('image')}</label>
                         <AssetPicker types={['IMAGE']} value={el.content.assetId} placeholder={t('noAsset')}
-                          onChange={assetId => updateElementContent(el.id, { assetId })} />
+                          onChange={assetId => commit(() => updateElementContent(el.id, { assetId }))} />
                       </div>
                     )}
                     {el.kind === 'VIDEO' && (
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('video')}</label>
                         <AssetPicker types={['VIDEO']} value={el.content.assetId} placeholder={t('noAsset')}
-                          onChange={assetId => updateElementContent(el.id, { assetId })} />
+                          onChange={assetId => commit(() => updateElementContent(el.id, { assetId }))} />
                       </div>
                     )}
                     {el.kind === 'PLAYLIST' && (
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('playlistContent')}</label>
-                        <select value={el.content.playlistId ?? ''} onChange={e => updateElementContent(el.id, { playlistId: e.target.value || null })}
+                        <select value={el.content.playlistId ?? ''} onChange={e => commit(() => updateElementContent(el.id, { playlistId: e.target.value || null }))}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
                           <option value="">{t('noPlaylist')}</option>
                           {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -758,12 +937,12 @@ export default function ThemesPage() {
                       <div className="space-y-1.5">
                         <div>
                           <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('widgetType')}</label>
-                          <select value={el.content.widgetType} onChange={e => updateElementContent(el.id, { widgetType: e.target.value as ThemeWidgetType, widgetConfig: {} })}
+                          <select value={el.content.widgetType} onChange={e => commit(() => updateElementContent(el.id, { widgetType: e.target.value as ThemeWidgetType, widgetConfig: {} }))}
                             className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
                             {WIDGET_TYPE_VALUES.map(w => <option key={w} value={w}>{t(`widgetTypes.${w}`)}</option>)}
                           </select>
                         </div>
-                        <WidgetConfigFields widgetType={el.content.widgetType} config={el.content.widgetConfig} onChange={cfg => updateElementContent(el.id, { widgetConfig: cfg })} />
+                        <WidgetConfigFields widgetType={el.content.widgetType} config={el.content.widgetConfig} onChange={cfg => commit(() => updateElementContent(el.id, { widgetConfig: cfg }))} />
                       </div>
                     )}
                   </div>
@@ -771,36 +950,40 @@ export default function ThemesPage() {
                   {/* Style — only fields the player renderer actually consumes for this kind */}
                   {el.kind === 'TEXT' && (
                     <div className="grid grid-cols-3 gap-2">
-                      <ColorField label={t('color')} value={el.style.color} onChange={v => updateElementStyle(el.id, { color: v })} />
+                      <ColorField label={t('color')} value={el.style.color}
+                        onFocusField={captureForHistory} onBlurField={commitCaptured}
+                        onChange={v => updateElementStyle(el.id, { color: v })} />
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('fontFamily')}</label>
                         <select
                           value={el.style.fontFamily === 'heading' || el.style.fontFamily === 'body' ? el.style.fontFamily : 'custom'}
-                          onChange={e => updateElementStyle(el.id, { fontFamily: e.target.value === 'custom' ? DEFAULT_FONT_ID : e.target.value })}
+                          onChange={e => commit(() => updateElementStyle(el.id, { fontFamily: e.target.value === 'custom' ? DEFAULT_FONT_ID : e.target.value }))}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none mb-1">
                           <option value="heading">{t('fontFamilyHeadingOption')}</option>
                           <option value="body">{t('fontFamilyBodyOption')}</option>
                           <option value="custom">{t('fontFamilyCustomOption')}</option>
                         </select>
                         {el.style.fontFamily !== 'heading' && el.style.fontFamily !== 'body' && (
-                          <FontPicker value={el.style.fontFamily} onChange={f => updateElementStyle(el.id, { fontFamily: f })} />
+                          <FontPicker value={el.style.fontFamily} onChange={f => commit(() => updateElementStyle(el.id, { fontFamily: f }))} />
                         )}
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('fontSizePx')}</label>
-                        <input type="number" min={8} max={200} value={el.style.fontSizePx ?? ''} onChange={e => updateElementStyle(el.id, { fontSizePx: parseInt(e.target.value, 10) || undefined })}
+                        <input type="number" min={8} max={200} value={el.style.fontSizePx ?? ''}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          onChange={e => updateElementStyle(el.id, { fontSizePx: parseInt(e.target.value, 10) || undefined })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('fontWeight')}</label>
-                        <select value={String(el.style.fontWeight ?? 400)} onChange={e => updateElementStyle(el.id, { fontWeight: parseInt(e.target.value, 10) })}
+                        <select value={String(el.style.fontWeight ?? 400)} onChange={e => commit(() => updateElementStyle(el.id, { fontWeight: parseInt(e.target.value, 10) }))}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none">
                           {[400, 500, 600, 700, 800, 900].map(w => <option key={w} value={w}>{w}</option>)}
                         </select>
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('textAlign')}</label>
-                        <select value={el.style.textAlign ?? 'left'} onChange={e => updateElementStyle(el.id, { textAlign: e.target.value as 'left' | 'center' | 'right' })}
+                        <select value={el.style.textAlign ?? 'left'} onChange={e => commit(() => updateElementStyle(el.id, { textAlign: e.target.value as 'left' | 'center' | 'right' }))}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none">
                           <option value="left">{t('align.left')}</option>
                           <option value="center">{t('align.center')}</option>
@@ -809,7 +992,7 @@ export default function ThemesPage() {
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('direction')}</label>
-                        <select value={el.style.direction ?? 'auto'} onChange={e => updateElementStyle(el.id, { direction: e.target.value as 'ltr' | 'rtl' | 'auto' })}
+                        <select value={el.style.direction ?? 'auto'} onChange={e => commit(() => updateElementStyle(el.id, { direction: e.target.value as 'ltr' | 'rtl' | 'auto' }))}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none">
                           <option value="auto">{t('direction_.auto')}</option>
                           <option value="ltr">{t('direction_.ltr')}</option>
@@ -822,7 +1005,7 @@ export default function ThemesPage() {
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('objectFit')}</label>
-                        <select value={el.style.objectFit ?? 'contain'} onChange={e => updateElementStyle(el.id, { objectFit: e.target.value as 'contain' | 'cover' | 'fill' })}
+                        <select value={el.style.objectFit ?? 'contain'} onChange={e => commit(() => updateElementStyle(el.id, { objectFit: e.target.value as 'contain' | 'cover' | 'fill' }))}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none">
                           <option value="contain">{t('fit.contain')}</option>
                           <option value="cover">{t('fit.cover')}</option>
@@ -831,12 +1014,16 @@ export default function ThemesPage() {
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('borderRadius')}</label>
-                        <input type="number" min={0} max={100} value={el.style.borderRadius ?? 0} onChange={e => updateElementStyle(el.id, { borderRadius: parseInt(e.target.value, 10) || 0 })}
+                        <input type="number" min={0} max={100} value={el.style.borderRadius ?? 0}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          onChange={e => updateElementStyle(el.id, { borderRadius: parseInt(e.target.value, 10) || 0 })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('opacity')}</label>
-                        <input type="number" min={0} max={1} step={0.05} value={el.style.opacity ?? 1} onChange={e => updateElementStyle(el.id, { opacity: parseFloat(e.target.value) })}
+                        <input type="number" min={0} max={1} step={0.05} value={el.style.opacity ?? 1}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          onChange={e => updateElementStyle(el.id, { opacity: parseFloat(e.target.value) })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                     </div>
@@ -844,21 +1031,29 @@ export default function ThemesPage() {
                   {el.kind === 'PLAYLIST' && (
                     <div className="w-1/3">
                       <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('borderRadius')}</label>
-                      <input type="number" min={0} max={100} value={el.style.borderRadius ?? 0} onChange={e => updateElementStyle(el.id, { borderRadius: parseInt(e.target.value, 10) || 0 })}
+                      <input type="number" min={0} max={100} value={el.style.borderRadius ?? 0}
+                        onFocus={captureForHistory} onBlur={commitCaptured}
+                        onChange={e => updateElementStyle(el.id, { borderRadius: parseInt(e.target.value, 10) || 0 })}
                         className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                     </div>
                   )}
                   {el.kind === 'SHAPE' && (
                     <div className="grid grid-cols-3 gap-2">
-                      <ColorField label={t('backgroundColor')} value={el.style.backgroundColor} onChange={v => updateElementStyle(el.id, { backgroundColor: v })} />
+                      <ColorField label={t('backgroundColor')} value={el.style.backgroundColor}
+                        onFocusField={captureForHistory} onBlurField={commitCaptured}
+                        onChange={v => updateElementStyle(el.id, { backgroundColor: v })} />
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('borderRadius')}</label>
-                        <input type="number" min={0} max={100} value={el.style.borderRadius ?? 0} onChange={e => updateElementStyle(el.id, { borderRadius: parseInt(e.target.value, 10) || 0 })}
+                        <input type="number" min={0} max={100} value={el.style.borderRadius ?? 0}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          onChange={e => updateElementStyle(el.id, { borderRadius: parseInt(e.target.value, 10) || 0 })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                       <div>
                         <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('opacity')}</label>
-                        <input type="number" min={0} max={1} step={0.05} value={el.style.opacity ?? 1} onChange={e => updateElementStyle(el.id, { opacity: parseFloat(e.target.value) })}
+                        <input type="number" min={0} max={1} step={0.05} value={el.style.opacity ?? 1}
+                          onFocus={captureForHistory} onBlur={commitCaptured}
+                          onChange={e => updateElementStyle(el.id, { opacity: parseFloat(e.target.value) })}
                           className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1 py-1 text-[10px] focus:outline-none" />
                       </div>
                     </div>
@@ -874,7 +1069,15 @@ export default function ThemesPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <button onClick={undo} disabled={history.past.length === 0} title={`${t('undo')} (Ctrl+Z)`}
+              className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30">
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button onClick={redo} disabled={history.future.length === 0} title={`${t('redo')} (Ctrl+Shift+Z)`}
+              className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 me-auto">
+              <Redo2 className="w-4 h-4" />
+            </button>
             <button onClick={() => setEditing(null)}
               className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
               {tc('cancel')}

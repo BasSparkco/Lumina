@@ -80,6 +80,7 @@ export interface PowerRule {
 }
 
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'ellipse' | 'triangle';
 
 export interface Zone {
   id: string;
@@ -92,6 +93,7 @@ export interface Zone {
   // Degrees, clockwise, about the zone's own center.
   rotation: number;
   zoneType: ZoneType;
+  shape: ElementShape;
   widgetConfig: Record<string, unknown> | null;
   // At most one of these is ever set (enforced server-side) — a MEDIA zone plays either a
   // playlist or a single asset, the latter arriving already wrapped as a one-item Playlist.
@@ -132,6 +134,7 @@ export interface ThemeElementStyle {
   borderRadius?: number;
   opacity?: number;
   objectFit?: 'contain' | 'cover' | 'fill';
+  shape?: ElementShape;
 }
 
 interface ThemeElementBase {

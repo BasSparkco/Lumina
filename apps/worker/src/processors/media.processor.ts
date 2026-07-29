@@ -14,6 +14,19 @@ import { PrismaService } from '../prisma/prisma.service';
 ffmpeg.setFfmpegPath(ffmpegPath.path);
 ffmpeg.setFfprobePath(ffprobePath.path);
 
+// pnpm's content-addressable store doesn't always preserve the executable bit on these
+// platform binaries (seen with @ffprobe-installer/linux-x64: installed 0644) — when that
+// happens probeVideo() below throws EACCES on every single video, which fails the whole job
+// (including the thumbnail that had already been generated and uploaded) and leaves the
+// asset stuck in ERROR with no thumbnailKey ever persisted.
+for (const binPath of [ffmpegPath.path, ffprobePath.path]) {
+  try {
+    fs.chmodSync(binPath, 0o755);
+  } catch {
+    // read-only filesystem or already correct — nothing to do
+  }
+}
+
 interface MediaJob {
   assetId: string;
   key: string;

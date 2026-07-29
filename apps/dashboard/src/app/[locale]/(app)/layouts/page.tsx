@@ -3,14 +3,43 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Rnd } from 'react-rnd';
-import { LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy, Undo2, Redo2, Volume2, RotateCw } from 'lucide-react';
+import {
+  LayoutTemplate, Plus, Trash2, Pencil, X, Check, Copy, Undo2, Redo2, Volume2, RotateCw,
+  BringToFront, SendToBack, ChevronsUp, ChevronsDown, Lock, LockOpen,
+} from 'lucide-react';
+import { shapeClipStyle, type ThemeElementShape } from '@lumina/types';
 import { layoutsApi, playlistsApi, type Layout, type ZoneInput, type ZoneType } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
+import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { AssetPicker } from '@/components/AssetPicker';
+
+const ZONE_SHAPES: ThemeElementShape[] = ['rectangle', 'rounded', 'circle', 'ellipse', 'triangle'];
+
+// Re-stacks one item's zIndex relative to its siblings — 'front'/'back' jump past every
+// sibling, 'forward'/'backward' swap with only the nearest neighbor in stacking order.
+function reorderZIndex<T extends { zIndex?: number }>(items: T[], index: number, action: 'front' | 'forward' | 'backward' | 'back'): T[] {
+  const z = (it: T) => it.zIndex ?? 0;
+  const current = z(items[index]!);
+  if (action === 'front' || action === 'back') {
+    const extreme = items.reduce((acc, it, i) => i === index ? acc : (action === 'front' ? Math.max(acc, z(it)) : Math.min(acc, z(it))), current);
+    const next = action === 'front' ? extreme + 1 : extreme - 1;
+    if (next === current) return items;
+    return items.map((it, i) => i === index ? { ...it, zIndex: next } : it);
+  }
+  let neighborIdx = -1;
+  items.forEach((it, i) => {
+    if (i === index) return;
+    if (action === 'forward' && z(it) > current && (neighborIdx === -1 || z(it) < z(items[neighborIdx]!))) neighborIdx = i;
+    if (action === 'backward' && z(it) < current && (neighborIdx === -1 || z(it) > z(items[neighborIdx]!))) neighborIdx = i;
+  });
+  if (neighborIdx === -1) return items;
+  const neighborZ = z(items[neighborIdx]!);
+  return items.map((it, i) => i === index ? { ...it, zIndex: neighborZ } : i === neighborIdx ? { ...it, zIndex: current } : it);
+}
 
 const PREVIEW_W = 400;
 const PREVIEW_H = 225;
@@ -100,6 +129,8 @@ function toZoneInputs(layout: Layout): ZoneInput[] {
     zIndex: z.zIndex,
     rotation: z.rotation ?? 0,
     zoneType: z.zoneType ?? 'MEDIA',
+    shape: z.shape ?? 'rectangle',
+    editable: z.editable ?? true,
     widgetConfig: z.widgetConfig,
     playlistId: z.playlist?.id,
     assetId: z.asset?.id,
@@ -207,6 +238,7 @@ export default function LayoutsPage() {
   const { canEditContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
   const { enabled: faithEnabled } = useFaithFeatures();
+  const { enabled: requireSelectToEdit } = useRequireSelectToEdit();
   const logAction = useAuditLog();
   const t = useTranslations('layouts');
   const tc = useTranslations('common');
@@ -298,6 +330,12 @@ export default function LayoutsPage() {
   const [dragBox, setDragBox] = useState<{ index: number } & Box | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [rotationDrag, setRotationDrag] = useState<{ index: number; deg: number } | null>(null);
+  // A zone must be selected (single click) before it can be dragged/resized/rotated — unless
+  // requireSelectToEdit is off, or the zone is locked (editable: false), which always wins.
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
+
+  useEffect(() => { setSelectedZoneId(null); }, [editing]);
 
   useEffect(() => {
     const el = previewRef.current;
@@ -405,6 +443,18 @@ export default function LayoutsPage() {
 
   function updateZone(i: number, patch: Partial<ZoneInput>) {
     setZones(prev => prev.map((z, idx) => idx === i ? { ...z, ...patch } : z));
+  }
+
+  function moveZoneLayer(i: number, action: 'front' | 'forward' | 'backward' | 'back') {
+    commit(() => setZones(prev => reorderZIndex(prev, i, action)));
+  }
+
+  // A locked zone (editable: false) can never be dragged/resized/rotated, regardless of
+  // selection or the requireSelectToEdit setting. Otherwise interaction is gated on selection
+  // only when that setting is on — off restores immediate drag/resize on first touch.
+  function zoneIsInteractive(z: ZoneInput, isSelected: boolean) {
+    if (z.editable === false) return false;
+    return !requireSelectToEdit || isSelected;
   }
 
   const getBoxPx = useCallback((z: ZoneInput): Box => ({
@@ -591,19 +641,31 @@ export default function LayoutsPage() {
                 Pink guide lines snap moving edges/centers to other zones and the canvas bounds. */}
             <div>
               <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('preview')}</div>
-              <div ref={previewRef} style={{ width: '100%', aspectRatio: '16 / 9', background: '#111', position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
+              <div ref={previewRef}
+                onMouseDown={e => { if (e.target === e.currentTarget) setSelectedZoneId(null); }}
+                style={{ width: '100%', aspectRatio: '16 / 9', background: '#111', position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
                 {previewSize.width > 0 && zones.map((z, i) => {
                   const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
                   const liveRotation = rotationDrag && rotationDrag.index === i ? rotationDrag.deg : (z.rotation ?? 0);
+                  const key = z._localId ?? String(i);
+                  const isSelected = selectedZoneId === key;
+                  const isHovered = hoveredZoneId === key;
+                  const locked = z.editable === false;
+                  const interactive = zoneIsInteractive(z, isSelected);
+                  const color = ZONE_COLORS[i % ZONE_COLORS.length];
                   return (
                     <Rnd
-                      key={z._localId ?? i}
+                      key={key}
                       bounds="parent"
                       minWidth={MIN_ZONE_PX}
                       minHeight={MIN_ZONE_PX}
+                      disableDragging={!interactive}
+                      enableResizing={interactive ? undefined : false}
                       cancel=".rotate-handle"
                       size={{ width: box.width, height: box.height }}
                       position={{ x: box.left, y: box.top }}
+                      onMouseDown={() => setSelectedZoneId(key)}
+                      onDragStart={() => setSelectedZoneId(key)}
                       onDrag={(_e, d) => handleDrag(i, d.x, d.y)}
                       onDragStop={(_e, d) => handleDragStop(i, d.x, d.y)}
                       onResize={(_e, dir, ref, _delta, position) => handleResize(i, dir, ref, position)}
@@ -612,30 +674,51 @@ export default function LayoutsPage() {
                       {/* react-rnd/react-draggable owns the root node's own `transform` (translate()
                           for positioning) and clobbers a rotate() set alongside it — rotation lives
                           on this separate inner wrapper instead. */}
-                      <div style={{
-                        width: '100%', height: '100%', position: 'relative',
-                        background: ZONE_COLORS[i % ZONE_COLORS.length] + '55',
-                        border: `2px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexDirection: 'column', gap: 2,
-                        transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
-                      }}>
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+                      <div
+                        onMouseEnter={() => setHoveredZoneId(key)}
+                        onMouseLeave={() => setHoveredZoneId(id => id === key ? null : id)}
+                        style={{
+                          width: '100%', height: '100%', position: 'relative',
+                          transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
+                        }}>
+                        {/* Shape-clipped fill — the actual visible zone. The true rectangular
+                            bounding box (below) only shows on hover/select, since a circle/triangle
+                            shape would otherwise look like it has an invisible rectangular halo. */}
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: color + '55',
+                          border: `2px solid ${color}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexDirection: 'column', gap: 2, overflow: 'hidden',
+                          ...shapeClipStyle(z.shape),
+                        }}>
                           <span style={{ fontSize: 11, color: '#fff', fontWeight: 600, textAlign: 'center' }}>{z.name}</span>
                           <span style={{ opacity: 0.7, fontSize: 10, color: '#fff' }}>{t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`)}</span>
                         </div>
-                        <div
-                          className="rotate-handle"
-                          onMouseDown={e => startRotateZone(e, i)}
-                          title={t('rotateHint')}
-                          style={{
-                            position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
-                            width: 14, height: 14, borderRadius: '50%',
-                            background: ZONE_COLORS[i % ZONE_COLORS.length], border: '2px solid white',
-                            cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                          }}
-                        />
-                        <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: ZONE_COLORS[i % ZONE_COLORS.length], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                        {(isHovered || isSelected) && (
+                          <div style={{ position: 'absolute', inset: -2, border: `1px dashed ${color}`, pointerEvents: 'none' }} />
+                        )}
+                        {locked && (
+                          <div title={t('lockedHint')} style={{ position: 'absolute', top: 3, insetInlineStart: 3, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 2, lineHeight: 0 }}>
+                            <Lock className="w-2.5 h-2.5" />
+                          </div>
+                        )}
+                        {interactive && (
+                          <>
+                            <div
+                              className="rotate-handle"
+                              onMouseDown={e => startRotateZone(e, i)}
+                              title={t('rotateHint')}
+                              style={{
+                                position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
+                                width: 14, height: 14, borderRadius: '50%',
+                                background: color, border: '2px solid white',
+                                cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                              }}
+                            />
+                            <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: color, transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                          </>
+                        )}
                       </div>
                     </Rnd>
                   );
@@ -660,30 +743,64 @@ export default function LayoutsPage() {
                 </button>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-start">
-                {zones.map((z, i) => (
-                  <div key={z._localId ?? i} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2.5">
+                {zones.map((z, i) => {
+                  const key = z._localId ?? String(i);
+                  const isSelected = selectedZoneId === key;
+                  return (
+                  <div key={key} onClick={() => setSelectedZoneId(key)}
+                    className={`bg-white dark:bg-gray-900 rounded-xl border p-3 flex flex-col gap-2.5 cursor-pointer transition-colors ${
+                      isSelected ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}>
                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: ZONE_COLORS[i % ZONE_COLORS.length] }} />
                       <input value={z.name} onChange={e => updateZone(i, { name: e.target.value })}
                         onFocus={captureForHistory} onBlur={commitCaptured}
                         className="flex-1 min-w-0 font-medium text-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-indigo-500 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none"
                         placeholder={tc('name')} />
-                      <button onClick={() => commit(() => setZones(prev => prev.filter((_, idx) => idx !== i)))}
+                      <label className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 shrink-0 cursor-pointer" title={t('editableHint')}>
+                        <input type="checkbox" checked={z.editable ?? true} onChange={e => commit(() => updateZone(i, { editable: e.target.checked }))} />
+                        {(z.editable ?? true) ? <LockOpen className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                      </label>
+                      <button onClick={e => { e.stopPropagation(); commit(() => setZones(prev => prev.filter((_, idx) => idx !== i))); }}
                         className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0"><X className="w-3.5 h-3.5" /></button>
                     </div>
 
-                    <div>
-                      <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{tc('type')}</label>
-                      <select value={z.zoneType ?? 'MEDIA'}
-                        onChange={e => commit(() => updateZone(i, { zoneType: e.target.value as ZoneType, widgetConfig: {} }))}
-                        className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                        {/* Keep an existing PRAYER zone's own option visible even with the feature
-                            off, so its <select> doesn't silently show a value with no matching
-                            option — but don't offer PRAYER for zones that aren't already that type. */}
-                        {(visibleZoneTypes.includes(z.zoneType ?? 'MEDIA') ? visibleZoneTypes : [...visibleZoneTypes, z.zoneType ?? 'MEDIA']).map(zt => (
-                          <option key={zt} value={zt}>{t(`zoneTypes.${zt}`)}</option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{tc('type')}</label>
+                        <select value={z.zoneType ?? 'MEDIA'}
+                          onChange={e => commit(() => updateZone(i, { zoneType: e.target.value as ZoneType, widgetConfig: {} }))}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                          {/* Keep an existing PRAYER zone's own option visible even with the feature
+                              off, so its <select> doesn't silently show a value with no matching
+                              option — but don't offer PRAYER for zones that aren't already that type. */}
+                          {(visibleZoneTypes.includes(z.zoneType ?? 'MEDIA') ? visibleZoneTypes : [...visibleZoneTypes, z.zoneType ?? 'MEDIA']).map(zt => (
+                            <option key={zt} value={zt}>{t(`zoneTypes.${zt}`)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('shape')}</label>
+                        <select value={z.shape ?? 'rectangle'}
+                          onChange={e => commit(() => updateZone(i, { shape: e.target.value as ThemeElementShape }))}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                          {ZONE_SHAPES.map(s => <option key={s} value={s}>{t(`shapeTypes.${s}`)}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">{t('layer.label')}</span>
+                      <div className="flex items-center gap-0.5">
+                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'back'); }} title={t('layer.sendToBack')}
+                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><SendToBack className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'backward'); }} title={t('layer.sendBackward')}
+                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsDown className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'forward'); }} title={t('layer.bringForward')}
+                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><ChevronsUp className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={e => { e.stopPropagation(); moveZoneLayer(i, 'front'); }} title={t('layer.bringToFront')}
+                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"><BringToFront className="w-3.5 h-3.5" /></button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-5 gap-1.5">
@@ -783,7 +900,8 @@ export default function LayoutsPage() {
                       />
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -877,6 +995,7 @@ export default function LayoutsPage() {
                   width: `${z.width}%`, height: `${z.height}%`,
                   background: ZONE_COLORS[i % ZONE_COLORS.length] + '66',
                   border: `1px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
+                  ...shapeClipStyle(z.shape),
                 }} />
               ))}
               {canEditContent && (

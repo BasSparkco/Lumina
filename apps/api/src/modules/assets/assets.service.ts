@@ -61,6 +61,22 @@ export class AssetsService {
     return this.toDto(asset, null);
   }
 
+  /** Re-queues thumbnail/transcode generation for an asset stuck in ERROR (e.g. a transient worker failure) — same queue path as upload(), just re-armed on the existing storageKey. */
+  async reprocess(
+    orgId: string,
+    id: string,
+    queueThumbnail: (assetId: string, key: string, type: AssetType) => Promise<void>,
+  ) {
+    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
+    if (!asset) throw new NotFoundException('Asset not found');
+    if (asset.status !== 'ERROR') throw new BadRequestException('Only a failed asset can be reprocessed');
+    if (asset.type !== 'IMAGE' && asset.type !== 'VIDEO') throw new BadRequestException('This asset type has nothing to reprocess');
+
+    const updated = await this.prisma.asset.update({ where: { id }, data: { status: 'PROCESSING' } });
+    await queueThumbnail(asset.id, asset.storageKey, asset.type);
+    return this.toDto(updated, null);
+  }
+
   async createText(
     orgId: string,
     name: string,

@@ -1,4 +1,4 @@
-import { resolveThemeColor, fontStack } from '@lumina/types';
+import { resolveThemeColor, fontStack, shapeClipStyle } from '@lumina/types';
 import type { HydratedTheme, HydratedThemeElement, PlayerState } from '../lib/api';
 import ZonePlayer from './ZonePlayer';
 import LiveWidget from './LiveWidget';
@@ -35,6 +35,7 @@ export default function ThemeRenderer({ theme, state, onAssetChange }: Props) {
             zIndex: el.zIndex,
             overflow: 'hidden',
             transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+            ...shapeClipStyle(el.style.shape),
           }}
         >
           <ThemeElementView element={el} theme={theme} state={state} onAssetChange={onAssetChange} />

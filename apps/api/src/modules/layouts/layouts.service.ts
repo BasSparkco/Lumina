@@ -47,6 +47,8 @@ export class LayoutsService {
       zIndex: z.zIndex ?? 0,
       rotation: z.rotation ?? 0,
       zoneType: z.zoneType ?? 'MEDIA',
+      shape: z.shape ?? 'rectangle',
+      editable: z.editable ?? true,
       ...(z.widgetConfig ? { widgetConfig: z.widgetConfig as Prisma.InputJsonValue } : {}),
       playlistId: z.playlistId,
       assetId: z.assetId,
