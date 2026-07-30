@@ -213,7 +213,7 @@ export const realScreenGroupsApi = {
 };
 
 // ── Types ───────────────────────────────────────────────────────────────────
-export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
@@ -301,7 +301,7 @@ export interface Playlist extends PlaylistSummary {
 // ── Themes ──────────────────────────────────────────────────────────────────
 export type ThemeCategory = 'RESTAURANT_MENU' | 'RETAIL_PROMO' | 'HOTEL_LOBBY' | 'CLINIC_WAITING' | 'MOSQUE' | 'GENERIC';
 export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'PLAYLIST' | 'SHAPE' | 'WIDGET';
-export type ThemeWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+export type ThemeWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
 
 export interface ThemePalette {
   primary: string; secondary: string; background: string; surface: string;

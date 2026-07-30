@@ -1,8 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { useRef } from 'react';
 import { Rnd } from 'react-rnd';
 import {
   Palette, Plus, Trash2, Pencil, X, Check, Copy, Sparkles, RotateCw, Undo2, Redo2,
@@ -18,12 +17,22 @@ import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { useEditorHistory } from '@/hooks/useEditorHistory';
 import { AssetPicker } from '@/components/AssetPicker';
 import { FontPicker, fontStack } from '@/components/FontPicker';
+import { WidgetConfigFields } from '@/components/WidgetConfigFields';
+import { type Box, clampBox, computeAlignTargets, resolveResize, snapDragAxis } from '@/lib/canvasSnap';
+import {
+  RESIZE_HANDLES, RESIZE_HANDLE_AXIS, resizeHandleStyle, rotatedResizeAnchor, rotatedResizeBox,
+  type ResizeHandle,
+} from '@/lib/rotatedResize';
 import { DEFAULT_FONT_ID, shapeClipStyle } from '@lumina/types';
 
+// Live preview canvas default size in px — the actual editor canvas is responsive (see
+// previewSize below) and takes up the full width of the panel, like the layout editor's.
 const PREVIEW_W = 640;
 const PREVIEW_H = 360;
+const MIN_ELEMENT_PX = 16;
 // Grid thumbnails scale text relative to this reference width rather than PREVIEW_W (the
 // editor canvas), since thumbnail cards render much narrower than the full editor.
 const CARD_SCALE_W = 400;
@@ -34,73 +43,22 @@ const CATEGORY_VALUES: ThemeCategory[] = ['RESTAURANT_MENU', 'RETAIL_PROMO', 'HO
 const ASPECT_RATIOS = ['16:9', '9:16', '4:3', '1:1'] as const;
 const ELEMENT_KIND_VALUES: ThemeElementKind[] = ['TEXT', 'IMAGE', 'VIDEO', 'PLAYLIST', 'SHAPE', 'WIDGET'];
 const ELEMENT_SHAPES: ElementShape[] = ['rectangle', 'rounded', 'circle', 'triangle'];
-const WIDGET_TYPE_VALUES: ThemeWidgetType[] = ['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'];
+const WIDGET_TYPE_VALUES: ThemeWidgetType[] = ['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER', 'TIME', 'DATE'];
 const PALETTE_ROLES: (keyof ThemePalette)[] = ['primary', 'secondary', 'background', 'surface', 'text', 'textMuted', 'accent'];
-const PRAYER_METHOD_VALUES = ['UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague', 'NorthAmerica'];
 
 const KIND_COLORS: Record<ThemeElementKind, string> = {
   TEXT: '#6366f1', IMAGE: '#0ea5e9', VIDEO: '#8b5cf6', PLAYLIST: '#10b981', SHAPE: '#64748b', WIDGET: '#f59e0b',
 };
 
-const SNAP_PX = 6;
-// Rotation drag snaps to the nearest 15° once within this many degrees — mirrors the
-// position/resize edge-snapping below, so square/45°/diagonal placements are easy to hit exactly.
+// Rotation drag snaps to the nearest 15° once within this many degrees — mirrors the layout
+// editor's rotation handle, so square/45°/diagonal placements are easy to hit exactly.
 const SNAP_DEG = 4;
-interface Rect { x: number; y: number; width: number; height: number }
 
-// Figma-style smart guides: snaps the active element's edges/center onto any other element's
-// (or the canvas's own) edges/center once within SNAP_PX, and reports where to draw the guide
-// lines. Resize anchors the drag origin (top-left) and only snaps the growing right/bottom edge.
-function computeSnap(rect: Rect, activeId: string, elements: ThemeElement[], canvasW: number, canvasH: number, mode: 'drag' | 'resize'): { rect: Rect; guides: { v: number[]; h: number[] } } {
-  const targets = elements
-    .filter(e => e.id !== activeId)
-    .map(e => ({
-      left: (e.x / 100) * canvasW,
-      right: ((e.x + e.width) / 100) * canvasW,
-      centerX: ((e.x + e.width / 2) / 100) * canvasW,
-      top: (e.y / 100) * canvasH,
-      bottom: ((e.y + e.height) / 100) * canvasH,
-      centerY: ((e.y + e.height / 2) / 100) * canvasH,
-    }));
-  targets.push({ left: 0, right: canvasW, centerX: canvasW / 2, top: 0, bottom: canvasH, centerY: canvasH / 2 });
-
-  let { x, y, width, height } = rect;
-  const vGuides = new Set<number>();
-  const hGuides = new Set<number>();
-
-  if (mode === 'drag') {
-    const left = x, right = x + width, centerX = x + width / 2;
-    for (const t of targets) {
-      for (const tv of [t.left, t.centerX, t.right]) {
-        if (Math.abs(left - tv) <= SNAP_PX) { x = tv; vGuides.add(tv); }
-        else if (Math.abs(centerX - tv) <= SNAP_PX) { x = tv - width / 2; vGuides.add(tv); }
-        else if (Math.abs(right - tv) <= SNAP_PX) { x = tv - width; vGuides.add(tv); }
-      }
-    }
-    const top = y, bottom = y + height, centerY = y + height / 2;
-    for (const t of targets) {
-      for (const tv of [t.top, t.centerY, t.bottom]) {
-        if (Math.abs(top - tv) <= SNAP_PX) { y = tv; hGuides.add(tv); }
-        else if (Math.abs(centerY - tv) <= SNAP_PX) { y = tv - height / 2; hGuides.add(tv); }
-        else if (Math.abs(bottom - tv) <= SNAP_PX) { y = tv - height; hGuides.add(tv); }
-      }
-    }
-  } else {
-    const right = x + width;
-    for (const t of targets) {
-      for (const tv of [t.left, t.centerX, t.right]) {
-        if (Math.abs(right - tv) <= SNAP_PX) { width = tv - x; vGuides.add(tv); }
-      }
-    }
-    const bottom = y + height;
-    for (const t of targets) {
-      for (const tv of [t.top, t.centerY, t.bottom]) {
-        if (Math.abs(bottom - tv) <= SNAP_PX) { height = tv - y; hGuides.add(tv); }
-      }
-    }
-  }
-
-  return { rect: { x, y, width, height }, guides: { v: [...vGuides], h: [...hGuides] } };
+// `aspectRatio` is stored as e.g. "16:9" — parsed to a ratio so the responsive canvas below can
+// derive its height from its rendered width for any of the theme's supported aspect ratios.
+function parseAspectRatio(aspect: string): number {
+  const [w, h] = aspect.split(':').map(Number);
+  return w && h && w > 0 && h > 0 ? w / h : 16 / 9;
 }
 
 function resolveColor(value: string | undefined, palette: ThemePalette): string | undefined {
@@ -209,78 +167,6 @@ function ColorField({ label, value, onChange, onFocusField, onBlurField }: Color
   );
 }
 
-function WidgetConfigFields({ widgetType, config, onChange }: { widgetType: ThemeWidgetType; config: Record<string, unknown>; onChange: (cfg: Record<string, unknown>) => void }) {
-  const t = useTranslations('layouts.widget');
-  const ts = useTranslations('screens.prayer.methods');
-  switch (widgetType) {
-    case 'PRAYER':
-      return (
-        <div className="grid grid-cols-2 gap-2 text-[10px]">
-          <div>
-            <label className="text-gray-400 block mb-0.5">{t('methodOverride')}</label>
-            <select value={(config.method as string) ?? ''} onChange={e => onChange({ ...config, method: e.target.value || undefined })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="">{t('inheritFromScreen')}</option>
-              {PRAYER_METHOD_VALUES.map(m => <option key={m} value={m}>{ts(m)}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-gray-400 block mb-0.5">{t('language')}</label>
-            <select value={(config.lang as string) ?? 'en'} onChange={e => onChange({ ...config, lang: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="en">{t('english')}</option>
-              <option value="ar">{t('arabicNative')}</option>
-            </select>
-          </div>
-          <label className="flex items-center gap-1.5 col-span-2 cursor-pointer">
-            <input type="checkbox" checked={!!config.athanEnabled} onChange={e => onChange({ ...config, athanEnabled: e.target.checked })} />
-            <span className="text-gray-500 dark:text-gray-400">{t('athanAudio')}</span>
-          </label>
-        </div>
-      );
-    case 'WEATHER':
-      return (
-        <div className="text-[10px]">
-          <label className="text-gray-400 block mb-0.5">{t('language')}</label>
-          <select value={(config.lang as string) ?? 'en'} onChange={e => onChange({ ...config, lang: e.target.value })}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-            <option value="en">{t('english')}</option>
-            <option value="ar">{t('arabic')}</option>
-          </select>
-        </div>
-      );
-    case 'CURRENCY':
-      return (
-        <div className="grid grid-cols-2 gap-2 text-[10px]">
-          <div>
-            <label className="text-gray-400 block mb-0.5">{t('baseCurrency')}</label>
-            <select value={(config.base as string) ?? 'USD'} onChange={e => onChange({ ...config, base: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              {['USD', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-gray-400 block mb-0.5">{t('language')}</label>
-            <select value={(config.lang as string) ?? 'en'} onChange={e => onChange({ ...config, lang: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="en">{t('english')}</option>
-              <option value="ar">{t('arabic')}</option>
-            </select>
-          </div>
-        </div>
-      );
-    case 'TICKER':
-      return (
-        <div className="text-[10px]">
-          <label className="text-gray-400 block mb-0.5">{t('rssFeedUrl')}</label>
-          <input type="url" value={(config.feedUrl as string) ?? ''} onChange={e => onChange({ ...config, feedUrl: e.target.value })}
-            placeholder="https://feeds.bbcnews.com/world/rss.xml"
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none" />
-        </div>
-      );
-  }
-}
-
 export default function ThemesPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -305,77 +191,36 @@ export default function ThemesPage() {
   const [typography, setTypography] = useState<ThemeTypography>(defaultTypography());
   const [elements, setElements] = useState<ThemeElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [dragRect, setDragRect] = useState<(Rect & { id: string }) | null>(null);
+  const [dragBox, setDragBox] = useState<({ id: string } & Box) | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [rotationDrag, setRotationDrag] = useState<{ id: string; deg: number } | null>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const { enabled: requireSelectToEdit } = useRequireSelectToEdit();
 
-  // Undo/redo — scoped to the current edit session, reset whenever a different theme (or a
-  // new one) is opened. Mirrors the layouts editor's history mechanism (see its comment for
-  // why full snapshots rather than diffs).
   interface EditorSnapshot { name: string; category: ThemeCategory; aspectRatio: string; palette: ThemePalette; typography: ThemeTypography; elements: ThemeElement[]; }
-  const [history, setHistory] = useState<{ past: EditorSnapshot[]; future: EditorSnapshot[] }>({ past: [], future: [] });
-  const pendingCaptureRef = useRef<EditorSnapshot | null>(null);
+  const { canUndo, canRedo, undo, redo, commit, captureForHistory, commitCaptured } = useEditorHistory<EditorSnapshot>(
+    editing,
+    () => ({ name, category, aspectRatio, palette, typography, elements }),
+    s => { setName(s.name); setCategory(s.category); setAspectRatio(s.aspectRatio); setPalette(s.palette); setTypography(s.typography); setElements(s.elements); },
+  );
+
+  // Live preview canvas size in px — kept in sync with its actual rendered width (like the
+  // layout editor's) so the preview takes up the full panel width instead of a fixed small box.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewSize, setPreviewSize] = useState({ width: PREVIEW_W, height: PREVIEW_H });
 
   useEffect(() => {
-    setHistory({ past: [], future: [] });
-    pendingCaptureRef.current = null;
-  }, [editing]);
-
-  function snapshot(): EditorSnapshot { return { name, category, aspectRatio, palette, typography, elements }; }
-  function applySnapshot(s: EditorSnapshot) {
-    setName(s.name); setCategory(s.category); setAspectRatio(s.aspectRatio);
-    setPalette(s.palette); setTypography(s.typography); setElements(s.elements);
-  }
-  function captureForHistory() {
-    if (pendingCaptureRef.current === null) pendingCaptureRef.current = snapshot();
-  }
-  function commitCaptured() {
-    const captured = pendingCaptureRef.current;
-    pendingCaptureRef.current = null;
-    if (!captured) return;
-    setHistory(h => ({ past: [...h.past, captured], future: [] }));
-  }
-  function commit(mutator: () => void) {
-    captureForHistory();
-    mutator();
-    commitCaptured();
-  }
-  function undo() {
-    const previous = history.past[history.past.length - 1];
-    if (!previous) return;
-    setHistory({ past: history.past.slice(0, -1), future: [snapshot(), ...history.future] });
-    applySnapshot(previous);
-  }
-  function redo() {
-    const next = history.future[0];
-    if (!next) return;
-    setHistory({ past: [...history.past, snapshot()], future: history.future.slice(1) });
-    applySnapshot(next);
-  }
-  const undoRef = useRef(undo);
-  const redoRef = useRef(redo);
-  undoRef.current = undo;
-  redoRef.current = redo;
-
-  useEffect(() => {
-    if (!editing) return;
-    function onKeyDown(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) redoRef.current(); else undoRef.current();
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editing]);
+    const el = previewRef.current;
+    if (!el) return;
+    const update = () => setPreviewSize({ width: el.clientWidth, height: el.clientWidth / parseAspectRatio(aspectRatio) });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editing, aspectRatio]);
 
   // A locked element (editable: false) can never be dragged/resized/rotated, regardless of
   // selection or the requireSelectToEdit setting — `editable` used to be set by this UI but
@@ -488,6 +333,87 @@ export default function ThemesPage() {
   function updateElementStyle(id: string, patch: ThemeElementStyle) {
     setElements(prev => prev.map(el => (el.id === id ? { ...el, style: { ...el.style, ...patch } } : el)));
   }
+  // A zone must be selected (single click) before it can be dragged/resized/rotated — unless
+  // requireSelectToEdit is off, or the element is locked (editable: false), which always wins.
+  const getBoxPx = useCallback((el: ThemeElement): Box => ({
+    left: (el.x / 100) * previewSize.width,
+    top: (el.y / 100) * previewSize.height,
+    width: (el.width / 100) * previewSize.width,
+    height: (el.height / 100) * previewSize.height,
+  }), [previewSize]);
+
+  // Alignment guides only make sense against another element's actual visible edges — a rotated
+  // element's unrotated left/top/width/height box doesn't correspond to anything on screen, so
+  // it's excluded both as a snap target for others and (in handleDrag below) as something that
+  // itself snaps while being dragged.
+  const computeTargets = useCallback((excludeId: string) => {
+    const otherBoxes = elements
+      .filter(el => el.id !== excludeId && !(el.rotation ?? 0))
+      .map(getBoxPx);
+    return computeAlignTargets(previewSize.width, previewSize.height, otherBoxes);
+  }, [elements, previewSize, getBoxPx]);
+
+  const clampToCanvas = useCallback((box: Box): Box => clampBox(box, previewSize.width, previewSize.height), [previewSize]);
+
+  function handleDrag(el: ThemeElement, x: number, y: number) {
+    const box = getBoxPx(el);
+    if (el.rotation) {
+      setDragBox({ id: el.id, ...clampToCanvas({ left: x, top: y, width: box.width, height: box.height }) });
+      setGuides({ v: [], h: [] });
+      return;
+    }
+    const { xs, ys } = computeTargets(el.id);
+    const snapX = snapDragAxis(x, box.width, xs);
+    const snapY = snapDragAxis(y, box.height, ys);
+    const next = clampToCanvas({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
+    setDragBox({ id: el.id, ...next });
+    setGuides({ v: snapX.guide !== null ? [snapX.guide] : [], h: snapY.guide !== null ? [snapY.guide] : [] });
+  }
+
+  function handleDragStop(el: ThemeElement, x: number, y: number) {
+    const box = getBoxPx(el);
+    if (el.rotation) {
+      const next = clampToCanvas({ left: x, top: y, width: box.width, height: box.height });
+      commit(() => updateElement(el.id, {
+        x: clampPct(next.left / previewSize.width * 100),
+        y: clampPct(next.top / previewSize.height * 100),
+      }));
+      setDragBox(null);
+      setGuides({ v: [], h: [] });
+      return;
+    }
+    const { xs, ys } = computeTargets(el.id);
+    const snapX = snapDragAxis(x, box.width, xs);
+    const snapY = snapDragAxis(y, box.height, ys);
+    const next = clampToCanvas({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
+    commit(() => updateElement(el.id, {
+      x: clampPct(next.left / previewSize.width * 100),
+      y: clampPct(next.top / previewSize.height * 100),
+    }));
+    setDragBox(null);
+    setGuides({ v: [], h: [] });
+  }
+
+  function handleResize(el: ThemeElement, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
+    const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
+    const { box: next, guides } = resolveResize(direction, box, computeTargets(el.id), MIN_ELEMENT_PX, previewSize.width, previewSize.height);
+    setDragBox({ id: el.id, ...next });
+    setGuides(guides);
+  }
+
+  function handleResizeStop(el: ThemeElement, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
+    const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
+    const { box: next } = resolveResize(direction, box, computeTargets(el.id), MIN_ELEMENT_PX, previewSize.width, previewSize.height);
+    commit(() => updateElement(el.id, {
+      x: clampPct(next.left / previewSize.width * 100),
+      y: clampPct(next.top / previewSize.height * 100),
+      width: clampPct(next.width / previewSize.width * 100),
+      height: clampPct(next.height / previewSize.height * 100),
+    }));
+    setDragBox(null);
+    setGuides({ v: [], h: [] });
+  }
+
   // Drag-to-rotate: the handle sits above the element's (unrotated) top-center. While dragging,
   // the element's rotation tracks the angle from its own center to the mouse, measured in the
   // canvas's own coordinate space so it works regardless of page scroll/zoom.
@@ -495,12 +421,12 @@ export default function ThemesPage() {
     e.preventDefault();
     e.stopPropagation();
     setSelectedElementId(el.id);
-    captureForHistory();
-    const canvas = canvasRef.current;
+    const canvas = previewRef.current;
     if (!canvas) return;
     const canvasRect = canvas.getBoundingClientRect();
-    const cx = (el.x + el.width / 2) / 100 * PREVIEW_W;
-    const cy = (el.y + el.height / 2) / 100 * PREVIEW_H;
+    const box = getBoxPx(el);
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
 
     function angleFor(clientX: number, clientY: number): number {
       const mx = clientX - canvasRect.left;
@@ -516,9 +442,46 @@ export default function ThemesPage() {
       setRotationDrag({ id: el.id, deg: angleFor(ev.clientX, ev.clientY) });
     }
     function onUp(ev: MouseEvent) {
-      updateElement(el.id, { rotation: angleFor(ev.clientX, ev.clientY) });
-      commitCaptured();
+      commit(() => updateElement(el.id, { rotation: angleFor(ev.clientX, ev.clientY) }));
       setRotationDrag(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  // Custom resize handles for rotated elements — mirrors the layout editor's zone handling:
+  // react-rnd's own resize handles stay anchored to the element's unrotated bounding box, so once
+  // rotated they end up nowhere near its visible corners/edges. These are rendered inside the same
+  // rotated wrapper as the shape, so they always sit at its true visual corners/edges.
+  function startResizeElement(e: React.MouseEvent, el: ThemeElement, handle: ResizeHandle) {
+    e.preventDefault();
+    e.stopPropagation();
+    const canvas = previewRef.current;
+    if (!canvas) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const box = getBoxPx(el);
+    const rotation = el.rotation ?? 0;
+    const anchor = rotatedResizeAnchor(box, rotation, handle);
+
+    function compute(clientX: number, clientY: number): Box {
+      const mouse = { x: clientX - canvasRect.left, y: clientY - canvasRect.top };
+      return clampToCanvas(rotatedResizeBox(rotation, handle, anchor, mouse, box, MIN_ELEMENT_PX));
+    }
+
+    function onMove(ev: MouseEvent) {
+      setDragBox({ id: el.id, ...compute(ev.clientX, ev.clientY) });
+    }
+    function onUp(ev: MouseEvent) {
+      const next = compute(ev.clientX, ev.clientY);
+      commit(() => updateElement(el.id, {
+        x: clampPct(next.left / previewSize.width * 100),
+        y: clampPct(next.top / previewSize.height * 100),
+        width: clampPct(next.width / previewSize.width * 100),
+        height: clampPct(next.height / previewSize.height * 100),
+      }));
+      setDragBox(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }
@@ -600,137 +563,129 @@ export default function ThemesPage() {
             </div>
           </div>
 
-          <div className="flex gap-6 flex-wrap lg:flex-nowrap">
-            {/* Left: canvas + palette + typography */}
-            <div className="shrink-0 space-y-4" style={{ width: PREVIEW_W }}>
-              <div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('preview')}</div>
-                <div
-                  ref={canvasRef}
-                  onMouseDown={e => { if (e.target === e.currentTarget) setSelectedElementId(null); }}
-                  style={{ width: PREVIEW_W, height: PREVIEW_H, background: palette.background, position: 'relative', borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
-                  {elements.map((el) => {
-                    const isSelected = el.id === selectedElementId;
-                    const isHovered = el.id === hoveredElementId;
-                    const interactive = elementIsInteractive(el, isSelected);
-                    const rect = dragRect && dragRect.id === el.id
-                      ? dragRect
-                      : { x: (el.x / 100) * PREVIEW_W, y: (el.y / 100) * PREVIEW_H, width: (el.width / 100) * PREVIEW_W, height: (el.height / 100) * PREVIEW_H };
-                    const liveRotation = rotationDrag && rotationDrag.id === el.id ? rotationDrag.deg : el.rotation;
-                    return (
-                      <Rnd
-                        key={el.id}
-                        bounds="parent"
-                        minWidth={16}
-                        minHeight={16}
-                        disableDragging={!interactive}
-                        enableResizing={interactive ? undefined : false}
-                        cancel=".rotate-handle"
-                        size={{ width: rect.width, height: rect.height }}
-                        position={{ x: rect.x, y: rect.y }}
-                        onMouseDown={() => setSelectedElementId(el.id)}
-                        onDragStart={() => { setSelectedElementId(el.id); captureForHistory(); }}
-                        onDrag={(_e, d) => {
-                          const snapped = computeSnap({ x: d.x, y: d.y, width: rect.width, height: rect.height }, el.id, elements, PREVIEW_W, PREVIEW_H, 'drag');
-                          setDragRect({ id: el.id, ...snapped.rect });
-                          setGuides(snapped.guides);
-                        }}
-                        onDragStop={(_e, d) => {
-                          const snapped = computeSnap({ x: d.x, y: d.y, width: rect.width, height: rect.height }, el.id, elements, PREVIEW_W, PREVIEW_H, 'drag');
-                          updateElement(el.id, { x: clampPct(snapped.rect.x / PREVIEW_W * 100), y: clampPct(snapped.rect.y / PREVIEW_H * 100) });
-                          commitCaptured();
-                          setDragRect(null);
-                          setGuides({ v: [], h: [] });
-                        }}
-                        onResizeStart={() => captureForHistory()}
-                        onResize={(_e, _dir, ref, _delta, position) => {
-                          const w = parseFloat(ref.style.width);
-                          const h = parseFloat(ref.style.height);
-                          const snapped = computeSnap({ x: position.x, y: position.y, width: w, height: h }, el.id, elements, PREVIEW_W, PREVIEW_H, 'resize');
-                          setDragRect({ id: el.id, ...snapped.rect });
-                          setGuides(snapped.guides);
-                        }}
-                        onResizeStop={(_e, _dir, ref, _delta, position) => {
-                          const w = parseFloat(ref.style.width);
-                          const h = parseFloat(ref.style.height);
-                          const snapped = computeSnap({ x: position.x, y: position.y, width: w, height: h }, el.id, elements, PREVIEW_W, PREVIEW_H, 'resize');
-                          updateElement(el.id, {
-                            width: clampPct(snapped.rect.width / PREVIEW_W * 100),
-                            height: clampPct(snapped.rect.height / PREVIEW_H * 100),
-                            x: clampPct(snapped.rect.x / PREVIEW_W * 100),
-                            y: clampPct(snapped.rect.y / PREVIEW_H * 100),
-                          });
-                          commitCaptured();
-                          setDragRect(null);
-                          setGuides({ v: [], h: [] });
-                        }}
-                        style={{ zIndex: el.zIndex, overflow: 'visible' }}>
-                        {/* react-rnd/react-draggable owns the root node's own `transform` (it uses
-                            translate() there for positioning) and will clobber a `rotate()` set
-                            alongside it — so rotation lives on this separate inner wrapper instead. */}
-                        <div
-                          onMouseEnter={() => setHoveredElementId(el.id)}
-                          onMouseLeave={() => setHoveredElementId(id => id === el.id ? null : id)}
-                          style={{
-                            width: '100%', height: '100%', position: 'relative',
-                            cursor: isSelected ? 'move' : 'pointer',
-                            transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
-                          }}>
-                          {/* Shape-clipped fill — the true rectangular bounding box only shows on
-                              hover/select (below), since a circle/triangle shape would otherwise
-                              look like it has an invisible rectangular halo. */}
-                          <div style={{
-                            position: 'absolute', inset: 0,
-                            background: el.kind === 'SHAPE' ? (resolveColor(el.style.backgroundColor, palette) ?? KIND_COLORS.SHAPE + '55') : KIND_COLORS[el.kind] + '33',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden',
-                            ...shapeClipStyle(el.style.shape),
-                          }}>
-                            <span style={{ fontSize: 9, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff', fontWeight: 600, textAlign: 'center', padding: '0 2px' }}>
-                              {el.label || (el.kind === 'TEXT' ? el.content.text : el.kind)}
-                            </span>
-                            <span style={{ opacity: 0.7, fontSize: 8, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff' }}>{t(`elementKinds.${el.kind}`)}</span>
-                          </div>
-                          {(isHovered || isSelected) && (
-                            <div style={{
-                              position: 'absolute', inset: 0, pointerEvents: 'none',
-                              border: isSelected ? `2px solid ${KIND_COLORS[el.kind]}` : `1px dashed ${KIND_COLORS[el.kind]}99`,
-                              boxShadow: isSelected ? `0 0 0 2px ${KIND_COLORS[el.kind]}55` : undefined,
-                            }} />
-                          )}
-                          {el.editable === false && (
-                            <div title={t('lockedHint')} style={{ position: 'absolute', top: 3, insetInlineStart: 3, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 2, lineHeight: 0 }}>
-                              <Lock className="w-2.5 h-2.5" />
-                            </div>
-                          )}
-                          {interactive && (
-                            <>
-                              <div
-                                className="rotate-handle"
-                                onMouseDown={e => startRotate(e, el)}
-                                title={t('rotateHint')}
-                                style={{
-                                  position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
-                                  width: 14, height: 14, borderRadius: '50%',
-                                  background: KIND_COLORS[el.kind], border: '2px solid white',
-                                  cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                                }}
-                              />
-                              <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: KIND_COLORS[el.kind], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
-                            </>
-                          )}
+          {/* Visual preview, full-width, with element settings stacked below — mirrors the
+              layout editor's shell so both editors share the same overall structure. */}
+          <div className="flex flex-col gap-6">
+            <div>
+              <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('preview')}</div>
+              <div ref={previewRef}
+                onMouseDown={e => { if (e.target === e.currentTarget) setSelectedElementId(null); }}
+                // Deliberately not clipped: a rotated element's corners (and its resize handles)
+                // can extend past the canvas rectangle once its bounding diagonal exceeds the
+                // canvas size — clipping them here made those corners/handles invisible and
+                // unreachable, which is what made resizing rotated elements feel broken.
+                style={{ width: '100%', aspectRatio: aspectRatio.replace(':', ' / '), background: palette.background, position: 'relative', borderRadius: 6, overflow: 'visible', border: '1px solid rgba(0,0,0,0.1)' }}>
+                {previewSize.width > 0 && elements.map((el) => {
+                  const isSelected = el.id === selectedElementId;
+                  const isHovered = el.id === hoveredElementId;
+                  const interactive = elementIsInteractive(el, isSelected);
+                  const box = dragBox && dragBox.id === el.id ? dragBox : getBoxPx(el);
+                  const liveRotation = rotationDrag && rotationDrag.id === el.id ? rotationDrag.deg : el.rotation;
+                  const rotation = el.rotation ?? 0;
+                  return (
+                    <Rnd
+                      key={el.id}
+                      bounds="parent"
+                      minWidth={MIN_ELEMENT_PX}
+                      minHeight={MIN_ELEMENT_PX}
+                      disableDragging={!interactive}
+                      // react-rnd's own resize handles are anchored to the unrotated box, which no
+                      // longer matches the visible (rotated) shape — once rotated, use the custom
+                      // rotation-aware handles rendered below instead.
+                      enableResizing={interactive && rotation === 0 ? undefined : false}
+                      cancel=".rotate-handle, .resize-handle"
+                      size={{ width: box.width, height: box.height }}
+                      position={{ x: box.left, y: box.top }}
+                      onMouseDown={() => setSelectedElementId(el.id)}
+                      onDragStart={() => setSelectedElementId(el.id)}
+                      onDrag={(_e, d) => handleDrag(el, d.x, d.y)}
+                      onDragStop={(_e, d) => handleDragStop(el, d.x, d.y)}
+                      onResize={(_e, dir, ref, _delta, position) => handleResize(el, dir, ref, position)}
+                      onResizeStop={(_e, dir, ref, _delta, position) => handleResizeStop(el, dir, ref, position)}
+                      style={{ zIndex: el.zIndex, overflow: 'visible' }}>
+                      {/* react-rnd/react-draggable owns the root node's own `transform` (it uses
+                          translate() there for positioning) and will clobber a `rotate()` set
+                          alongside it — so rotation lives on this separate inner wrapper instead. */}
+                      <div
+                        onMouseEnter={() => setHoveredElementId(el.id)}
+                        onMouseLeave={() => setHoveredElementId(id => id === el.id ? null : id)}
+                        style={{
+                          width: '100%', height: '100%', position: 'relative',
+                          cursor: isSelected ? 'move' : 'pointer',
+                          transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
+                        }}>
+                        {/* Shape-clipped fill — the true rectangular bounding box only shows on
+                            hover/select (below), since a circle/triangle shape would otherwise
+                            look like it has an invisible rectangular halo. */}
+                        <div style={{
+                          position: 'absolute', inset: 0,
+                          background: el.kind === 'SHAPE' ? (resolveColor(el.style.backgroundColor, palette) ?? KIND_COLORS.SHAPE + '55') : KIND_COLORS[el.kind] + '33',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2, overflow: 'hidden',
+                          ...shapeClipStyle(el.style.shape),
+                        }}>
+                          <span style={{ fontSize: 9, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff', fontWeight: 600, textAlign: 'center', padding: '0 2px' }}>
+                            {el.label || (el.kind === 'TEXT' ? el.content.text : el.kind)}
+                          </span>
+                          <span style={{ opacity: 0.7, fontSize: 8, color: el.kind === 'SHAPE' ? KIND_COLORS.SHAPE : '#fff' }}>{t(`elementKinds.${el.kind}`)}</span>
                         </div>
-                      </Rnd>
-                    );
-                  })}
-                  {dragRect && guides.v.map(x => (
-                    <div key={`v-${x}`} style={{ position: 'absolute', left: x, top: 0, width: 0, height: PREVIEW_H, borderLeft: '1px dashed #ec4899', pointerEvents: 'none' }} />
-                  ))}
-                  {dragRect && guides.h.map(y => (
-                    <div key={`h-${y}`} style={{ position: 'absolute', top: y, left: 0, height: 0, width: PREVIEW_W, borderTop: '1px dashed #ec4899', pointerEvents: 'none' }} />
-                  ))}
-                </div>
+                        {(isHovered || isSelected) && (
+                          <div style={{
+                            position: 'absolute', inset: 0, pointerEvents: 'none',
+                            border: isSelected ? `2px solid ${KIND_COLORS[el.kind]}` : `1px dashed ${KIND_COLORS[el.kind]}99`,
+                            boxShadow: isSelected ? `0 0 0 2px ${KIND_COLORS[el.kind]}55` : undefined,
+                          }} />
+                        )}
+                        {el.editable === false && (
+                          <div title={t('lockedHint')} style={{ position: 'absolute', top: 3, insetInlineStart: 3, color: '#fff', background: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 2, lineHeight: 0 }}>
+                            <Lock className="w-2.5 h-2.5" />
+                          </div>
+                        )}
+                        {interactive && (
+                          <>
+                            <div
+                              className="rotate-handle"
+                              onMouseDown={e => startRotate(e, el)}
+                              title={t('rotateHint')}
+                              style={{
+                                position: 'absolute', top: -22, left: '50%', transform: 'translateX(-50%)',
+                                width: 14, height: 14, borderRadius: '50%',
+                                background: KIND_COLORS[el.kind], border: '2px solid white',
+                                cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                              }}
+                            />
+                            <div style={{ position: 'absolute', top: -22, left: '50%', width: 1, height: 22, background: KIND_COLORS[el.kind], transform: 'translateX(-50%)', pointerEvents: 'none' }} />
+                          </>
+                        )}
+                        {interactive && rotation !== 0 && RESIZE_HANDLES.map(h => (
+                          <div
+                            key={h}
+                            className="resize-handle"
+                            onMouseDown={e => startResizeElement(e, el, h)}
+                            title={t('resizeHint')}
+                            style={{
+                              ...resizeHandleStyle(h),
+                              width: 8, height: 8, borderRadius: 2,
+                              background: KIND_COLORS[el.kind], border: '1.5px solid white',
+                              cursor: RESIZE_HANDLE_AXIS[h].cursor, boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </Rnd>
+                  );
+                })}
+                {guides.v.map((x, idx) => (
+                  <div key={`v-${idx}`} style={{ position: 'absolute', left: x, top: 0, width: 0, height: '100%', borderLeft: '1px solid #ec4899', pointerEvents: 'none', zIndex: 50 }} />
+                ))}
+                {guides.h.map((y, idx) => (
+                  <div key={`h-${idx}`} style={{ position: 'absolute', top: y, left: 0, height: 0, width: '100%', borderTop: '1px solid #ec4899', pointerEvents: 'none', zIndex: 50 }} />
+                ))}
               </div>
+            </div>
 
+            {/* Palette + typography — theme-only settings that sit between the preview and the
+                element cards below, unlike the layout editor which has neither. */}
+            <div className="grid gap-6 sm:grid-cols-2">
               <div>
                 <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">{t('palette')}</div>
                 <div className="grid grid-cols-4 gap-2">
@@ -779,55 +734,62 @@ export default function ThemesPage() {
               </div>
             </div>
 
-            {/* Right: element list */}
-            <div className="flex-1 min-w-[320px] space-y-3 max-h-[640px] overflow-y-auto pe-1">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{t('elements')}</div>
+            {/* Element cards — one per element, mirroring the layout editor's zone cards. */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs text-gray-400 dark:text-gray-500">{t('elements')}</div>
+                <button onClick={addElement} className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> {t('addElement')}
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-start">
               {elements.map(el => {
                 const isSelected = el.id === selectedElementId;
                 return (
                 <div key={el.id}
                   onClick={() => setSelectedElementId(el.id)}
-                  className={`border rounded-lg p-3 space-y-2 cursor-pointer transition-colors ${
+                  className={`bg-white dark:bg-gray-900 rounded-xl border p-3 flex flex-col gap-2.5 cursor-pointer transition-colors ${
                     isSelected
                       ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
                   }`}>
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ background: KIND_COLORS[el.kind] }} />
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: KIND_COLORS[el.kind] }} />
                     <input value={el.label ?? ''} onChange={e => updateElement(el.id, { label: e.target.value })}
                       onFocus={captureForHistory} onBlur={commitCaptured}
                       placeholder={t('elementLabel')}
-                      className="flex-1 min-w-0 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                    {isSelected && (
-                      <span className="flex items-center gap-1 text-[9px] font-medium text-indigo-600 dark:text-indigo-400 shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" /> {t('editingNow')}
-                      </span>
-                    )}
-                    <select value={el.kind} onChange={e => commit(() => updateElementKind(el.id, e.target.value as ThemeElementKind))}
-                      className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
-                      {ELEMENT_KIND_VALUES.map(k => <option key={k} value={k}>{t(`elementKinds.${k}`)}</option>)}
-                    </select>
-                    <label className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 shrink-0" title={t('editableHint')}>
+                      className="flex-1 min-w-0 font-medium text-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:border-indigo-500 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none" />
+                    <label className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 shrink-0 cursor-pointer" title={t('editableHint')}>
                       <input type="checkbox" checked={el.editable} onChange={e => commit(() => updateElement(el.id, { editable: e.target.checked }))} />
                       {el.editable ? <LockOpen className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                     </label>
                     <button onClick={e => { e.stopPropagation(); removeElement(el.id); }} className="text-gray-400 dark:text-gray-500 hover:text-red-500 shrink-0"><X className="w-3.5 h-3.5" /></button>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{tc('type')}</label>
+                      <select value={el.kind} onChange={e => commit(() => updateElementKind(el.id, e.target.value as ThemeElementKind))}
+                        className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        {ELEMENT_KIND_VALUES.map(k => <option key={k} value={k}>{t(`elementKinds.${k}`)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('shape')}</label>
+                      <select value={el.style.shape ?? 'rectangle'}
+                        onChange={e => commit(() => updateElementStyle(el.id, { shape: e.target.value as ElementShape }))}
+                        className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        {ELEMENT_SHAPES.map(s => <option key={s} value={s}>{t(`shapeTypes.${s}`)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
                   {!isSelected && (
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 pl-4">{t('clickToEditHint')}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">{t('clickToEditHint')}</p>
                   )}
 
                   {isSelected && (
                   <>
-                  <div>
-                    <label className="text-[10px] text-gray-400 dark:text-gray-500 block mb-0.5">{t('shape')}</label>
-                    <select value={el.style.shape ?? 'rectangle'}
-                      onChange={e => commit(() => updateElementStyle(el.id, { shape: e.target.value as ElementShape }))}
-                      className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none">
-                      {ELEMENT_SHAPES.map(s => <option key={s} value={s}>{t(`shapeTypes.${s}`)}</option>)}
-                    </select>
-                  </div>
                   <div className="grid grid-cols-6 gap-1">
                     {(['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const).map(field => (
                       <div key={field}>
@@ -901,7 +863,14 @@ export default function ThemesPage() {
                             {WIDGET_TYPE_VALUES.map(w => <option key={w} value={w}>{t(`widgetTypes.${w}`)}</option>)}
                           </select>
                         </div>
-                        <WidgetConfigFields widgetType={el.content.widgetType} config={el.content.widgetConfig} onChange={cfg => commit(() => updateElementContent(el.id, { widgetConfig: cfg }))} />
+                        <WidgetConfigFields
+                          widgetType={el.content.widgetType}
+                          config={el.content.widgetConfig}
+                          onChange={cfg => updateElementContent(el.id, { widgetConfig: cfg })}
+                          onChangeCommitted={cfg => commit(() => updateElementContent(el.id, { widgetConfig: cfg }))}
+                          onFocusField={captureForHistory}
+                          onBlurField={commitCaptured}
+                        />
                       </div>
                     )}
                   </div>
@@ -1022,18 +991,16 @@ export default function ThemesPage() {
                 </div>
               );
               })}
-              <button onClick={addElement} className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                <Plus className="w-3 h-3" /> {t('addElement')}
-              </button>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <button onClick={undo} disabled={history.past.length === 0} title={`${t('undo')} (Ctrl+Z)`}
+            <button onClick={undo} disabled={!canUndo} title={`${t('undo')} (Ctrl+Z)`}
               className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30">
               <Undo2 className="w-4 h-4" />
             </button>
-            <button onClick={redo} disabled={history.future.length === 0} title={`${t('redo')} (Ctrl+Shift+Z)`}
+            <button onClick={redo} disabled={!canRedo} title={`${t('redo')} (Ctrl+Shift+Z)`}
               className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 me-auto">
               <Redo2 className="w-4 h-4" />
             </button>

@@ -1,32 +1,46 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type TickerItem } from '../lib/api';
 
 interface Props {
-  feedUrl: string;
+  // Exactly one of these is expected to be set — feedUrl for the RSS source, staticText for
+  // free-typed content (one item per non-empty line). Both undefined renders nothing.
+  feedUrl?: string;
+  staticText?: string;
+  direction?: 'horizontal' | 'vertical';
   scrollSpeedPx?: number; // px per second
   lang?: 'en' | 'ar';
 }
 
-export default function TickerWidget({ feedUrl, scrollSpeedPx = 80, lang = 'en' }: Props) {
-  const [items, setItems] = useState<TickerItem[]>([]);
+export default function TickerWidget({ feedUrl, staticText, direction = 'horizontal', scrollSpeedPx = 80, lang = 'en' }: Props) {
+  const [feedItems, setFeedItems] = useState<TickerItem[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const posRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
   const isRtl = lang === 'ar';
+  const isVertical = direction === 'vertical';
 
   useEffect(() => {
+    if (!feedUrl) { setFeedItems([]); return; }
     let alive = true;
     const load = async () => {
       try {
         const result = await api.getTicker(feedUrl);
-        if (alive && result) setItems(result.items);
+        if (alive && result) setFeedItems(result.items);
       } catch { /* keep previous */ }
     };
     void load();
     const interval = setInterval(load, 5 * 60 * 1000); // refresh every 5m
     return () => { alive = false; clearInterval(interval); };
   }, [feedUrl]);
+
+  // Static text takes priority when both are somehow set — one item per non-empty line.
+  const items = useMemo<TickerItem[]>(() => {
+    if (staticText) {
+      return staticText.split('\n').map(line => line.trim()).filter(Boolean).map(title => ({ title, link: '' }));
+    }
+    return feedItems;
+  }, [staticText, feedItems]);
 
   // Smooth scroll animation
   useEffect(() => {
@@ -41,15 +55,21 @@ export default function TickerWidget({ feedUrl, scrollSpeedPx = 80, lang = 'en' 
       const dt = (ts - lastTsRef.current) / 1000;
       lastTsRef.current = ts;
 
-      posRef.current += scrollSpeedPx * dt * (isRtl ? -1 : 1);
+      // Vertical always scrolls "up" (no RTL equivalent for a vertical axis).
+      posRef.current += scrollSpeedPx * dt * (isVertical ? 1 : isRtl ? -1 : 1);
 
-      // Loop when the inner content scrolled its own width
       const inner = el.firstElementChild as HTMLElement | null;
       if (inner) {
-        const innerW = inner.scrollWidth / 2; // duplicated content
-        if (!isRtl && posRef.current >= innerW) posRef.current -= innerW;
-        if (isRtl && posRef.current <= -innerW) posRef.current += innerW;
-        inner.style.transform = `translateX(${-posRef.current}px)`;
+        if (isVertical) {
+          const innerH = inner.scrollHeight / 2; // duplicated content
+          if (posRef.current >= innerH) posRef.current -= innerH;
+          inner.style.transform = `translateY(${-posRef.current}px)`;
+        } else {
+          const innerW = inner.scrollWidth / 2; // duplicated content
+          if (!isRtl && posRef.current >= innerW) posRef.current -= innerW;
+          if (isRtl && posRef.current <= -innerW) posRef.current += innerW;
+          inner.style.transform = `translateX(${-posRef.current}px)`;
+        }
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -57,11 +77,12 @@ export default function TickerWidget({ feedUrl, scrollSpeedPx = 80, lang = 'en' 
 
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
-  }, [items, scrollSpeedPx, isRtl]);
+  }, [items, scrollSpeedPx, isRtl, isVertical]);
 
-  const separator = isRtl ? ' ◆ ' : ' ◆ ';
-  const text = items.map(i => i.title).join(separator);
-  const doubled = text + separator + text;
+  const fontFamily = isRtl ? "'Amiri', 'Noto Sans Arabic', sans-serif" : "'Inter', system-ui, sans-serif";
+  const separator = ' ◆ ';
+  const joinedText = items.map(i => i.title).join(separator);
+  const doubledText = joinedText + separator + joinedText;
 
   return (
     <div
@@ -72,27 +93,54 @@ export default function TickerWidget({ feedUrl, scrollSpeedPx = 80, lang = 'en' 
         background: 'rgba(0,0,0,0.85)',
         color: '#fff',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: isVertical ? 'stretch' : 'center',
         overflow: 'hidden',
         position: 'relative',
       }}
     >
-      {/* Gradient fade edges */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(0,0,0,0.8) 0%, transparent 8%, transparent 92%, rgba(0,0,0,0.8) 100%)', zIndex: 1, pointerEvents: 'none' }} />
+      {/* Gradient fade edges — along whichever axis is scrolling */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: isVertical
+            ? 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 10%, transparent 90%, rgba(0,0,0,0.8) 100%)'
+            : 'linear-gradient(90deg, rgba(0,0,0,0.8) 0%, transparent 8%, transparent 92%, rgba(0,0,0,0.8) 100%)',
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
 
-      <div ref={containerRef} style={{ overflow: 'hidden', width: '100%' }}>
-        <div
-          style={{
-            display: 'inline-block',
-            whiteSpace: 'nowrap',
-            fontFamily: isRtl ? "'Amiri', 'Noto Sans Arabic', sans-serif" : "'Inter', system-ui, sans-serif",
-            fontSize: 'clamp(0.75rem, 2.5vh, 1.4rem)',
-            padding: '0 1em',
-            willChange: 'transform',
-          }}
-        >
-          {doubled}
-        </div>
+      <div ref={containerRef} style={{ overflow: 'hidden', width: '100%', height: '100%' }}>
+        {isVertical ? (
+          <div style={{ padding: '0.5em 1em', willChange: 'transform' }}>
+            {[...items, ...items].map((item, i) => (
+              <div
+                key={i}
+                style={{
+                  fontFamily,
+                  fontSize: 'clamp(0.75rem, 2.5vh, 1.4rem)',
+                  padding: '0.35em 0',
+                }}
+              >
+                {item.title}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'inline-block',
+              whiteSpace: 'nowrap',
+              fontFamily,
+              fontSize: 'clamp(0.75rem, 2.5vh, 1.4rem)',
+              padding: '0 1em',
+              willChange: 'transform',
+            }}
+          >
+            {doubledText}
+          </div>
+        )}
       </div>
     </div>
   );

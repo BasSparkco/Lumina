@@ -15,7 +15,10 @@ import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { useEditorHistory } from '@/hooks/useEditorHistory';
 import { AssetPicker } from '@/components/AssetPicker';
+import { WidgetConfigFields } from '@/components/WidgetConfigFields';
+import { type Box, clampBox, computeAlignTargets, resolveResize, snapDragAxis } from '@/lib/canvasSnap';
 import {
   RESIZE_HANDLES, RESIZE_HANDLE_AXIS, resizeHandleStyle, rotatedResizeAnchor, rotatedResizeBox,
   type ResizeHandle,
@@ -25,44 +28,13 @@ const ZONE_SHAPES: ThemeElementShape[] = ['rectangle', 'rounded', 'circle', 'tri
 
 const PREVIEW_W = 400;
 const PREVIEW_H = 225;
-const SNAP_THRESHOLD = 6;
 const MIN_ZONE_PX = 20;
 // Rotation drag snaps to the nearest 15° once within this many degrees.
 const SNAP_DEG = 4;
 
 const clampPct = (v: number) => Math.min(100, Math.max(0, Math.round(v * 10) / 10));
 
-type Box = { left: number; top: number; width: number; height: number };
-
-// Snap a moving edge (or center) to the nearest same-axis edge/center among other zones
-// or the canvas bounds — mirrors the alignment guides in Google Drawings/Slides.
-function snapDragAxis(pos: number, size: number, targets: number[]): { pos: number; guide: number | null } {
-  const candidates = [pos, pos + size / 2, pos + size];
-  let bestDiff = SNAP_THRESHOLD;
-  let result: { pos: number; guide: number } | null = null;
-  for (const target of targets) {
-    for (const c of candidates) {
-      const diff = Math.abs(c - target);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        result = { pos: target - (c - pos), guide: target };
-      }
-    }
-  }
-  return result ?? { pos, guide: null };
-}
-
-function snapEdge(value: number, targets: number[]): { value: number; guide: number | null } {
-  let bestDiff = SNAP_THRESHOLD;
-  let best: number | null = null;
-  for (const target of targets) {
-    const diff = Math.abs(value - target);
-    if (diff < bestDiff) { bestDiff = diff; best = target; }
-  }
-  return best !== null ? { value: best, guide: best } : { value, guide: null };
-}
-
-const ZONE_TYPE_VALUES: ZoneType[] = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'];
+const ZONE_TYPE_VALUES: ZoneType[] = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER', 'TIME', 'DATE'];
 
 const PRESET_ZONE_KEYS = ['fullscreen', 'mainTicker', 'split5050', 'mainSidebar', 'mosque'] as const;
 type PresetKey = typeof PRESET_ZONE_KEYS[number];
@@ -96,6 +68,8 @@ const ZONE_TYPE_BADGE: Record<ZoneType, string> = {
   WEATHER: 'bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300',
   CURRENCY: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300',
   TICKER: 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300',
+  TIME: 'bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300',
+  DATE: 'bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300',
 };
 
 // Client-only id used purely for stable React keys/history-diffing while editing — server zone
@@ -121,99 +95,6 @@ function toZoneInputs(layout: Layout): ZoneInput[] {
   }));
 }
 
-interface WidgetConfigFieldsProps {
-  zone: ZoneInput;
-  // Discrete changes (selects, checkboxes) — each one is its own undo step.
-  onChangeCommitted: (cfg: Record<string, unknown>) => void;
-  // Continuous typing (the RSS URL field) — live-updates with no history entry per keystroke;
-  // onFocusField/onBlurField below bracket the whole edit into a single undo step instead.
-  onChange: (cfg: Record<string, unknown>) => void;
-  onFocusField: () => void;
-  onBlurField: () => void;
-}
-
-function WidgetConfigFields({ zone, onChange, onChangeCommitted, onFocusField, onBlurField }: WidgetConfigFieldsProps) {
-  const cfg = zone.widgetConfig ?? {};
-  const t = useTranslations('layouts.widget');
-  const ts = useTranslations('screens.prayer.methods');
-
-  switch (zone.zoneType) {
-    case 'PRAYER':
-      return (
-        <div className="grid grid-cols-3 gap-2 bg-amber-50 dark:bg-amber-950/40 rounded p-2 text-xs">
-          <div>
-            <label className="text-gray-500 block mb-0.5">{t('methodOverride')}</label>
-            <select value={(cfg.method as string) ?? ''} onChange={e => onChangeCommitted({ ...cfg, method: e.target.value || undefined })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="">{t('inheritFromScreen')}</option>
-              {['UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague', 'NorthAmerica'].map(m =>
-                <option key={m} value={m}>{ts(m)}</option>
-              )}
-            </select>
-          </div>
-          <div>
-            <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChangeCommitted({ ...cfg, lang: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="en">{t('english')}</option>
-              <option value="ar">{t('arabicNative')}</option>
-            </select>
-          </div>
-          <label className="flex items-center gap-1.5 cursor-pointer self-end">
-            <input type="checkbox" checked={!!(cfg.athanEnabled)} onChange={e => onChangeCommitted({ ...cfg, athanEnabled: e.target.checked })} />
-            <span className="text-gray-600">{t('athanAudio')}</span>
-          </label>
-        </div>
-      );
-    case 'WEATHER':
-      return (
-        <div className="grid grid-cols-2 gap-2 bg-sky-50 dark:bg-sky-950/40 rounded p-2 text-xs">
-          <div>
-            <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChangeCommitted({ ...cfg, lang: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="en">{t('english')}</option>
-              <option value="ar">{t('arabic')}</option>
-            </select>
-          </div>
-          <p className="text-gray-400 self-center">{t('locationInherited')}</p>
-        </div>
-      );
-    case 'CURRENCY':
-      return (
-        <div className="grid grid-cols-2 gap-2 bg-emerald-50 dark:bg-emerald-950/40 rounded p-2 text-xs">
-          <div>
-            <label className="text-gray-500 block mb-0.5">{t('baseCurrency')}</label>
-            <select value={(cfg.base as string) ?? 'USD'} onChange={e => onChangeCommitted({ ...cfg, base: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              {['USD', 'EUR', 'GBP', 'SAR', 'AED'].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-gray-500 block mb-0.5">{t('language')}</label>
-            <select value={(cfg.lang as string) ?? 'en'} onChange={e => onChangeCommitted({ ...cfg, lang: e.target.value })}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-1.5 py-1 focus:outline-none">
-              <option value="en">{t('english')}</option>
-              <option value="ar">{t('arabic')}</option>
-            </select>
-          </div>
-        </div>
-      );
-    case 'TICKER':
-      return (
-        <div className="bg-orange-50 dark:bg-orange-950/40 rounded p-2 text-xs">
-          <label className="text-gray-500 block mb-0.5">{t('rssFeedUrl')}</label>
-          <input type="url" value={(cfg.feedUrl as string) ?? ''} onChange={e => onChange({ ...cfg, feedUrl: e.target.value })}
-            onFocus={onFocusField} onBlur={onBlurField}
-            placeholder="https://feeds.bbcnews.com/world/rss.xml"
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-orange-400" />
-        </div>
-      );
-    default:
-      return null;
-  }
-}
-
 export default function LayoutsPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -235,73 +116,12 @@ export default function LayoutsPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Undo/redo — scoped to the current edit session, reset whenever a different layout (or a
-  // new one) is opened. `past`/`future` hold full {name, zones} snapshots rather than diffs —
-  // simplest correct thing for a state this small, and it's already fully replaced on save
-  // anyway (see layouts.service.ts's delete-and-recreate).
   interface EditorSnapshot { name: string; zones: ZoneInput[]; }
-  const [history, setHistory] = useState<{ past: EditorSnapshot[]; future: EditorSnapshot[] }>({ past: [], future: [] });
-  // Brackets a continuous edit (typing in a field, dragging a slider) into a single undo step:
-  // captured once on focus/mousedown, consumed once on blur/release, ignored if nothing changed.
-  const pendingCaptureRef = useRef<EditorSnapshot | null>(null);
-
-  useEffect(() => {
-    setHistory({ past: [], future: [] });
-    pendingCaptureRef.current = null;
-  }, [editing]);
-
-  function captureForHistory() {
-    if (pendingCaptureRef.current === null) pendingCaptureRef.current = { name, zones };
-  }
-  function commitCaptured() {
-    const captured = pendingCaptureRef.current;
-    pendingCaptureRef.current = null;
-    if (!captured) return;
-    setHistory(h => ({ past: [...h.past, captured], future: [] }));
-  }
-  // Discrete actions (add/delete zone, preset, dropdown picks, drag/resize stop) commit in one
-  // shot: snapshot the pre-mutation state, then apply the mutation.
-  function commit(mutator: () => void) {
-    captureForHistory();
-    mutator();
-    commitCaptured();
-  }
-  function undo() {
-    const previous = history.past[history.past.length - 1];
-    if (!previous) return;
-    setHistory({ past: history.past.slice(0, -1), future: [{ name, zones }, ...history.future] });
-    setName(previous.name);
-    setZones(previous.zones);
-  }
-  function redo() {
-    const next = history.future[0];
-    if (!next) return;
-    setHistory({ past: [...history.past, { name, zones }], future: history.future.slice(1) });
-    setName(next.name);
-    setZones(next.zones);
-  }
-  // Stable keydown listener (only resubscribes when the editor opens/closes) that still always
-  // calls the latest undo/redo — avoids either a stale closure or resubscribing on every
-  // keystroke, which re-running the effect on every zones/history change would otherwise cause.
-  const undoRef = useRef(undo);
-  const redoRef = useRef(redo);
-  undoRef.current = undo;
-  redoRef.current = redo;
-
-  useEffect(() => {
-    if (!editing) return;
-    function onKeyDown(e: KeyboardEvent) {
-      // Don't fight the browser's own per-field undo while someone's mid-edit of a text input.
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) redoRef.current(); else undoRef.current();
-      }
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editing]);
+  const { canUndo, canRedo, undo, redo, commit, captureForHistory, commitCaptured } = useEditorHistory<EditorSnapshot>(
+    editing,
+    () => ({ name, zones }),
+    s => { setName(s.name); setZones(s.zones); },
+  );
 
   // Live preview canvas size in px — kept in sync with its actual rendered width so the
   // preview can take up most of the page instead of a fixed small box.
@@ -442,36 +262,32 @@ export default function LayoutsPage() {
     height: (z.height / 100) * previewSize.height,
   }), [previewSize]);
 
+  // Alignment guides only make sense against another zone's actual visible edges — a rotated
+  // zone's unrotated left/top/width/height box doesn't correspond to anything on screen, so it's
+  // excluded both as a snap target for others and (in handleDrag/handleResize below) as something
+  // that itself snaps while being dragged/resized.
   const computeTargets = useCallback((excludeIndex: number) => {
-    const xs = new Set<number>([0, previewSize.width / 2, previewSize.width]);
-    const ys = new Set<number>([0, previewSize.height / 2, previewSize.height]);
-    zones.forEach((z, idx) => {
-      if (idx === excludeIndex) return;
-      const b = getBoxPx(z);
-      xs.add(b.left); xs.add(b.left + b.width / 2); xs.add(b.left + b.width);
-      ys.add(b.top); ys.add(b.top + b.height / 2); ys.add(b.top + b.height);
-    });
-    return { xs: [...xs], ys: [...ys] };
+    const otherBoxes = zones
+      .filter((z, idx) => idx !== excludeIndex && !(z.rotation ?? 0))
+      .map(getBoxPx);
+    return computeAlignTargets(previewSize.width, previewSize.height, otherBoxes);
   }, [zones, previewSize, getBoxPx]);
 
-  const clampBox = useCallback((box: Box): Box => {
-    const width = Math.min(box.width, previewSize.width);
-    const height = Math.min(box.height, previewSize.height);
-    return {
-      width, height,
-      left: Math.min(Math.max(box.left, 0), previewSize.width - width),
-      top: Math.min(Math.max(box.top, 0), previewSize.height - height),
-    };
-  }, [previewSize]);
+  const clampToCanvas = useCallback((box: Box): Box => clampBox(box, previewSize.width, previewSize.height), [previewSize]);
 
   function handleDrag(i: number, x: number, y: number) {
     const z = zones[i];
     if (!z) return;
     const box = getBoxPx(z);
+    if (z.rotation) {
+      setDragBox({ index: i, ...clampToCanvas({ left: x, top: y, width: box.width, height: box.height }) });
+      setGuides({ v: [], h: [] });
+      return;
+    }
     const { xs, ys } = computeTargets(i);
     const snapX = snapDragAxis(x, box.width, xs);
     const snapY = snapDragAxis(y, box.height, ys);
-    const next = clampBox({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
+    const next = clampToCanvas({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
     setDragBox({ index: i, ...next });
     setGuides({ v: snapX.guide !== null ? [snapX.guide] : [], h: snapY.guide !== null ? [snapY.guide] : [] });
   }
@@ -480,10 +296,20 @@ export default function LayoutsPage() {
     const z = zones[i];
     if (!z) return;
     const box = getBoxPx(z);
+    if (z.rotation) {
+      const next = clampToCanvas({ left: x, top: y, width: box.width, height: box.height });
+      commit(() => updateZone(i, {
+        x: clampPct(next.left / previewSize.width * 100),
+        y: clampPct(next.top / previewSize.height * 100),
+      }));
+      setDragBox(null);
+      setGuides({ v: [], h: [] });
+      return;
+    }
     const { xs, ys } = computeTargets(i);
     const snapX = snapDragAxis(x, box.width, xs);
     const snapY = snapDragAxis(y, box.height, ys);
-    const next = clampBox({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
+    const next = clampToCanvas({ left: snapX.pos, top: snapY.pos, width: box.width, height: box.height });
     commit(() => updateZone(i, {
       x: clampPct(next.left / previewSize.width * 100),
       y: clampPct(next.top / previewSize.height * 100),
@@ -492,46 +318,16 @@ export default function LayoutsPage() {
     setGuides({ v: [], h: [] });
   }
 
-  function resolveResize(i: number, direction: string, box: Box): Box {
-    const { xs, ys } = computeTargets(i);
-    let { left, top, width, height } = box;
-    let right = left + width, bottom = top + height;
-    const vGuides: number[] = [];
-    const hGuides: number[] = [];
-
-    if (/right/i.test(direction)) {
-      const s = snapEdge(right, xs);
-      if (s.guide !== null) { right = s.value; vGuides.push(s.guide); }
-    }
-    if (/left/i.test(direction)) {
-      const s = snapEdge(left, xs);
-      if (s.guide !== null) { left = s.value; vGuides.push(s.guide); }
-    }
-    if (/bottom/i.test(direction)) {
-      const s = snapEdge(bottom, ys);
-      if (s.guide !== null) { bottom = s.value; hGuides.push(s.guide); }
-    }
-    if (/top/i.test(direction)) {
-      const s = snapEdge(top, ys);
-      if (s.guide !== null) { top = s.value; hGuides.push(s.guide); }
-    }
-
-    width = Math.max(MIN_ZONE_PX, right - left);
-    height = Math.max(MIN_ZONE_PX, bottom - top);
-    const next = clampBox({ left, top, width, height });
-    setGuides({ v: vGuides, h: hGuides });
-    return next;
-  }
-
   function handleResize(i: number, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
     const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
-    const next = resolveResize(i, direction, box);
+    const { box: next, guides } = resolveResize(direction, box, computeTargets(i), MIN_ZONE_PX, previewSize.width, previewSize.height);
     setDragBox({ index: i, ...next });
+    setGuides(guides);
   }
 
   function handleResizeStop(i: number, direction: string, ref: HTMLElement, position: { x: number; y: number }) {
     const box: Box = { left: position.x, top: position.y, width: parseFloat(ref.style.width), height: parseFloat(ref.style.height) };
-    const next = resolveResize(i, direction, box);
+    const { box: next } = resolveResize(direction, box, computeTargets(i), MIN_ZONE_PX, previewSize.width, previewSize.height);
     commit(() => updateZone(i, {
       x: clampPct(next.left / previewSize.width * 100),
       y: clampPct(next.top / previewSize.height * 100),
@@ -596,7 +392,7 @@ export default function LayoutsPage() {
 
     function compute(clientX: number, clientY: number): Box {
       const mouse = { x: clientX - canvasRect.left, y: clientY - canvasRect.top };
-      return clampBox(rotatedResizeBox(rotation, handle, anchor, mouse, box, MIN_ZONE_PX));
+      return clampBox(rotatedResizeBox(rotation, handle, anchor, mouse, box, MIN_ZONE_PX), previewSize.width, previewSize.height);
     }
 
     function onMove(ev: MouseEvent) {
@@ -661,7 +457,14 @@ export default function LayoutsPage() {
               <div className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('preview')}</div>
               <div ref={previewRef}
                 onMouseDown={e => { if (e.target === e.currentTarget) setSelectedZoneId(null); }}
-                style={{ width: '100%', aspectRatio: '16 / 9', background: '#111', position: 'relative', borderRadius: 6, overflow: 'hidden' }}>
+                // Deliberately not clipped: a rotated zone's corners (and its resize handles) can
+                // extend past the canvas rectangle once its bounding diagonal exceeds the canvas
+                // size — clipping them here made those corners/handles invisible and unreachable,
+                // which is what made resizing rotated zones feel broken. The editor is a drafting
+                // aid, not the final render, so letting rotation overflow show while editing (with
+                // the canvas's own background/border still marking the real screen bounds) is the
+                // right tradeoff.
+                style={{ width: '100%', aspectRatio: '16 / 9', background: '#111', position: 'relative', borderRadius: 6, overflow: 'visible' }}>
                 {previewSize.width > 0 && zones.map((z, i) => {
                   const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
                   const liveRotation = rotationDrag && rotationDrag.index === i ? rotationDrag.deg : (z.rotation ?? 0);
@@ -923,7 +726,8 @@ export default function LayoutsPage() {
                     {/* Widget-specific config */}
                     {z.zoneType && z.zoneType !== 'MEDIA' && (
                       <WidgetConfigFields
-                        zone={z}
+                        widgetType={z.zoneType}
+                        config={z.widgetConfig ?? {}}
                         onChange={cfg => updateZone(i, { widgetConfig: cfg })}
                         onChangeCommitted={cfg => commit(() => updateZone(i, { widgetConfig: cfg }))}
                         onFocusField={captureForHistory}
@@ -938,11 +742,11 @@ export default function LayoutsPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
-            <button onClick={undo} disabled={history.past.length === 0} title={`${t('undo')} (Ctrl+Z)`}
+            <button onClick={undo} disabled={!canUndo} title={`${t('undo')} (Ctrl+Z)`}
               className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30">
               <Undo2 className="w-4 h-4" />
             </button>
-            <button onClick={redo} disabled={history.future.length === 0} title={`${t('redo')} (Ctrl+Shift+Z)`}
+            <button onClick={redo} disabled={!canRedo} title={`${t('redo')} (Ctrl+Shift+Z)`}
               className="p-2 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-30 me-auto">
               <Redo2 className="w-4 h-4" />
             </button>

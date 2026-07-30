@@ -79,7 +79,7 @@ export interface PowerRule {
   endTime: string;
 }
 
-export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle';
 
 export interface Zone {
@@ -160,7 +160,7 @@ export type HydratedThemeElement =
   | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null; url: string | null } })
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null; playlist: Playlist | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
-  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER'; widgetConfig: Record<string, unknown> } });
+  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE'; widgetConfig: Record<string, unknown> } });
 
 export interface HydratedTheme {
   id: string;

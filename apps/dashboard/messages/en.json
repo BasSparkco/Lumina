@@ -410,7 +410,9 @@
       "PRAYER": "Prayer times",
       "WEATHER": "Weather",
       "CURRENCY": "Currency rates",
-      "TICKER": "News ticker (RSS)"
+      "TICKER": "News ticker",
+      "TIME": "Time",
+      "DATE": "Date"
     },
     "widget": {
       "methodOverride": "Method override",
@@ -422,7 +424,23 @@
       "athanAudio": "Athan audio",
       "locationInherited": "Location inherited from screen settings",
       "baseCurrency": "Base currency",
-      "rssFeedUrl": "RSS feed URL"
+      "tickerSource": "Content source",
+      "tickerSourceRss": "RSS feed",
+      "tickerSourceText": "Free text",
+      "rssFeedUrl": "RSS feed URL",
+      "tickerText": "Ticker text",
+      "tickerTextPlaceholder": "One line per message",
+      "scrollDirection": "Scroll direction",
+      "directionHorizontal": "Horizontal",
+      "directionVertical": "Vertical",
+      "clockFormat": "Clock format",
+      "clock12h": "12-hour",
+      "clock24h": "24-hour",
+      "showSeconds": "Show seconds",
+      "timezoneOverride": "Override timezone",
+      "dateFormat": "Date format",
+      "dateFormatLong": "Long (Monday, January 5, 2026)",
+      "dateFormatShort": "Short (01/05/2026)"
     }
   },
   "themes": {
@@ -481,6 +499,7 @@
     "fontFamilyBodyOption": "Body font (theme default)",
     "fontFamilyCustomOption": "Custom font…",
     "rotateHint": "Drag to rotate",
+    "resizeHint": "Drag to resize",
     "fontSizePx": "Text size (px)",
     "fontWeight": "Weight",
     "textAlign": "Align",
@@ -533,7 +552,9 @@
       "PRAYER": "Prayer times",
       "WEATHER": "Weather",
       "CURRENCY": "Currency rates",
-      "TICKER": "News ticker (RSS)"
+      "TICKER": "News ticker",
+      "TIME": "Time",
+      "DATE": "Date"
     },
     "paletteRoles": {
       "primary": "Primary",

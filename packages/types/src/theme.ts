@@ -37,7 +37,7 @@ export type ThemeTypography = z.infer<typeof ThemeTypographySchema>;
 export const ThemeElementKindSchema = z.enum(['TEXT', 'IMAGE', 'VIDEO', 'PLAYLIST', 'SHAPE', 'WIDGET']);
 export type ThemeElementKind = z.infer<typeof ThemeElementKindSchema>;
 
-export const ThemeWidgetTypeSchema = z.enum(['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER']);
+export const ThemeWidgetTypeSchema = z.enum(['PRAYER', 'WEATHER', 'CURRENCY', 'TICKER', 'TIME', 'DATE']);
 export type ThemeWidgetType = z.infer<typeof ThemeWidgetTypeSchema>;
 
 export const ThemeElementShapeSchema = z.enum(['rectangle', 'rounded', 'circle', 'triangle']);

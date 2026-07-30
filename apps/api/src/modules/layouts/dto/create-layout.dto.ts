@@ -1,7 +1,7 @@
 import { IsString, IsArray, ValidateNested, IsNumber, IsOptional, IsIn, IsObject, IsBoolean, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
-const ZONE_TYPES = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER'] as const;
+const ZONE_TYPES = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER', 'TIME', 'DATE'] as const;
 const ZONE_SHAPES = ['rectangle', 'rounded', 'circle', 'triangle'] as const;
 
 export class ZoneDto {

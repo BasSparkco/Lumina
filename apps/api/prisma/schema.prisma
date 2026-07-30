@@ -407,6 +407,8 @@ enum ZoneType {
   WEATHER
   CURRENCY
   TICKER
+  TIME
+  DATE
 }
 
 // Clips a zone's rendered content to a shape within its (still rectangular) bounding box —

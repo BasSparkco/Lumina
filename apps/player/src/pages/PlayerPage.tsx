@@ -13,6 +13,8 @@ import PrayerZoneWidget, { type PrayerMethod } from '../components/PrayerZoneWid
 import WeatherWidget from '../components/WeatherWidget';
 import CurrencyWidget from '../components/CurrencyWidget';
 import TickerWidget from '../components/TickerWidget';
+import TimeWidget from '../components/TimeWidget';
+import DateWidget from '../components/DateWidget';
 import Splash from '../components/Splash';
 
 const HEARTBEAT_INTERVAL = 30_000;
@@ -36,8 +38,10 @@ function zoneHasContent(zone: Zone, state: PlayerState): boolean {
       return lat != null && lon != null;
     }
     case 'TICKER':
-      return !!cfg.feedUrl;
+      return !!cfg.feedUrl || !!(cfg.staticText as string | undefined)?.trim();
     case 'CURRENCY':
+    case 'TIME':
+    case 'DATE':
       return true;
     default:
       return !!zone.playlist && zone.playlist.items.length > 0;
@@ -325,8 +329,32 @@ function ZoneRenderer({ zone, state, onAssetChange, volume, forceMuted }: {
         />
       );
     case 'TICKER':
-      if (!cfg.feedUrl) return <Splash text="Ticker zone: no RSS URL set" />;
-      return <TickerWidget feedUrl={cfg.feedUrl as string} lang={lang} />;
+      if (!cfg.feedUrl && !cfg.staticText) return <Splash text="Ticker zone: no content source set" />;
+      return (
+        <TickerWidget
+          feedUrl={cfg.feedUrl as string | undefined}
+          staticText={cfg.staticText as string | undefined}
+          direction={(cfg.direction as 'horizontal' | 'vertical' | undefined) ?? 'horizontal'}
+          lang={lang}
+        />
+      );
+    case 'TIME':
+      return (
+        <TimeWidget
+          timezone={(cfg.timezone as string | undefined) ?? state.timezone}
+          hour12={(cfg.hour12 as boolean | undefined) ?? true}
+          showSeconds={!!cfg.showSeconds}
+          lang={lang}
+        />
+      );
+    case 'DATE':
+      return (
+        <DateWidget
+          timezone={(cfg.timezone as string | undefined) ?? state.timezone}
+          format={(cfg.format as 'short' | 'long' | undefined) ?? 'long'}
+          lang={lang}
+        />
+      );
     default:
       return zone.playlist
         ? <ZonePlayer playlist={zone.playlist} volume={volume} forceMuted={forceMuted} onAssetChange={onAssetChange} />

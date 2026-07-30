@@ -4,8 +4,10 @@ import PrayerZoneWidget, { type PrayerMethod } from './PrayerZoneWidget';
 import WeatherWidget from './WeatherWidget';
 import CurrencyWidget from './CurrencyWidget';
 import TickerWidget from './TickerWidget';
+import TimeWidget from './TimeWidget';
+import DateWidget from './DateWidget';
 
-export type LiveWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER';
+export type LiveWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
 
 interface Props {
   widgetType: LiveWidgetType;
@@ -45,8 +47,32 @@ export default function LiveWidget({ widgetType, widgetConfig: cfg, state }: Pro
         />
       );
     case 'TICKER':
-      if (!cfg.feedUrl) return <Splash text="Ticker zone: no RSS URL set" />;
-      return <TickerWidget feedUrl={cfg.feedUrl as string} lang={lang} />;
+      if (!cfg.feedUrl && !cfg.staticText) return <Splash text="Ticker zone: no content source set" />;
+      return (
+        <TickerWidget
+          feedUrl={cfg.feedUrl as string | undefined}
+          staticText={cfg.staticText as string | undefined}
+          direction={(cfg.direction as 'horizontal' | 'vertical' | undefined) ?? 'horizontal'}
+          lang={lang}
+        />
+      );
+    case 'TIME':
+      return (
+        <TimeWidget
+          timezone={(cfg.timezone as string | undefined) ?? state.timezone}
+          hour12={(cfg.hour12 as boolean | undefined) ?? true}
+          showSeconds={!!cfg.showSeconds}
+          lang={lang}
+        />
+      );
+    case 'DATE':
+      return (
+        <DateWidget
+          timezone={(cfg.timezone as string | undefined) ?? state.timezone}
+          format={(cfg.format as 'short' | 'long' | undefined) ?? 'long'}
+          lang={lang}
+        />
+      );
     default:
       return null;
   }

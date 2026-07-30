@@ -410,7 +410,9 @@
       "PRAYER": "أوقات الصلاة",
       "WEATHER": "الطقس",
       "CURRENCY": "أسعار العملات",
-      "TICKER": "شريط إخباري (RSS)"
+      "TICKER": "شريط إخباري",
+      "TIME": "الوقت",
+      "DATE": "التاريخ"
     },
     "widget": {
       "methodOverride": "تجاوز طريقة الحساب",
@@ -422,7 +424,23 @@
       "athanAudio": "صوت الأذان",
       "locationInherited": "الموقع موروث من إعدادات الشاشة",
       "baseCurrency": "العملة الأساسية",
-      "rssFeedUrl": "رابط تغذية RSS"
+      "tickerSource": "مصدر المحتوى",
+      "tickerSourceRss": "تغذية RSS",
+      "tickerSourceText": "نص حر",
+      "rssFeedUrl": "رابط تغذية RSS",
+      "tickerText": "نص الشريط",
+      "tickerTextPlaceholder": "سطر واحد لكل رسالة",
+      "scrollDirection": "اتجاه التمرير",
+      "directionHorizontal": "أفقي",
+      "directionVertical": "عمودي",
+      "clockFormat": "صيغة الساعة",
+      "clock12h": "12 ساعة",
+      "clock24h": "24 ساعة",
+      "showSeconds": "إظهار الثواني",
+      "timezoneOverride": "تجاوز المنطقة الزمنية",
+      "dateFormat": "صيغة التاريخ",
+      "dateFormatLong": "طويلة (الاثنين، 5 يناير 2026)",
+      "dateFormatShort": "قصيرة (05/01/2026)"
     }
   },
   "themes": {
@@ -481,6 +499,7 @@
     "fontFamilyBodyOption": "خط النص (افتراضي القالب)",
     "fontFamilyCustomOption": "خط مخصص…",
     "rotateHint": "اسحب للتدوير",
+    "resizeHint": "اسحب لتغيير الحجم",
     "fontSizePx": "حجم النص (بكسل)",
     "fontWeight": "الوزن",
     "textAlign": "المحاذاة",
@@ -533,7 +552,9 @@
       "PRAYER": "أوقات الصلاة",
       "WEATHER": "الطقس",
       "CURRENCY": "أسعار العملات",
-      "TICKER": "شريط إخباري (RSS)"
+      "TICKER": "شريط إخباري",
+      "TIME": "الوقت",
+      "DATE": "التاريخ"
     },
     "paletteRoles": {
       "primary": "أساسي",
