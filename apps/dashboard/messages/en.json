@@ -21,9 +21,15 @@
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "signOut": "Sign out",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "unsavedChangesConfirm": "You have unsaved changes. Leave this page and discard them?"
   },
   "common": {
+    "openAddPanel": "Open add panel",
+    "closeAddPanel": "Close add panel",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Reset zoom to 100%",
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
@@ -62,6 +68,13 @@
       "APPROVED": "Approved",
       "REJECTED": "Rejected"
     }
+  },
+  "cropEditor": {
+    "title": "Adjust framing",
+    "editCrop": "Adjust framing",
+    "dragHint": "Drag to reposition, zoom in to pan",
+    "resetToFull": "Reset to full image",
+    "zoom": "Zoom"
   },
   "auth": {
     "login": {
@@ -250,6 +263,14 @@
     "includeAudio": "Include audio",
     "audioEnabled": "Audio included",
     "audioDisabled": "Audio muted",
+    "convertToAudio": "Convert to audio asset",
+    "videoUploadChoice": {
+      "title": "Video selected",
+      "body": "Upload the full video, or extract just its audio as a separate asset?",
+      "bodyPlural": "Upload the full videos, or extract just their audio as separate assets? ({count} videos)",
+      "uploadVideo": "Upload video",
+      "extractAudioOnly": "Extract audio only"
+    },
     "newText": "New text",
     "newTextModalTitle": "New text asset",
     "newTextNamePlaceholder": "e.g. Welcome Message",
@@ -283,6 +304,17 @@
     "libraryEmpty": "No library assets match your search.",
     "addToMyAssets": "Add to my assets",
     "addedToMyAssets": "Added",
+    "allTypes": "All types",
+    "allUsage": "All assets",
+    "inUse": "In use",
+    "unused": "Unused",
+    "typeFilter": {
+      "IMAGE": "Images",
+      "VIDEO": "Videos",
+      "AUDIO": "Audio",
+      "DOCUMENT": "Documents",
+      "TEXT": "Text"
+    },
     "categories": {
       "BACKGROUND": "Background",
       "ICON": "Icon",
@@ -362,6 +394,13 @@
     "noAsset": "— No asset —",
     "zones": "Zones",
     "addZone": "Add zone",
+    "addGroups": {
+      "media": "Media",
+      "dataFeeds": "Data feeds",
+      "timeDate": "Time & date",
+      "faith": "Faith",
+      "interactive": "Interactive"
+    },
     "saveLayout": "Save layout",
     "saving": "Saving…",
     "loading": "Loading layouts…",
@@ -381,7 +420,12 @@
       "rectangle": "Rectangle",
       "rounded": "Rounded rectangle",
       "circle": "Circle",
-      "triangle": "Triangle"
+      "triangle": "Triangle",
+      "pentagon": "Pentagon",
+      "hexagon": "Hexagon",
+      "octagon": "Octagon",
+      "star": "Star",
+      "arrow": "Arrow"
     },
     "editableHint": "Uncheck to lock this zone in place — dragging, resizing, and rotating are disabled",
     "lockedHint": "Locked — uncheck \"Editable\" below to unlock",
@@ -412,7 +456,8 @@
       "CURRENCY": "Currency rates",
       "TICKER": "News ticker",
       "TIME": "Time",
-      "DATE": "Date"
+      "DATE": "Date",
+      "QR": "QR code"
     },
     "widget": {
       "methodOverride": "Method override",
@@ -440,7 +485,12 @@
       "timezoneOverride": "Override timezone",
       "dateFormat": "Date format",
       "dateFormatLong": "Long (Monday, January 5, 2026)",
-      "dateFormatShort": "Short (01/05/2026)"
+      "dateFormatShort": "Short (01/05/2026)",
+      "qrValue": "Content (URL or text)",
+      "qrValuePlaceholder": "https://example.com",
+      "qrForeground": "Foreground color",
+      "qrBackground": "Background color",
+      "qrSize": "Size (% of zone)"
     }
   },
   "themes": {
@@ -468,6 +518,14 @@
     "scale": "Type scale",
     "elements": "Elements",
     "addElement": "Add element",
+    "addGroups": {
+      "basic": "Basic",
+      "media": "Media",
+      "dataFeeds": "Data feeds",
+      "timeDate": "Time & date",
+      "faith": "Faith",
+      "interactive": "Interactive"
+    },
     "elementLabel": "Label",
     "editableShort": "Editable",
     "editableHint": "Uncheck to lock this element in place — dragging, resizing, and rotating are disabled",
@@ -475,12 +533,21 @@
     "editingNow": "Editing",
     "clickToEditHint": "Click this element to edit its position, content, and typography",
     "shapeHint": "No content of its own — just a positioned, styled color block in whatever shape you pick above.",
+    "brushHint": "A freehand stroke you drew on the canvas. Adjust its color and thickness below, or draw it again from scratch.",
+    "brushRedraw": "Redraw",
+    "brushDrawHint": "Drag across the canvas to draw a stroke. Release to place it.",
+    "strokeColor": "Stroke color",
     "shape": "Shape",
     "shapeTypes": {
       "rectangle": "Rectangle",
       "rounded": "Rounded rectangle",
       "circle": "Circle",
-      "triangle": "Triangle"
+      "triangle": "Triangle",
+      "pentagon": "Pentagon",
+      "hexagon": "Hexagon",
+      "octagon": "Octagon",
+      "star": "Star",
+      "arrow": "Arrow"
     },
     "undo": "Undo",
     "redo": "Redo",
@@ -488,8 +555,18 @@
     "translationAr": "Arabic translation (optional)",
     "image": "Image asset",
     "video": "Video asset",
+    "document": "Document asset",
+    "secondsPerPage": "Seconds per page",
     "playlistContent": "Playlist",
     "noAsset": "— No asset —",
+    "imageSourceExisting": "Existing",
+    "imageSourceUpload": "Upload",
+    "imageSourcePaste": "Paste",
+    "uploadImage": "Upload image",
+    "uploadingImage": "Uploading…",
+    "uploadImageFailed": "Upload failed",
+    "pasteImageHint": "Click here, then press Ctrl+V (⌘V on Mac) to paste an image",
+    "pasteImageError": "Clipboard didn't contain an image",
     "noPlaylist": "— No playlist —",
     "widgetType": "Widget",
     "color": "Text color",
@@ -500,6 +577,7 @@
     "fontFamilyCustomOption": "Custom font…",
     "rotateHint": "Drag to rotate",
     "resizeHint": "Drag to resize",
+    "editTextHint": "Double-click to edit text",
     "fontSizePx": "Text size (px)",
     "fontWeight": "Weight",
     "textAlign": "Align",
@@ -507,6 +585,14 @@
     "borderRadius": "Corner radius",
     "opacity": "Opacity",
     "objectFit": "Fit",
+    "fillStyle": "Fill style",
+    "fillStyleSolid": "Solid",
+    "fillStyleOutline": "Outline",
+    "outlineColor": "Outline color",
+    "strokeWidth": "Stroke width",
+    "quickAddShape": "Add shape",
+    "quickAdd": "Add",
+    "customColor": "Custom color",
     "saveTheme": "Save theme",
     "saving": "Saving…",
     "field": {
@@ -544,8 +630,10 @@
       "TEXT": "Text",
       "IMAGE": "Image",
       "VIDEO": "Video",
+      "DOCUMENT": "Document",
       "PLAYLIST": "Playlist",
       "SHAPE": "Shape / color block",
+      "BRUSH": "Brush (freehand)",
       "WIDGET": "Live widget"
     },
     "widgetTypes": {
@@ -554,7 +642,8 @@
       "CURRENCY": "Currency rates",
       "TICKER": "News ticker",
       "TIME": "Time",
-      "DATE": "Date"
+      "DATE": "Date",
+      "QR": "QR code"
     },
     "paletteRoles": {
       "primary": "Primary",
@@ -719,6 +808,7 @@
     "detailMovedFromTo": "Moved from {from} to {to}",
     "detailRemovedFromGroup": "Removed from {group}",
     "detailDuplicatedFrom": "Duplicated from {name}",
+    "detailExtractedFrom": "Extracted from {name}",
     "resourceTypes": {
       "MEMBER": "Member",
       "PLAYLIST": "Playlist",
@@ -815,6 +905,12 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Personal preferences for this browser",
+    "sectionGeneral": "General",
+    "sectionGeneralDesc": "Appearance and localization",
+    "sectionEditor": "Editor",
+    "sectionEditorDesc": "Behavior of the Layouts and Themes canvas editors",
+    "sectionContent": "Content & publishing",
+    "sectionContentDesc": "Defaults for playlists, screens, and optional features",
     "darkMode": "Dark mode",
     "darkModeDesc": "Switch between light and dark appearance",
     "timeFormat": "Time format",
@@ -838,6 +934,10 @@
     "autoPublishDesc": "Skip the Publish button — playlist, layout, and other display changes on the Screens page go live the moment they're saved",
     "autoPublishNoPermission": "Only admins and owners can change this",
     "requireSelectToEdit": "Require a click to select before editing",
-    "requireSelectToEditDesc": "In the Layouts and Themes editors, click an element once to select it before you can drag, resize, or rotate it — a guard against accidental changes"
+    "requireSelectToEditDesc": "In the Layouts and Themes editors, click an element once to select it before you can drag, resize, or rotate it — a guard against accidental changes",
+    "rotateHandleStyle": "Rotate handle style",
+    "rotateHandleStyleDesc": "How the rotate grip appears on a selected element in the Layouts and Themes editors",
+    "rotateHandleCorners": "Corner arrows",
+    "rotateHandleSingle": "Single grip"
   }
 }

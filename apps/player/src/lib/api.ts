@@ -39,13 +39,21 @@ export interface PlaylistItem {
   durationSecs: number;
   muted: boolean;
   playFullVideo: boolean;
+  // Per-placement image/video framing (crop editor) — null means "show the whole asset" per
+  // the render-side default (fill for images, contain for video/document).
+  cropZoom: number | null;
+  cropOffsetX: number | null;
+  cropOffsetY: number | null;
   asset: {
     id: string;
     name: string;
-    type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT';
+    type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT';
     mimeType: string;
     url: string | null;
     thumbnailUrl: string | null;
+    // One image URL per page, DOCUMENT only — empty for every other type. durationSecs above
+    // doubles as "seconds per page" for DOCUMENT items (see ZonePlayer).
+    pageUrls: string[];
     textContent: string | null;
     textFontFamily: string | null;
     textColor: string | null;
@@ -79,8 +87,8 @@ export interface PowerRule {
   endTime: string;
 }
 
-export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
-export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle';
+export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
+export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
 
 export interface Zone {
   id: string;
@@ -104,7 +112,8 @@ export interface Zone {
 
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
 
-export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'PLAYLIST' | 'SHAPE' | 'WIDGET';
+export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'PLAYLIST' | 'SHAPE' | 'BRUSH' | 'WIDGET';
+export interface ThemeBrushPoint { x: number; y: number; }
 
 export interface ThemePalette {
   primary: string;
@@ -134,7 +143,15 @@ export interface ThemeElementStyle {
   borderRadius?: number;
   opacity?: number;
   objectFit?: 'contain' | 'cover' | 'fill';
+  // Per-placement image/video framing (crop editor) — see mediaCropStyle in @lumina/types.
+  cropZoom?: number;
+  cropOffsetX?: number;
+  cropOffsetY?: number;
   shape?: ElementShape;
+  // SHAPE-kind only: a solid color-filled silhouette (default) or a stroked outline — the latter
+  // for pure decoration (an emphasis ring, an arrow painted a color), no media/content of its own.
+  shapeFill?: 'solid' | 'outline';
+  strokeWidthPx?: number;
 }
 
 interface ThemeElementBase {
@@ -158,8 +175,10 @@ export type HydratedThemeElement =
   | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string> } })
   | (ThemeElementBase & { kind: 'IMAGE'; content: { assetId: string | null; url: string | null } })
   | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null; url: string | null } })
+  | (ThemeElementBase & { kind: 'DOCUMENT'; content: { assetId: string | null; pageUrls: string[]; secondsPerPage: number } })
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null; playlist: Playlist | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
+  | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[] } })
   | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE'; widgetConfig: Record<string, unknown> } });
 
 export interface HydratedTheme {

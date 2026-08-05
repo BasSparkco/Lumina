@@ -4,7 +4,7 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl python3 make g++ procps \
+    openssl python3 make g++ procps poppler-utils libreoffice \
     && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable

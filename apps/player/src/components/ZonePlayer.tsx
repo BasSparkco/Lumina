@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { fontStack } from '@lumina/types';
+import { fontStack, mediaCropStyle } from '@lumina/types';
 import type { Playlist, PlaylistItem } from '../lib/api';
 
 interface Props {
@@ -22,7 +22,11 @@ const FONT_SIZE_CLAMPS: Record<string, string> = {
 export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forceMuted = false }: Props) {
   const [index, setIndex] = useState(0);
   const [item, setItem] = useState<PlaylistItem | null>(null);
+  // Which page of a DOCUMENT item is currently showing — durationSecs doubles as "seconds per
+  // page" for this type (see hydratePlaylist on the API side).
+  const [pageIndex, setPageIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const preloadRef = useRef<HTMLVideoElement | null>(null);
 
@@ -57,6 +61,8 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
       preloadRef.current.load();
     }
 
+    setPageIndex(0);
+
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, playlist]);
@@ -64,6 +70,31 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
   function advance() {
     setIndex(i => (i + 1) % playlist.items.length);
   }
+
+  // DOCUMENT items cycle their own pages before handing off to advance() — mirrors how VIDEO's
+  // onEnded hands off, except there's an internal "sub-item" (page) advance first.
+  useEffect(() => {
+    if (pageTimerRef.current) clearInterval(pageTimerRef.current);
+    if (item?.asset.type !== 'DOCUMENT' || item.asset.pageUrls.length === 0) return;
+
+    pageTimerRef.current = setInterval(() => {
+      setPageIndex(p => {
+        const next = p + 1;
+        if (next < item.asset.pageUrls.length) return next;
+        // Last page: hand off to the next playlist item, unless this is the only item — a
+        // single-item playlist has nowhere to advance to (index would stay 0, so nothing would
+        // ever reset the page), so loop the document's own pages instead.
+        if (playlist.items.length > 1) {
+          advance();
+          return p;
+        }
+        return 0;
+      });
+    }, item.durationSecs * 1000);
+
+    return () => { if (pageTimerRef.current) clearInterval(pageTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item]);
 
   // Browsers block unmuted autoplay without prior user interaction — if that
   // happens, fall back to muted playback rather than leaving the video paused.
@@ -95,6 +126,15 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
         <img
           key={item.id}
           src={item.asset.url ?? undefined}
+          alt={item.asset.name}
+          crossOrigin="anonymous"
+          style={{ width: '100%', height: '100%', objectFit: 'fill', ...mediaCropStyle(item) }}
+        />
+      )}
+      {item.asset.type === 'DOCUMENT' && item.asset.pageUrls[pageIndex] && (
+        <img
+          key={`${item.id}-${pageIndex}`}
+          src={item.asset.pageUrls[pageIndex]}
           alt={item.asset.name}
           crossOrigin="anonymous"
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
@@ -141,7 +181,7 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
           loop={playlist.items.length === 1}
           playsInline
           crossOrigin="anonymous"
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain', ...mediaCropStyle(item) }}
           onEnded={playlist.items.length === 1 ? undefined : advance}
         />
       )}

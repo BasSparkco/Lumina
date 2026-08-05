@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Users, UserPlus, Trash2, Mail, Link2, Check } from 'lucide-react';
+import { Users, UserPlus, Trash2, Mail, Link2, Check, Search } from 'lucide-react';
 import { membersApi, type Member } from '@/lib/mocks/members';
 import type { UserRole } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -37,6 +37,11 @@ export default function MembersPage() {
   const [inviteRole, setInviteRole] = useState<UserRole>('EDITOR');
   const [inviteError, setInviteError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const filteredMembers = members.filter((m: Member) => {
+    const q = search.toLowerCase();
+    return m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+  });
 
   function copyInviteLink(member: Member) {
     if (!member.inviteToken) return;
@@ -129,6 +134,15 @@ export default function MembersPage() {
         </div>
       )}
 
+      {members.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={tc('search')}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+        </div>
+      )}
+
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
       {!isLoading && members.length === 0 && (
@@ -138,9 +152,16 @@ export default function MembersPage() {
         </div>
       )}
 
-      {members.length > 0 && (
+      {!isLoading && members.length > 0 && filteredMembers.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{tc('noMatches')}</p>
+        </div>
+      )}
+
+      {filteredMembers.length > 0 && (
         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-          {members.map((member: Member) => {
+          {filteredMembers.map((member: Member) => {
             const isSelf = member.email === user?.email;
             const isOwner = member.role === 'OWNER';
             return (

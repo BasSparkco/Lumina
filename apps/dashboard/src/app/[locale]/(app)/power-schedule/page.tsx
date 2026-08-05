@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { PowerCircle, Plus, Trash2, Pencil, Check, X, Volume2 } from 'lucide-react';
+import { PowerCircle, Plus, Trash2, Pencil, Check, X, Volume2, Search } from 'lucide-react';
 import { powerSchedulesApi, realScreenGroupsApi, screensApi, type PowerScheduleEntry, type CreatePowerScheduleInput } from '@/lib/api';
 import { PowerPreviewChip } from './PowerPreviewChip';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -82,6 +82,7 @@ export default function PowerSchedulePage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [search, setSearch] = useState('');
 
   const createGroupMut = useMutation({
     mutationFn: () => realScreenGroupsApi.create(newGroupName.trim()),
@@ -158,6 +159,12 @@ export default function PowerSchedulePage() {
   const midnightGapDays = crossesMidnight && days.length > 0
     ? [...new Set(days.filter(d => !days.includes((d + 1) % 7)).map(d => t(`days.${DAY_KEYS[(d + 1) % 7]}`)))]
     : [];
+
+  const filteredRules = rules.filter((r: PowerScheduleEntry) => {
+    const q = search.toLowerCase();
+    if (!q) return true;
+    return (r.screen?.name ?? '').toLowerCase().includes(q) || (r.group?.name ?? '').toLowerCase().includes(q);
+  });
 
   function formatRule(r: PowerScheduleEntry) {
     const parts: string[] = [];
@@ -296,6 +303,15 @@ export default function PowerSchedulePage() {
         </div>
       )}
 
+      {!editing && rules.length > 0 && (
+        <div className="relative mb-5 max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={tc('search')}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+        </div>
+      )}
+
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
       {!isLoading && rules.length === 0 && !editing && (
@@ -305,8 +321,15 @@ export default function PowerSchedulePage() {
         </div>
       )}
 
+      {!isLoading && !editing && rules.length > 0 && filteredRules.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{tc('noMatches')}</p>
+        </div>
+      )}
+
       <div className="space-y-3">
-        {rules.map((r: PowerScheduleEntry) => (
+        {filteredRules.map((r: PowerScheduleEntry) => (
           <div key={r.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">

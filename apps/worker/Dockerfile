@@ -28,8 +28,11 @@ FROM node:24-bookworm-slim AS runner
 WORKDIR /repo
 
 # ffmpeg/ffprobe (via the installer packages) and sharp both need these at runtime,
-# same baseline as Dockerfile.dev.
-RUN apt-get update && apt-get install -y --no-install-recommends openssl procps \
+# same baseline as Dockerfile.dev. poppler-utils (pdftoppm) rasterizes PDF pages; libreoffice
+# (headless, via its `soffice` binary) converts PPT/PPTX/DOC/DOCX to PDF first — both needed for
+# the DOCUMENT asset pipeline in media.processor.ts. libreoffice is a large package; accepted
+# trade-off for full OptiSigns document-format parity instead of PDF-only.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl procps poppler-utils libreoffice \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /repo/node_modules node_modules

@@ -20,6 +20,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: change-me-in-production
       PORT: 4000
+      HOST: 0.0.0.0
       NODE_ENV: development
       LOG_LEVEL: debug
       S3_ENDPOINT: http://minio:9000

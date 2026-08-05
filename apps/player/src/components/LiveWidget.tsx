@@ -6,8 +6,9 @@ import CurrencyWidget from './CurrencyWidget';
 import TickerWidget from './TickerWidget';
 import TimeWidget from './TimeWidget';
 import DateWidget from './DateWidget';
+import QrCodeWidget from './QrCodeWidget';
 
-export type LiveWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
+export type LiveWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 
 interface Props {
   widgetType: LiveWidgetType;
@@ -71,6 +72,15 @@ export default function LiveWidget({ widgetType, widgetConfig: cfg, state }: Pro
           timezone={(cfg.timezone as string | undefined) ?? state.timezone}
           format={(cfg.format as 'short' | 'long' | undefined) ?? 'long'}
           lang={lang}
+        />
+      );
+    case 'QR':
+      return (
+        <QrCodeWidget
+          value={cfg.value as string | undefined}
+          color={cfg.color as string | undefined}
+          background={cfg.background as string | undefined}
+          sizePercent={cfg.sizePercent as number | undefined}
         />
       );
     default:

@@ -8,8 +8,9 @@
 - **Start here next session** tells you exactly what to pick up next.
 - Check [status-backend.md](./status-backend.md)'s **Breaking changes for frontend** section
   periodically in case a shape you're mocking changed.
-- Task list: [Roadmap-Phase5-Frontend.md](./Roadmap-Phase5-Frontend.md). Earlier history (Phases
-  0–4, single log): [status.md](./status.md).
+- Task list: [Roadmap.md](./Roadmap.md) (Phase 5 section — the backend/frontend split roadmap
+  files were merged into this single roadmap). Earlier history (Phases 0–4, single log):
+  [status.md](./status.md).
 
 ---
 

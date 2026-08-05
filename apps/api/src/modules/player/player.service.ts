@@ -145,7 +145,11 @@ export class PlayerService {
         // A zone's MEDIA content is either a playlist or a single asset, never both (enforced
         // in LayoutsService) — asset wins the null-coalesce below only because at most one of
         // the two is ever actually set.
-        playlist: z.playlist ? this.hydratePlaylist(z.playlist) : z.asset ? this.hydrateAssetAsPlaylist(z.asset) : null,
+        playlist: z.playlist
+          ? this.hydratePlaylist(z.playlist)
+          : z.asset
+            ? this.hydrateAssetAsPlaylist(z.asset, { cropZoom: z.cropZoom, cropOffsetX: z.cropOffsetX, cropOffsetY: z.cropOffsetY })
+            : null,
       }));
 
     return {
@@ -211,10 +215,10 @@ export class PlayerService {
   // durationSecs mirrors the PlaylistItem schema default; muted follows the asset's own audio
   // choice, since that's the only place such a choice can be recorded for a non-playlist placement.
   private hydrateAssetAsPlaylist(asset: {
-    id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null;
+    id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null;
     textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null;
     hasAudioTrack: boolean; audioEnabled: boolean;
-  }) {
+  }, crop?: { cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null }) {
     return this.hydratePlaylist({
       id: `asset:${asset.id}`,
       name: asset.name,
@@ -227,6 +231,9 @@ export class PlayerService {
         durationSecs: 10,
         muted: asset.type === 'VIDEO' && asset.hasAudioTrack ? !asset.audioEnabled : true,
         playFullVideo: true,
+        cropZoom: crop?.cropZoom,
+        cropOffsetX: crop?.cropOffsetX,
+        cropOffsetY: crop?.cropOffsetY,
         asset,
       }],
     });
@@ -273,15 +280,15 @@ export class PlayerService {
 
   /**
    * Theme elements reference assets/playlists by id (like layout zones do). Resolve IMAGE/VIDEO
-   * elements to a signed-URL, and PLAYLIST elements to a fully hydrated playlist — everything
-   * else (TEXT/SHAPE/WIDGET) passes through untouched.
+   * elements to a signed-URL, DOCUMENT elements to per-page signed-URLs, and PLAYLIST elements
+   * to a fully hydrated playlist — everything else (TEXT/SHAPE/WIDGET) passes through untouched.
    */
   private async hydrateThemeElements(elements: unknown): Promise<unknown> {
     if (!Array.isArray(elements)) return [];
     const els = elements as { kind: string; content: Record<string, unknown> }[];
 
     const assetIds = [...new Set(
-      els.filter(e => e.kind === 'IMAGE' || e.kind === 'VIDEO')
+      els.filter(e => e.kind === 'IMAGE' || e.kind === 'VIDEO' || e.kind === 'DOCUMENT')
         .map(e => e.content.assetId as string | null)
         .filter((id): id is string => !!id),
     )];
@@ -294,7 +301,10 @@ export class PlayerService {
     const assets = assetIds.length
       ? await this.prisma.asset.findMany({ where: { id: { in: assetIds } } })
       : [];
-    const assetMap = new Map(assets.map(a => [a.id, this.storage.publicUrl(a.storageKey)]));
+    const assetMap = new Map(assets.map(a => [a.id, {
+      url: this.storage.publicUrl(a.storageKey),
+      pageUrls: a.type === 'DOCUMENT' ? this.documentPageUrls(a.storageKey, a.pageCount) : [],
+    }]));
 
     const playlists = playlistIds.length
       ? await this.prisma.playlist.findMany({
@@ -309,7 +319,18 @@ export class PlayerService {
     return els.map(e => {
       if (e.kind === 'IMAGE' || e.kind === 'VIDEO') {
         const assetId = e.content.assetId as string | null;
-        return { ...e, content: { assetId, url: assetId ? (assetMap.get(assetId) ?? null) : null } };
+        return { ...e, content: { assetId, url: assetId ? (assetMap.get(assetId)?.url ?? null) : null } };
+      }
+      if (e.kind === 'DOCUMENT') {
+        const assetId = e.content.assetId as string | null;
+        return {
+          ...e,
+          content: {
+            assetId,
+            pageUrls: assetId ? (assetMap.get(assetId)?.pageUrls ?? []) : [],
+            secondsPerPage: e.content.secondsPerPage,
+          },
+        };
       }
       if (e.kind === 'PLAYLIST') {
         const playlistId = e.content.playlistId as string | null;
@@ -325,7 +346,7 @@ export class PlayerService {
     transitionStyle: string;
     transitionDurationMs: number;
     playbackOrder: string;
-    items: { id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
+    items: { id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean; cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
   }) {
     const items = playlist.items.map(item => {
       // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
@@ -337,6 +358,9 @@ export class PlayerService {
         durationSecs: item.durationSecs,
         muted: item.muted,
         playFullVideo: item.playFullVideo,
+        cropZoom: item.cropZoom ?? null,
+        cropOffsetX: item.cropOffsetX ?? null,
+        cropOffsetY: item.cropOffsetY ?? null,
         asset: {
           id: item.asset.id,
           name: item.asset.name,
@@ -346,6 +370,11 @@ export class PlayerService {
           thumbnailUrl: !isText && item.asset.thumbnailKey
             ? this.storage.publicUrl(item.asset.thumbnailKey)
             : null,
+          // Per-page images for DOCUMENT assets — durationSecs above doubles as "seconds per
+          // page" for this type, cycled through client-side (see ZonePlayer).
+          pageUrls: item.asset.type === 'DOCUMENT'
+            ? this.documentPageUrls(item.asset.storageKey, item.asset.pageCount)
+            : [],
           textContent: item.asset.textContent,
           textFontFamily: item.asset.textFontFamily,
           textColor: item.asset.textColor,
@@ -362,5 +391,13 @@ export class PlayerService {
       playbackOrder: playlist.playbackOrder,
       items,
     };
+  }
+
+  // Reconstructs the derived page-image keys media.processor.ts uploaded during DOCUMENT
+  // conversion (1-indexed `_p${n}.webp` siblings of storageKey) into signed/public URLs.
+  private documentPageUrls(storageKey: string, pageCount: number | null): string[] {
+    return Array.from({ length: pageCount ?? 0 }, (_, i) =>
+      this.storage.publicUrl(storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
+    );
   }
 }

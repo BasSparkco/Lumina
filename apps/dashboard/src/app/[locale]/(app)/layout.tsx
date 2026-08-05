@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, Palette, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { EditorDirtyProvider, useEditorDirty } from '@/context/EditorDirtyContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 import { playlistsApi } from '@/lib/api';
@@ -30,6 +31,14 @@ const nav: { href: string; key: string; icon: typeof Monitor; visible?: (p: Perm
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <EditorDirtyProvider>
+      <AppShell>{children}</AppShell>
+    </EditorDirtyProvider>
+  );
+}
+
+function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const perms = usePermissions();
   const { collapsed, setCollapsed } = useSidebarCollapsed();
@@ -38,6 +47,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const locale = useLocale();
   const path = usePathname();
   const t = useTranslations('nav');
+  const { guardNavigation } = useEditorDirty();
 
   // The mobile drawer overlay only ever opens on small screens (the hamburger trigger that
   // opens it is `md:hidden`), so overriding the desktop-persisted `collapsed` preference
@@ -90,7 +100,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 start-0 z-40 transition-all duration-200 ease-in-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
-      } md:static md:translate-x-0 ${effectiveCollapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-900 border-e border-gray-200 dark:border-gray-800 flex flex-col shrink-0`}>
+      } md:static md:translate-x-0 md:rtl:translate-x-0 ${effectiveCollapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-900 border-e border-gray-200 dark:border-gray-800 flex flex-col shrink-0`}>
         <div className="flex items-center gap-2 px-5 py-5 border-b border-gray-100 dark:border-gray-800">
           <Tv className="w-5 h-5 text-indigo-600 shrink-0" />
           {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Lumina</span>}
@@ -108,8 +118,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             const active = path.includes(href);
             const label = t(key);
             const badgeCount = key === 'playlists' ? pendingApprovalsCount : 0;
+            const target = `/${locale}${href}`;
             return (
-              <Link key={href} href={`/${locale}${href}`} title={effectiveCollapsed ? label : undefined}
+              <Link key={href} href={target} title={effectiveCollapsed ? label : undefined}
+                onClick={e => {
+                  // Leave modified clicks (new tab/window, middle-click) to the browser's default
+                  // handling — only plain navigation needs the unsaved-changes guard.
+                  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  e.preventDefault();
+                  guardNavigation(t('unsavedChangesConfirm'), () => router.push(target));
+                }}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${effectiveCollapsed ? 'justify-center' : ''} ${
                   active ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}>
@@ -131,7 +149,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="px-3 py-4 border-t border-gray-100 dark:border-gray-800">
           {!effectiveCollapsed && <div className="px-3 py-2 text-xs text-gray-400 truncate">{user.email}</div>}
-          <button onClick={logout} title={effectiveCollapsed ? t('signOut') : undefined}
+          <button onClick={() => guardNavigation(t('unsavedChangesConfirm'), logout)} title={effectiveCollapsed ? t('signOut') : undefined}
             className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors ${effectiveCollapsed ? 'justify-center' : ''}`}>
             <LogOut className="w-4 h-4 shrink-0" /> {!effectiveCollapsed && t('signOut')}
           </button>

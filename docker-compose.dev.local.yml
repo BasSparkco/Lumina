@@ -18,6 +18,7 @@ services:
       REDIS_URL: redis://host.docker.internal:6382
       JWT_SECRET: change-me-in-production
       PORT: 4000
+      HOST: 0.0.0.0
       NODE_ENV: development
       LOG_LEVEL: debug
       S3_ENDPOINT: http://host.docker.internal:9010

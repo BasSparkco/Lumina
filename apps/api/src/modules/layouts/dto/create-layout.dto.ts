@@ -1,8 +1,8 @@
 import { IsString, IsArray, ValidateNested, IsNumber, IsOptional, IsIn, IsObject, IsBoolean, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
-const ZONE_TYPES = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER', 'TIME', 'DATE'] as const;
-const ZONE_SHAPES = ['rectangle', 'rounded', 'circle', 'triangle'] as const;
+const ZONE_TYPES = ['MEDIA', 'PRAYER', 'WEATHER', 'CURRENCY', 'TICKER', 'TIME', 'DATE', 'QR'] as const;
+const ZONE_SHAPES = ['rectangle', 'rounded', 'circle', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arrow'] as const;
 
 export class ZoneDto {
   @IsString() name!: string;
@@ -24,6 +24,11 @@ export class ZoneDto {
   @IsString() @IsOptional() assetId?: string;
   @IsBoolean() @IsOptional() audioPriority?: boolean;
   @IsNumber() @Min(0) @Max(100) @IsOptional() audioVolume?: number | null;
+  // Per-placement image/video framing for a zone playing a direct assetId (see the matching
+  // Prisma column comment) — mirrors PlaylistItem's crop fields.
+  @IsNumber() @Min(1) @Max(4) @IsOptional() cropZoom?: number | null;
+  @IsNumber() @IsOptional() cropOffsetX?: number | null;
+  @IsNumber() @IsOptional() cropOffsetY?: number | null;
 }
 
 export class CreateLayoutDto {

@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "PlaylistItem" ADD COLUMN     "cropOffsetX" DOUBLE PRECISION,
+ADD COLUMN     "cropOffsetY" DOUBLE PRECISION,
+ADD COLUMN     "cropZoom" DOUBLE PRECISION;
+
+-- AlterTable
+ALTER TABLE "Zone" ADD COLUMN     "cropOffsetX" DOUBLE PRECISION,
+ADD COLUMN     "cropOffsetY" DOUBLE PRECISION,
+ADD COLUMN     "cropZoom" DOUBLE PRECISION;

@@ -8,8 +8,9 @@
 - **Start here next session** tells you exactly what to pick up next.
 - If you ship a change that affects a shape the frontend track is building against (renamed field,
   changed endpoint, etc.), note it under **Breaking changes for frontend** so it's easy to spot.
-- Task list: [Roadmap-Phase5-Backend.md](./Roadmap-Phase5-Backend.md). Earlier history (Phases
-  0–4, single log): [status.md](./status.md).
+- Task list: [Roadmap.md](./Roadmap.md) (Phase 5 section — the backend/frontend split roadmap
+  files were merged into this single roadmap). Earlier history (Phases 0–4, single log):
+  [status.md](./status.md).
 
 ---
 
@@ -63,7 +64,7 @@
 
 **Start here next session:**
 > Screen groups & tags, proof-of-play logging, fleet monitoring, and billing are still open — see
-> the second half of [Roadmap-Phase5-Backend.md](./Roadmap-Phase5-Backend.md). Billing needs a
+> the second half of the Phase 5 section in [Roadmap.md](./Roadmap.md). Billing needs a
 > Stripe test-mode key before that section can start.
 
 ---
@@ -93,7 +94,7 @@ regenerate. **Restart `pnpm dev`** to pick up all of today's and the previous se
 **Start here next session:**
 > Only billing/subscriptions is left on the backend list (Stripe checkout + webhook, `Subscription`
 > model, screen-limit enforcement) — blocked on a Stripe test-mode secret key. Everything else in
-> [Roadmap-Phase5-Backend.md](./Roadmap-Phase5-Backend.md) is done.
+> the Phase 5 backend list in [Roadmap.md](./Roadmap.md) is done.
 
 ---
 

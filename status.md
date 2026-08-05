@@ -6,9 +6,9 @@
   parallel, each logging to its own file so daily entries never conflict:
   - Backend track (Phase 5) → [status-backend.md](./status-backend.md)
   - Frontend track (Phase 5) → [status-frontend.md](./status-frontend.md)
-  - Player app (own roadmap, not tied to Phase 5) → [status-player.md](./status-player.md)
-- See [Roadmap.md](./Roadmap.md) Phase 5 for the backend/frontend split task list, or
-  [Roadmap-Player.md](./Roadmap-Player.md) for the player app's own roadmap.
+  - Player app work has no separate log/roadmap file — it's tracked inline in
+    [Roadmap.md](./Roadmap.md)'s phases (Phase 1 PWA player, Phase 2 video, Phase 6 native/MQTT).
+- See [Roadmap.md](./Roadmap.md) Phase 5 for the backend/frontend split task list.
 
 ---
 

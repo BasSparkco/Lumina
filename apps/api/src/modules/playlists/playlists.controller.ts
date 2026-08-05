@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import type { TransitionStyle, PlaybackOrder } from '@lumina/db';
 import { PlaylistsService } from './playlists.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -16,11 +16,17 @@ class AddItemDto {
   @IsInt() @Min(1) durationSecs = 10;
   @IsBoolean() @IsOptional() muted?: boolean;
   @IsBoolean() @IsOptional() playFullVideo?: boolean;
+  @IsNumber() @Min(1) @Max(4) @IsOptional() cropZoom?: number;
+  @IsNumber() @IsOptional() cropOffsetX?: number;
+  @IsNumber() @IsOptional() cropOffsetY?: number;
 }
 class UpdateItemDto {
   @IsInt() @Min(1) durationSecs!: number;
   @IsBoolean() @IsOptional() muted?: boolean;
   @IsBoolean() @IsOptional() playFullVideo?: boolean;
+  @IsNumber() @Min(1) @Max(4) @IsOptional() cropZoom?: number | null;
+  @IsNumber() @IsOptional() cropOffsetX?: number | null;
+  @IsNumber() @IsOptional() cropOffsetY?: number | null;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) ids!: string[]; }
 class UpdateConfigDto {
@@ -65,7 +71,10 @@ export class PlaylistsController {
 
   @Post(':id/items')
   addItem(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: AddItemDto) {
-    return this.playlists.addItem(user.orgId, id, dto.assetId, dto.durationSecs, dto.muted, dto.playFullVideo);
+    return this.playlists.addItem(
+      user.orgId, id, dto.assetId, dto.durationSecs, dto.muted, dto.playFullVideo,
+      dto.cropZoom, dto.cropOffsetX, dto.cropOffsetY,
+    );
   }
 
   @Put(':id/items/:itemId')
@@ -75,7 +84,10 @@ export class PlaylistsController {
     @Param('itemId') itemId: string,
     @Body() dto: UpdateItemDto,
   ) {
-    return this.playlists.updateItem(user.orgId, id, itemId, dto.durationSecs, dto.muted, dto.playFullVideo);
+    return this.playlists.updateItem(
+      user.orgId, id, itemId, dto.durationSecs, dto.muted, dto.playFullVideo,
+      dto.cropZoom, dto.cropOffsetX, dto.cropOffsetY,
+    );
   }
 
   @Delete(':id/items/:itemId')

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, ChevronUp, RefreshCw, Send, Shuffle, Sparkles } from 'lucide-react';
+import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search } from 'lucide-react';
 import { playlistsApi, assetsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type Asset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
 import { useTranslations } from 'next-intl';
@@ -12,6 +12,7 @@ import { useDefaultItemDuration } from '@/hooks/useDefaultItemDuration';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { Toggle } from '@/components/Toggle';
 import { ImageLightbox } from '@/components/ImageLightbox';
+import { CropEditor, type MediaCrop } from '@/components/CropEditor';
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -24,6 +25,7 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   VIDEO: <Film className="w-3.5 h-3.5 text-purple-500" />,
   AUDIO: <Music className="w-3.5 h-3.5 text-green-500" />,
   TEXT: <Type className="w-3.5 h-3.5 text-amber-500" />,
+  DOCUMENT: <FileText className="w-3.5 h-3.5 text-red-500" />,
 };
 
 /** The items/settings for one expanded playlist — everything that used to live on its own
@@ -39,8 +41,10 @@ function PlaylistDetail({ id }: { id: string }) {
   const tc = useTranslations('common');
   const ta = useTranslations('approvals');
   const tAssets = useTranslations('assets');
+  const tCrop = useTranslations('cropEditor');
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
+  const [croppingItemId, setCroppingItemId] = useState<string | null>(null);
 
   const { data: playlist, isLoading } = useQuery({
     queryKey: ['playlist', id],
@@ -108,6 +112,12 @@ function PlaylistDetail({ id }: { id: string }) {
 
   const durMut = useMutation({
     mutationFn: ({ itemId, dur }: { itemId: string; dur: number }) => playlistsApi.updateItem(id, itemId, dur),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
+  const cropMut = useMutation({
+    mutationFn: ({ item, crop }: { item: PlaylistItem; crop: MediaCrop }) =>
+      playlistsApi.updateItem(id, item.id, item.durationSecs, item.muted, item.playFullVideo, crop),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
@@ -271,6 +281,13 @@ function PlaylistDetail({ id }: { id: string }) {
               <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
             </div>
 
+            {canEditContent && (item.asset.type === 'IMAGE' || item.asset.type === 'VIDEO') && (
+              <button onClick={() => setCroppingItemId(item.id)} title={tCrop('editCrop')}
+                className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+                <Crop className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {canEditContent && (
               <button onClick={() => removeMut.mutate(item)}
                 className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
@@ -303,6 +320,26 @@ function PlaylistDetail({ id }: { id: string }) {
           />
         );
       })()}
+
+      {croppingItemId && (() => {
+        const item = playlist.items.find(i => i.id === croppingItemId);
+        const mediaUrl = item?.asset.url;
+        if (!item || !mediaUrl || (item.asset.type !== 'IMAGE' && item.asset.type !== 'VIDEO')) return null;
+        return (
+          <CropEditor
+            mediaUrl={mediaUrl}
+            mediaType={item.asset.type}
+            name={item.asset.name}
+            aspectRatio={16 / 9}
+            initialCrop={{ cropZoom: item.cropZoom, cropOffsetX: item.cropOffsetX, cropOffsetY: item.cropOffsetY }}
+            onClose={() => setCroppingItemId(null)}
+            onSave={(crop) => {
+              cropMut.mutate({ item, crop });
+              setCroppingItemId(null);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -325,6 +362,7 @@ export default function PlaylistsPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectComment, setRejectComment] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   const { data: playlists = [], isLoading } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: approvals = {}, isLoading: approvalsLoading } = useQuery({ queryKey: ['approvals'], queryFn: approvalsApi.listAll });
@@ -556,6 +594,15 @@ export default function PlaylistsPage() {
 
       {deleteError && <div className="mb-4 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 text-sm px-4 py-2 rounded-lg">{deleteError}</div>}
 
+      {playlists.length > 0 && (
+        <div className="relative mb-5 max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={tc('search')}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+        </div>
+      )}
+
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
       {!isLoading && playlists.length === 0 && (
@@ -565,8 +612,16 @@ export default function PlaylistsPage() {
         </div>
       )}
 
+      {!isLoading && playlists.length > 0 &&
+        playlists.filter((pl: PlaylistSummary) => pl.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{tc('noMatches')}</p>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {playlists.map((pl: PlaylistSummary) => {
+        {playlists.filter((pl: PlaylistSummary) => pl.name.toLowerCase().includes(search.toLowerCase())).map((pl: PlaylistSummary) => {
           const isExpanded = expandedId === pl.id;
           return (
             <div key={pl.id} id={`playlist-row-${pl.id}`}

@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { authApi, clearToken, getToken, setToken, type User } from '@/lib/api';
+import { authApi, clearToken, getToken, loginPath, setToken, type User } from '@/lib/api';
 
 interface AuthCtx {
   user: User | null;
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearToken();
     setUser(null);
     // Use replace to prevent back-navigation to protected pages
-    if (typeof window !== 'undefined') window.location.replace('/en/login');
+    if (typeof window !== 'undefined') window.location.replace(loginPath());
   }, []);
 
   return <Ctx.Provider value={{ user, loading, login, register, logout }}>{children}</Ctx.Provider>;

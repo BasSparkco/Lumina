@@ -54,6 +54,9 @@ export class LayoutsService {
       assetId: z.assetId,
       audioPriority: z.audioPriority ?? false,
       audioVolume: z.audioVolume,
+      cropZoom: z.cropZoom,
+      cropOffsetX: z.cropOffsetX,
+      cropOffsetY: z.cropOffsetY,
     };
   }
 

@@ -21,9 +21,15 @@
     "openMenu": "فتح القائمة",
     "closeMenu": "إغلاق القائمة",
     "signOut": "تسجيل الخروج",
-    "loading": "جارٍ التحميل…"
+    "loading": "جارٍ التحميل…",
+    "unsavedChangesConfirm": "لديك تغييرات غير محفوظة. هل تريد مغادرة هذه الصفحة والتخلي عنها؟"
   },
   "common": {
+    "openAddPanel": "فتح لوحة الإضافة",
+    "closeAddPanel": "إغلاق لوحة الإضافة",
+    "zoomIn": "تكبير",
+    "zoomOut": "تصغير",
+    "zoomReset": "إعادة التكبير إلى 100%",
     "save": "حفظ",
     "cancel": "إلغاء",
     "delete": "حذف",
@@ -62,6 +68,13 @@
       "APPROVED": "مُعتمدة",
       "REJECTED": "مرفوضة"
     }
+  },
+  "cropEditor": {
+    "title": "ضبط التأطير",
+    "editCrop": "ضبط التأطير",
+    "dragHint": "اسحب لإعادة التموضع، وقرّب للتحريك",
+    "resetToFull": "إعادة تعيين للصورة الكاملة",
+    "zoom": "التكبير"
   },
   "auth": {
     "login": {
@@ -250,6 +263,14 @@
     "includeAudio": "تضمين الصوت",
     "audioEnabled": "تم تضمين الصوت",
     "audioDisabled": "تم كتم الصوت",
+    "convertToAudio": "تحويل إلى أصل صوتي",
+    "videoUploadChoice": {
+      "title": "تم اختيار فيديو",
+      "body": "هل تريد رفع الفيديو كاملاً، أم استخراج الصوت فقط كأصل منفصل؟",
+      "bodyPlural": "هل تريد رفع الفيديوهات كاملة، أم استخراج الصوت فقط كأصول منفصلة؟ ({count} فيديوهات)",
+      "uploadVideo": "رفع الفيديو",
+      "extractAudioOnly": "استخراج الصوت فقط"
+    },
     "newText": "نص جديد",
     "newTextModalTitle": "أصل نصي جديد",
     "newTextNamePlaceholder": "مثال: رسالة ترحيب",
@@ -283,6 +304,17 @@
     "libraryEmpty": "لا توجد أصول في المكتبة تطابق بحثك.",
     "addToMyAssets": "أضف إلى أصولي",
     "addedToMyAssets": "تمت الإضافة",
+    "allTypes": "كل الأنواع",
+    "allUsage": "كل الأصول",
+    "inUse": "قيد الاستخدام",
+    "unused": "غير مستخدم",
+    "typeFilter": {
+      "IMAGE": "صور",
+      "VIDEO": "فيديوهات",
+      "AUDIO": "ملفات صوتية",
+      "DOCUMENT": "مستندات",
+      "TEXT": "نصوص"
+    },
     "categories": {
       "BACKGROUND": "خلفية",
       "ICON": "أيقونة",
@@ -362,6 +394,13 @@
     "noAsset": "— بدون أصل —",
     "zones": "المناطق",
     "addZone": "إضافة منطقة",
+    "addGroups": {
+      "media": "الوسائط",
+      "dataFeeds": "بيانات حية",
+      "timeDate": "الوقت والتاريخ",
+      "faith": "الشؤون الدينية",
+      "interactive": "تفاعلي"
+    },
     "saveLayout": "حفظ التخطيط",
     "saving": "جارٍ الحفظ…",
     "loading": "جارٍ تحميل التخطيطات…",
@@ -381,7 +420,12 @@
       "rectangle": "مستطيل",
       "rounded": "مستطيل مدوّر",
       "circle": "دائرة",
-      "triangle": "مثلث"
+      "triangle": "مثلث",
+      "pentagon": "خماسي",
+      "hexagon": "سداسي",
+      "octagon": "ثماني",
+      "star": "نجمة",
+      "arrow": "سهم"
     },
     "editableHint": "ألغِ التحديد لقفل هذه المنطقة في مكانها — يتم تعطيل السحب وتغيير الحجم والتدوير",
     "lockedHint": "مقفلة — ألغِ تحديد \"قابل للتعديل\" أدناه لإلغاء القفل",
@@ -412,7 +456,8 @@
       "CURRENCY": "أسعار العملات",
       "TICKER": "شريط إخباري",
       "TIME": "الوقت",
-      "DATE": "التاريخ"
+      "DATE": "التاريخ",
+      "QR": "رمز QR"
     },
     "widget": {
       "methodOverride": "تجاوز طريقة الحساب",
@@ -440,7 +485,12 @@
       "timezoneOverride": "تجاوز المنطقة الزمنية",
       "dateFormat": "صيغة التاريخ",
       "dateFormatLong": "طويلة (الاثنين، 5 يناير 2026)",
-      "dateFormatShort": "قصيرة (05/01/2026)"
+      "dateFormatShort": "قصيرة (05/01/2026)",
+      "qrValue": "المحتوى (رابط أو نص)",
+      "qrValuePlaceholder": "https://example.com",
+      "qrForeground": "لون الرمز",
+      "qrBackground": "لون الخلفية",
+      "qrSize": "الحجم (% من المنطقة)"
     }
   },
   "themes": {
@@ -468,6 +518,14 @@
     "scale": "مقياس الحجم",
     "elements": "العناصر",
     "addElement": "إضافة عنصر",
+    "addGroups": {
+      "basic": "أساسي",
+      "media": "الوسائط",
+      "dataFeeds": "بيانات حية",
+      "timeDate": "الوقت والتاريخ",
+      "faith": "الشؤون الدينية",
+      "interactive": "تفاعلي"
+    },
     "elementLabel": "التسمية",
     "editableShort": "قابل للتعديل",
     "editableHint": "ألغِ التحديد لقفل هذا العنصر في مكانه — يتم تعطيل السحب وتغيير الحجم والتدوير",
@@ -475,12 +533,21 @@
     "editingNow": "قيد التعديل",
     "clickToEditHint": "انقر هذا العنصر لتعديل موضعه ومحتواه وطباعته",
     "shapeHint": "بلا محتوى خاص به — مجرد كتلة لونية موضعة ومنسّقة بالشكل الذي تختاره أعلاه.",
+    "brushHint": "خط حر رسمته على اللوحة. عدّل لونه وسماكته أدناه، أو أعد رسمه من جديد.",
+    "brushRedraw": "إعادة الرسم",
+    "brushDrawHint": "اسحب عبر اللوحة لرسم خط. أفلت للوضع.",
+    "strokeColor": "لون الخط",
     "shape": "الشكل",
     "shapeTypes": {
       "rectangle": "مستطيل",
       "rounded": "مستطيل مدوّر",
       "circle": "دائرة",
-      "triangle": "مثلث"
+      "triangle": "مثلث",
+      "pentagon": "خماسي",
+      "hexagon": "سداسي",
+      "octagon": "ثماني",
+      "star": "نجمة",
+      "arrow": "سهم"
     },
     "undo": "تراجع",
     "redo": "إعادة",
@@ -488,8 +555,18 @@
     "translationAr": "الترجمة العربية (اختياري)",
     "image": "أصل الصورة",
     "video": "أصل الفيديو",
+    "document": "أصل المستند",
+    "secondsPerPage": "ثوانٍ لكل صفحة",
     "playlistContent": "قائمة التشغيل",
     "noAsset": "— بدون أصل —",
+    "imageSourceExisting": "موجودة",
+    "imageSourceUpload": "رفع",
+    "imageSourcePaste": "لصق",
+    "uploadImage": "رفع صورة",
+    "uploadingImage": "جارٍ الرفع…",
+    "uploadImageFailed": "فشل الرفع",
+    "pasteImageHint": "انقر هنا ثم اضغط Ctrl+V (⌘V على ماك) للصق صورة",
+    "pasteImageError": "الحافظة لا تحتوي على صورة",
     "noPlaylist": "— بدون قائمة تشغيل —",
     "widgetType": "الأداة",
     "color": "لون النص",
@@ -500,6 +577,7 @@
     "fontFamilyCustomOption": "خط مخصص…",
     "rotateHint": "اسحب للتدوير",
     "resizeHint": "اسحب لتغيير الحجم",
+    "editTextHint": "انقر نقرًا مزدوجًا لتعديل النص",
     "fontSizePx": "حجم النص (بكسل)",
     "fontWeight": "الوزن",
     "textAlign": "المحاذاة",
@@ -507,6 +585,14 @@
     "borderRadius": "استدارة الحواف",
     "opacity": "الشفافية",
     "objectFit": "طريقة الملاءمة",
+    "fillStyle": "نمط التعبئة",
+    "fillStyleSolid": "معبأ",
+    "fillStyleOutline": "مفرغ (حدود فقط)",
+    "outlineColor": "لون الحدود",
+    "strokeWidth": "سماكة الحد",
+    "quickAddShape": "إضافة شكل",
+    "quickAdd": "إضافة",
+    "customColor": "لون مخصص",
     "saveTheme": "حفظ السمة",
     "saving": "جارٍ الحفظ…",
     "field": {
@@ -544,8 +630,10 @@
       "TEXT": "نص",
       "IMAGE": "صورة",
       "VIDEO": "فيديو",
+      "DOCUMENT": "مستند",
       "PLAYLIST": "قائمة تشغيل",
       "SHAPE": "شكل / كتلة لونية",
+      "BRUSH": "فرشاة (رسم حر)",
       "WIDGET": "أداة حية"
     },
     "widgetTypes": {
@@ -554,7 +642,8 @@
       "CURRENCY": "أسعار العملات",
       "TICKER": "شريط إخباري",
       "TIME": "الوقت",
-      "DATE": "التاريخ"
+      "DATE": "التاريخ",
+      "QR": "رمز QR"
     },
     "paletteRoles": {
       "primary": "أساسي",
@@ -719,6 +808,7 @@
     "detailMovedFromTo": "نُقلت من {from} إلى {to}",
     "detailRemovedFromGroup": "أُزيلت من {group}",
     "detailDuplicatedFrom": "نسخة من {name}",
+    "detailExtractedFrom": "مستخرج من {name}",
     "resourceTypes": {
       "MEMBER": "عضو",
       "PLAYLIST": "قائمة تشغيل",
@@ -815,6 +905,12 @@
   "settings": {
     "title": "الإعدادات",
     "subtitle": "تفضيلات شخصية لهذا المتصفح",
+    "sectionGeneral": "عام",
+    "sectionGeneralDesc": "المظهر واللغة",
+    "sectionEditor": "المحرر",
+    "sectionEditorDesc": "سلوك محرري التخطيطات والقوالب",
+    "sectionContent": "المحتوى والنشر",
+    "sectionContentDesc": "الإعدادات الافتراضية لقوائم التشغيل والشاشات والميزات الاختيارية",
     "darkMode": "الوضع الداكن",
     "darkModeDesc": "التبديل بين المظهر الفاتح والداكن",
     "timeFormat": "تنسيق الوقت",
@@ -838,6 +934,10 @@
     "autoPublishDesc": "تخطي زر النشر — تصبح تغييرات قائمة التشغيل والتخطيط وإعدادات العرض الأخرى في صفحة الشاشات مباشرة فور حفظها",
     "autoPublishNoPermission": "فقط المسؤولون والمالكون يمكنهم تغيير هذا الإعداد",
     "requireSelectToEdit": "طلب نقرة للتحديد قبل التعديل",
-    "requireSelectToEditDesc": "في محرري التخطيطات والقوالب، انقر على العنصر مرة واحدة لتحديده قبل أن تتمكن من سحبه أو تغيير حجمه أو تدويره — إجراء وقائي ضد التعديلات غير المقصودة"
+    "requireSelectToEditDesc": "في محرري التخطيطات والقوالب، انقر على العنصر مرة واحدة لتحديده قبل أن تتمكن من سحبه أو تغيير حجمه أو تدويره — إجراء وقائي ضد التعديلات غير المقصودة",
+    "rotateHandleStyle": "شكل مقبض التدوير",
+    "rotateHandleStyleDesc": "طريقة ظهور مقبض التدوير عند تحديد عنصر في محرري التخطيطات والقوالب",
+    "rotateHandleCorners": "أسهم في الزوايا",
+    "rotateHandleSingle": "مقبض واحد"
   }
 }

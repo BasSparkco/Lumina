@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { ImageIcon, Film, Music, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle } from 'lucide-react';
+import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines } from 'lucide-react';
 import { assetsApi, type Asset, type TextSize, type AssetCategory } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
@@ -17,6 +17,7 @@ const typeIcon: Record<string, React.ReactNode> = {
   VIDEO: <Film className="w-4 h-4 text-purple-500" />,
   AUDIO: <Music className="w-4 h-4 text-green-500" />,
   TEXT: <Type className="w-4 h-4 text-amber-500" />,
+  DOCUMENT: <FileText className="w-4 h-4 text-red-500" />,
 };
 
 const FONT_SIZE_PREVIEW: Record<TextSize, string> = {
@@ -130,6 +131,45 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
   );
 }
 
+interface VideoUploadChoiceModalProps {
+  count: number;
+  onCancel: () => void;
+  onChoose: (extractAudioOnly: boolean) => void;
+}
+
+// Shown when the normal upload picker's selection includes a video — lets the user decide
+// whether to upload it as a video asset (the default) or extract just its audio into a new
+// AUDIO asset instead, without needing a separate upload control for that choice.
+function VideoUploadChoiceModal({ count, onCancel, onChoose }: VideoUploadChoiceModalProps) {
+  const t = useTranslations('assets');
+  const tc = useTranslations('common');
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('videoUploadChoice.title')}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          {count > 1 ? t('videoUploadChoice.bodyPlural', { count }) : t('videoUploadChoice.body')}
+        </p>
+        <div className="flex flex-col gap-2">
+          <button onClick={() => onChoose(false)}
+            className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            {t('videoUploadChoice.uploadVideo')}
+          </button>
+          <button onClick={() => onChoose(true)}
+            className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+            {t('videoUploadChoice.extractAudioOnly')}
+          </button>
+          <button onClick={onCancel}
+            className="w-full text-gray-500 dark:text-gray-400 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+            {tc('cancel')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AssetsPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -143,6 +183,7 @@ export default function AssetsPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
+  const [videoUploadChoice, setVideoUploadChoice] = useState<{ videoFiles: File[]; otherFiles: File[] } | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -152,8 +193,19 @@ export default function AssetsPage() {
   const [libraryCategory, setLibraryCategory] = useState<AssetCategory | ''>('');
   const [librarySearch, setLibrarySearch] = useState('');
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<Asset['type'] | ''>('');
+  const [usageFilter, setUsageFilter] = useState<'' | 'IN_USE' | 'UNUSED'>('');
 
   const { data: assets = [], isLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+
+  const filteredAssets = assets.filter((a: Asset) => {
+    if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (typeFilter && a.type !== typeFilter) return false;
+    if (usageFilter === 'IN_USE' && !a.inUse) return false;
+    if (usageFilter === 'UNUSED' && a.inUse) return false;
+    return true;
+  });
 
   const { data: libraryAssets = [], isLoading: libraryLoading } = useQuery({
     queryKey: ['assets', 'library', libraryCategory, librarySearch],
@@ -216,6 +268,19 @@ export default function AssetsPage() {
     },
   });
 
+  const extractAudioMut = useMutation({
+    mutationFn: (video: Asset) => assetsApi.extractAudio(video.id),
+    onSuccess: (created, source) => {
+      logAction({
+        resourceType: 'ASSET', resourceName: created.name, action: 'CREATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: ta('detailExtractedFrom', { name: source.name }),
+      });
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+    },
+    onError: (e: Error) => setUploadError(e.message),
+  });
+
   const renameMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => assetsApi.rename(id, name),
     onSuccess: (renamed, { previousName }) => {
@@ -241,13 +306,15 @@ export default function AssetsPage() {
     renameMut.mutate({ id: asset.id, name: trimmed, previousName: asset.name });
   }
 
-  async function handleFiles(files: FileList | null) {
-    if (!files?.length) return;
+  async function runUpload(entries: { file: File; extractAudioOnly: boolean }[]) {
+    if (!entries.length) return;
     setUploading(true);
     setUploadError('');
     try {
-      for (const file of Array.from(files)) {
-        const uploaded = await assetsApi.upload(file, setProgress);
+      for (const { file, extractAudioOnly } of entries) {
+        const uploaded = extractAudioOnly
+          ? await assetsApi.uploadAudioFromVideo(file, setProgress)
+          : await assetsApi.upload(file, setProgress);
         logAction({
           resourceType: 'ASSET', resourceName: uploaded.name, action: 'CREATE',
           userName: user?.name ?? '', userEmail: user?.email ?? '',
@@ -261,6 +328,31 @@ export default function AssetsPage() {
       setProgress(0);
       if (inputRef.current) inputRef.current.value = '';
     }
+  }
+
+  // Videos get a fork here — everything else uploads immediately. Splitting the selection
+  // (rather than asking file-by-file) keeps a mixed batch (e.g. a few images + one video) from
+  // popping a modal per file.
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return;
+    const fileArr = Array.from(files);
+    const videoFiles = fileArr.filter(f => f.type.startsWith('video/'));
+    const otherFiles = fileArr.filter(f => !f.type.startsWith('video/'));
+    if (videoFiles.length > 0) {
+      setVideoUploadChoice({ videoFiles, otherFiles });
+      return;
+    }
+    await runUpload(fileArr.map(file => ({ file, extractAudioOnly: false })));
+  }
+
+  async function resolveVideoUploadChoice(extractAudioOnly: boolean) {
+    if (!videoUploadChoice) return;
+    const { videoFiles, otherFiles } = videoUploadChoice;
+    setVideoUploadChoice(null);
+    await runUpload([
+      ...otherFiles.map(file => ({ file, extractAudioOnly: false })),
+      ...videoFiles.map(file => ({ file, extractAudioOnly })),
+    ]);
   }
 
   return (
@@ -280,11 +372,19 @@ export default function AssetsPage() {
               className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
               {uploading ? <><RefreshCw className="w-4 h-4 animate-spin" /> {t('uploading', { progress })}</> : <><Upload className="w-4 h-4" /> {t('upload')}</>}
             </button>
-            <input ref={inputRef} type="file" multiple accept="image/*,video/*,audio/*" className="hidden"
+            <input ref={inputRef} type="file" multiple accept="image/*,video/*,audio/*,application/pdf,.ppt,.pptx,.doc,.docx" className="hidden"
               onChange={e => { void handleFiles(e.target.files); }} />
           </div>
         )}
       </div>
+
+      {videoUploadChoice && (
+        <VideoUploadChoiceModal
+          count={videoUploadChoice.videoFiles.length}
+          onCancel={() => { setVideoUploadChoice(null); if (inputRef.current) inputRef.current.value = ''; }}
+          onChoose={extractAudioOnly => { void resolveVideoUploadChoice(extractAudioOnly); }}
+        />
+      )}
 
       <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
         <button onClick={() => setTab('mine')}
@@ -310,6 +410,32 @@ export default function AssetsPage() {
         />
       )}
 
+      {assets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={tc('search')}
+              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+          </div>
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as Asset['type'] | '')}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none">
+            <option value="">{t('allTypes')}</option>
+            <option value="IMAGE">{t('typeFilter.IMAGE')}</option>
+            <option value="VIDEO">{t('typeFilter.VIDEO')}</option>
+            <option value="AUDIO">{t('typeFilter.AUDIO')}</option>
+            <option value="DOCUMENT">{t('typeFilter.DOCUMENT')}</option>
+            <option value="TEXT">{t('typeFilter.TEXT')}</option>
+          </select>
+          <select value={usageFilter} onChange={e => setUsageFilter(e.target.value as '' | 'IN_USE' | 'UNUSED')}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none">
+            <option value="">{t('allUsage')}</option>
+            <option value="IN_USE">{t('inUse')}</option>
+            <option value="UNUSED">{t('unused')}</option>
+          </select>
+        </div>
+      )}
+
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
       {!isLoading && assets.length === 0 && (
@@ -319,8 +445,15 @@ export default function AssetsPage() {
         </div>
       )}
 
+      {!isLoading && assets.length > 0 && filteredAssets.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{tc('noMatches')}</p>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {assets.map((asset: Asset) => (
+        {filteredAssets.map((asset: Asset) => (
           <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden group">
             {/* Thumbnail — click to view full size (images) or edit (text) */}
             <div className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
@@ -397,6 +530,11 @@ export default function AssetsPage() {
                   )}
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
                     {typeIcon[asset.type]} {formatBytes(asset.sizeBytes)}
+                    {asset.inUse && (
+                      <span className="ms-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-medium">
+                        {t('inUse')}
+                      </span>
+                    )}
                   </p>
                   {asset.type === 'VIDEO' && asset.status === 'READY' && asset.hasAudioTrack && (
                     <label className={`flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-1 ${canEditContent ? 'cursor-pointer' : ''}`}>
@@ -408,6 +546,14 @@ export default function AssetsPage() {
                   )}
                 </div>
                 <div className="flex items-center shrink-0">
+                  {canEditContent && asset.type === 'VIDEO' && asset.status === 'READY' && asset.hasAudioTrack && (
+                    <button onClick={() => extractAudioMut.mutate(asset)}
+                      disabled={extractAudioMut.isPending && extractAudioMut.variables?.id === asset.id}
+                      title={t('convertToAudio')}
+                      className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors disabled:opacity-50">
+                      <AudioLines className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {asset.downloadUrl && (
                     <a href={asset.downloadUrl} title={t('download')}
                       className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
@@ -448,6 +594,11 @@ export default function AssetsPage() {
                 setViewingId(null);
               }
             }}
+            {...(canEditContent && asset.type === 'VIDEO' && asset.status === 'READY' && asset.hasAudioTrack ? {
+              onConvertToAudio: () => extractAudioMut.mutate(asset),
+              convertToAudioLabel: t('convertToAudio'),
+              convertToAudioBusy: extractAudioMut.isPending && extractAudioMut.variables?.id === asset.id,
+            } : {})}
           />
         );
       })()}

@@ -258,6 +258,10 @@ model Asset {
   durationSecs Float?    // for video/audio
   width        Int?
   height       Int?
+  // Set by the worker once a DOCUMENT asset's pages have been rasterized — null while
+  // PROCESSING/ERROR. Page N's derived image lives at storageKey with its extension swapped for
+  // `_p${N}.webp` (1-indexed), the same convention thumbnailKey (= page 1's key) already follows.
+  pageCount    Int?
   textContent  String?   // plain-text body for TEXT assets only
   // Styling for TEXT assets only — null means "use the player's default" for that field,
   // so non-TEXT assets never carry these and a TEXT asset created before this field existed
@@ -298,6 +302,7 @@ enum AssetType {
   VIDEO
   AUDIO
   TEXT
+  DOCUMENT
 }
 
 enum TextSize {
@@ -374,6 +379,13 @@ model PlaylistItem {
   // "ended" event (i.e. plays the full clip). When false, durationSecs clips it short. Has no
   // effect on non-video items.
   playFullVideo Boolean  @default(true)
+  // Per-placement image/video framing (like cropping a profile picture into a frame) — null
+  // means "show the whole asset" (today's default fill/contain behavior). Lives here rather
+  // than on Asset since the same asset can be placed in multiple items with different framing.
+  // cropZoom 1–4 (1 = default cover-fit, no pan room); offsets are a % shift from center.
+  cropZoom      Float?
+  cropOffsetX   Float?
+  cropOffsetY   Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -409,6 +421,7 @@ enum ZoneType {
   TICKER
   TIME
   DATE
+  QR
 }
 
 // Clips a zone's rendered content to a shape within its (still rectangular) bounding box —
@@ -418,6 +431,11 @@ enum ZoneShape {
   rounded
   circle
   triangle
+  pentagon
+  hexagon
+  octagon
+  star
+  arrow
 }
 
 model Zone {
@@ -445,6 +463,11 @@ model Zone {
   // audioVolume overrides the screen's global volume for this zone specifically; null inherits it.
   audioPriority Boolean @default(false)
   audioVolume   Int?
+  // Per-placement image/video framing for a zone's direct `asset` (no PlaylistItem exists for
+  // this case to carry it) — same semantics as PlaylistItem.cropZoom/cropOffsetX/cropOffsetY.
+  cropZoom      Float?
+  cropOffsetX   Float?
+  cropOffsetY   Float?
 
   layoutId String
   layout   Layout @relation(fields: [layoutId], references: [id], onDelete: Cascade)

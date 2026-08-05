@@ -2,10 +2,20 @@ import Cookies from 'js-cookie';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/v1';
 const TOKEN_KEY = 'lumina_token';
+const LOCALES = ['en', 'ar'];
 
 export function getToken() { return Cookies.get(TOKEN_KEY) ?? null; }
 export function setToken(t: string) { Cookies.set(TOKEN_KEY, t, { expires: 7, sameSite: 'lax' }); }
 export function clearToken() { Cookies.remove(TOKEN_KEY); }
+
+// Hard navigations to /login (401 handling, logout) happen outside React, so the locale has
+// to be read off the URL rather than from next-intl — falls back to the default locale for any
+// path that isn't already locale-prefixed.
+export function loginPath() {
+  if (typeof window === 'undefined') return '/en/login';
+  const seg = window.location.pathname.split('/')[1] ?? '';
+  return `/${LOCALES.includes(seg) ? seg : 'en'}/login`;
+}
 
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -26,7 +36,7 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   // Without the `token` check, this also fires for a plain wrong-password attempt on the
   // login endpoint itself (also a 401), forcing a hard navigation mid-attempt and wiping
   // whatever the login form was showing (error message, entered email, etc.).
-  if (token && res.status === 401) { clearToken(); if (typeof window !== 'undefined') window.location.replace('/en/login'); }
+  if (token && res.status === 401) { clearToken(); if (typeof window !== 'undefined') window.location.replace(loginPath()); }
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(body.message ?? res.statusText);
@@ -108,6 +118,21 @@ export const assetsApi = {
       xhr.send(form);
     });
   },
+  uploadAudioFromVideo: async (file: File, onProgress?: (pct: number) => void): Promise<Asset> => {
+    const token = getToken();
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('file', file);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/assets/upload-audio`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e: ProgressEvent) => { if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100)); };
+      xhr.onload = () => { if (xhr.status < 300) resolve(JSON.parse(xhr.responseText) as Asset); else reject(new Error(xhr.responseText)); };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(form);
+    });
+  },
+  extractAudio: (id: string) => req<Asset>(`/assets/${id}/extract-audio`, { method: 'POST' }),
   get: (id: string) => req<Asset>(`/assets/${id}`),
   rename: (id: string, name: string) => req<Asset>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   setAudioEnabled: (id: string, audioEnabled: boolean) =>
@@ -137,8 +162,11 @@ export const playlistsApi = {
   remove: (id: string) => req<void>(`/playlists/${id}`, { method: 'DELETE' }),
   addItem: (id: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) =>
     req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ assetId, durationSecs, muted, playFullVideo }) }),
-  updateItem: (id: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) =>
-    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted, playFullVideo }) }),
+  updateItem: (
+    id: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
+    crop?: { cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null },
+  ) =>
+    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted, playFullVideo, ...crop }) }),
   removeItem: (id: string, itemId: string) => req<void>(`/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
   reorder: (id: string, ids: string[]) => req<void>(`/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
   updateConfig: (id: string, config: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder }) =>
@@ -213,8 +241,8 @@ export const realScreenGroupsApi = {
 };
 
 // ── Types ───────────────────────────────────────────────────────────────────
-export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
-export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle';
+export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
+export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
@@ -231,6 +259,9 @@ export interface ZoneInput {
   // Mutually exclusive — a MEDIA zone plays either a playlist or a single asset, never both.
   playlistId?: string; assetId?: string;
   audioPriority?: boolean; audioVolume?: number | null;
+  // Per-placement image/video framing (crop editor) for a direct assetId zone — mirrors
+  // PlaylistItem's crop fields, which cover the playlistId case.
+  cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null;
   // Dashboard-only, client-generated, stripped before every network call — see layouts/page.tsx.
   // Not sent to (or returned by) the API, so it's optional and absent from ZoneRecord.
   _localId?: string;
@@ -277,17 +308,22 @@ export type TextSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE';
 export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; textBackgroundColor?: string; }
 export type AssetCategory = 'BACKGROUND' | 'ICON' | 'ILLUSTRATION' | 'STOCK_PHOTO' | 'LOGO' | 'VIDEO_LOOP' | 'AUDIO_JINGLE' | 'GENERIC';
 export interface Asset {
-  id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT'; mimeType: string;
+  id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT'; mimeType: string;
   sizeBytes: number; status: string; url: string | null; thumbnailUrl: string | null;
   downloadUrl: string | null; textContent: string | null;
   textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
   textBackgroundColor: string | null;
   hasAudioTrack: boolean; audioEnabled: boolean;
   category: AssetCategory; tags: string[];
-  width: number | null; height: number | null; durationSecs: number | null; createdAt: string;
+  width: number | null; height: number | null; durationSecs: number | null; pageCount: number | null; createdAt: string;
+  // Only populated by the "my assets" list endpoint (playlist items + screens + zones
+  // referencing it) — other endpoints (library, findOne, rename, etc.) don't compute it.
+  inUse?: boolean;
 }
 export interface PlaylistItem {
   id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
+  // Per-placement image/video framing (crop editor) — null means "show the whole asset".
+  cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null;
   asset: Asset;
 }
 export type TransitionStyle = 'NONE' | 'CROSSFADE';
@@ -300,8 +336,9 @@ export interface Playlist extends PlaylistSummary {
 
 // ── Themes ──────────────────────────────────────────────────────────────────
 export type ThemeCategory = 'RESTAURANT_MENU' | 'RETAIL_PROMO' | 'HOTEL_LOBBY' | 'CLINIC_WAITING' | 'MOSQUE' | 'GENERIC';
-export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'PLAYLIST' | 'SHAPE' | 'WIDGET';
-export type ThemeWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE';
+export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'PLAYLIST' | 'SHAPE' | 'BRUSH' | 'WIDGET';
+export interface ThemeBrushPoint { x: number; y: number; }
+export type ThemeWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 
 export interface ThemePalette {
   primary: string; secondary: string; background: string; surface: string;
@@ -314,9 +351,15 @@ export interface ThemeElementStyle {
   fontSizePx?: number; fontWeight?: number | string; textAlign?: 'left' | 'center' | 'right';
   direction?: 'ltr' | 'rtl' | 'auto'; borderRadius?: number; opacity?: number;
   objectFit?: 'contain' | 'cover' | 'fill';
+  // Per-placement image/video framing (crop editor) — see mediaCropStyle in @lumina/types.
+  cropZoom?: number; cropOffsetX?: number; cropOffsetY?: number;
   // Clips the element's content to a shape within its (still rectangular) bounding box —
   // available on every element kind, not just SHAPE.
   shape?: ElementShape;
+  // SHAPE-kind only: a solid color-filled silhouette (default) or a stroked outline — the latter
+  // for pure decoration (an emphasis ring, an arrow painted a color), no media/content of its own.
+  shapeFill?: 'solid' | 'outline';
+  strokeWidthPx?: number;
 }
 interface ThemeElementBase {
   id: string; x: number; y: number; width: number; height: number; zIndex: number;
@@ -328,8 +371,10 @@ export type ThemeElement =
   | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string> } })
   | (ThemeElementBase & { kind: 'IMAGE'; content: { assetId: string | null } })
   | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null } })
+  | (ThemeElementBase & { kind: 'DOCUMENT'; content: { assetId: string | null; secondsPerPage: number } })
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
+  | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[] } })
   | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: ThemeWidgetType; widgetConfig: Record<string, unknown> } });
 
 export interface ThemeInput {

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { X, Trash2, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { X, Trash2, ZoomIn, ZoomOut, Download, AudioLines } from 'lucide-react';
 
 interface ImageLightboxProps {
   name: string;
@@ -16,12 +16,16 @@ interface ImageLightboxProps {
   onDelete: () => void;
   downloadUrl?: string | null;
   downloadLabel?: string;
+  /** Only passed by the Assets page, and only for VIDEO assets with a detected audio track — converts this video into a new, separate AUDIO asset. */
+  onConvertToAudio?: () => void;
+  convertToAudioLabel?: string;
+  convertToAudioBusy?: boolean;
 }
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 4;
 
-export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, onClose, onRename, deleteLabel, onDelete, downloadUrl, downloadLabel }: ImageLightboxProps) {
+export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, onClose, onRename, deleteLabel, onDelete, downloadUrl, downloadLabel, onConvertToAudio, convertToAudioLabel, convertToAudioBusy }: ImageLightboxProps) {
   const tc = useTranslations('common');
   const isVideo = typeLabel === 'VIDEO';
   const [zoom, setZoom] = useState(1);
@@ -136,13 +140,19 @@ export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, o
           </div>
         )}
 
-        {(downloadUrl ?? canEdit) && (
+        {(downloadUrl ?? canEdit ?? onConvertToAudio) && (
         <div className="p-5 mt-auto space-y-2">
           {downloadUrl && (
             <a href={downloadUrl}
               className="w-full flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
               <Download className="w-4 h-4" /> {downloadLabel}
             </a>
+          )}
+          {onConvertToAudio && (
+            <button onClick={onConvertToAudio} disabled={convertToAudioBusy}
+              className="w-full flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+              <AudioLines className="w-4 h-4" /> {convertToAudioLabel}
+            </button>
           )}
           {canEdit && (
             <button onClick={onDelete}

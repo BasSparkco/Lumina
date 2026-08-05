@@ -62,15 +62,31 @@ export class AssetsController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }))
   upload(@CurrentUser() user: JwtUser, @UploadedFile() file: Express.Multer.File) {
-    return this.assets.upload(user.orgId, file, async (assetId, key, type) => {
-      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type });
+    return this.assets.upload(user.orgId, file, async (assetId, key, type, mimeType) => {
+      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
+    });
+  }
+
+  @Post('upload-audio')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }))
+  uploadAudioFromVideo(@CurrentUser() user: JwtUser, @UploadedFile() file: Express.Multer.File) {
+    return this.assets.uploadAudioFromVideo(user.orgId, file, async (assetId, sourceKey, targetKey, deleteSourceKey) => {
+      await this.mediaQueue.add('extract-audio', { assetId, sourceKey, targetKey, deleteSourceKey });
+    });
+  }
+
+  @Post(':id/extract-audio')
+  extractAudioFromVideo(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.assets.extractAudioFromVideo(user.orgId, id, async (assetId, sourceKey, targetKey, deleteSourceKey) => {
+      await this.mediaQueue.add('extract-audio', { assetId, sourceKey, targetKey, deleteSourceKey });
     });
   }
 
   @Post(':id/reprocess')
   reprocess(@CurrentUser() user: JwtUser, @Param('id') id: string) {
-    return this.assets.reprocess(user.orgId, id, async (assetId, key, type) => {
-      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type });
+    return this.assets.reprocess(user.orgId, id, async (assetId, key, type, mimeType) => {
+      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
     });
   }
 

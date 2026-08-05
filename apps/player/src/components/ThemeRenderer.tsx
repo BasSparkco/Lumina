@@ -1,4 +1,5 @@
-import { resolveThemeColor, fontStack, shapeClipStyle } from '@lumina/types';
+import { useEffect, useState } from 'react';
+import { resolveThemeColor, fontStack, shapeClipStyle, shapeOutlineGeometry, brushPolylinePoints, mediaCropStyle } from '@lumina/types';
 import type { HydratedTheme, HydratedThemeElement, PlayerState } from '../lib/api';
 import ZonePlayer from './ZonePlayer';
 import LiveWidget from './LiveWidget';
@@ -87,7 +88,7 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
         <img
           src={element.content.url}
           alt={element.label ?? ''}
-          style={{ width: '100%', height: '100%', objectFit: style.objectFit ?? 'contain', borderRadius: style.borderRadius, opacity: style.opacity }}
+          style={{ width: '100%', height: '100%', objectFit: style.objectFit ?? 'fill', borderRadius: style.borderRadius, opacity: style.opacity, ...mediaCropStyle(style) }}
         />
       ) : (
         <ThemePlaceholder label={element.label ?? 'Image'} palette={palette} />
@@ -100,10 +101,20 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
           loop
           muted
           playsInline
-          style={{ width: '100%', height: '100%', objectFit: style.objectFit ?? 'contain', borderRadius: style.borderRadius, opacity: style.opacity }}
+          style={{ width: '100%', height: '100%', objectFit: style.objectFit ?? 'contain', borderRadius: style.borderRadius, opacity: style.opacity, ...mediaCropStyle(style) }}
         />
       ) : (
         <ThemePlaceholder label={element.label ?? 'Video'} palette={palette} />
+      );
+    case 'DOCUMENT':
+      return element.content.pageUrls.length > 0 ? (
+        <DocumentPager
+          pageUrls={element.content.pageUrls}
+          secondsPerPage={element.content.secondsPerPage}
+          style={{ objectFit: style.objectFit ?? 'contain', borderRadius: style.borderRadius, opacity: style.opacity }}
+        />
+      ) : (
+        <ThemePlaceholder label={element.label ?? 'Document'} palette={palette} />
       );
     case 'PLAYLIST':
       return element.content.playlist ? (
@@ -114,12 +125,81 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
         <ThemePlaceholder label={element.label ?? 'Media'} palette={palette} />
       );
     case 'SHAPE':
+      if (style.shapeFill === 'outline') {
+        return <ShapeOutline shape={style.shape} color={backgroundColor ?? palette.text} strokeWidthPx={style.strokeWidthPx} opacity={style.opacity} />;
+      }
       return <div style={{ width: '100%', height: '100%', backgroundColor: backgroundColor ?? 'transparent', borderRadius: style.borderRadius, opacity: style.opacity }} />;
+    case 'BRUSH':
+      return (
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block', opacity: style.opacity }}>
+          <polyline
+            points={brushPolylinePoints(element.content.points)}
+            fill="none"
+            stroke={backgroundColor ?? palette.text}
+            strokeWidth={style.strokeWidthPx ?? 4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
     case 'WIDGET':
       return <LiveWidget widgetType={element.content.widgetType} widgetConfig={element.content.widgetConfig} state={state} />;
     default:
       return null;
   }
+}
+
+// Renders `shapeFill: 'outline'` as a stroked ring/silhouette instead of a solid fill — a plain
+// CSS `border` on a clip-path'd box only follows the box's rectangular edge, not an arbitrary
+// polygon, so arrow/star/pentagon/etc. need a real SVG stroke to look like a clean outline.
+function ShapeOutline({ shape, color, strokeWidthPx, opacity }: {
+  shape: string | undefined;
+  color: string;
+  strokeWidthPx: number | undefined;
+  opacity: number | undefined;
+}) {
+  const geo = shapeOutlineGeometry(shape as Parameters<typeof shapeOutlineGeometry>[0]);
+  const sw = strokeWidthPx ?? 4;
+  const inset = sw / 2;
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block', opacity }}>
+      {geo.kind === 'rect' && (
+        <rect x={inset} y={inset} width={100 - sw} height={100 - sw} rx={geo.rx} fill="none" stroke={color} strokeWidth={sw} />
+      )}
+      {geo.kind === 'ellipse' && (
+        <ellipse cx={50} cy={50} rx={50 - inset} ry={50 - inset} fill="none" stroke={color} strokeWidth={sw} />
+      )}
+      {geo.kind === 'polygon' && (
+        <polygon points={geo.points} fill="none" stroke={color} strokeWidth={sw} strokeLinejoin="round" />
+      )}
+    </svg>
+  );
+}
+
+// A DOCUMENT element has no playlist wrapping it (unlike a MEDIA zone's DOCUMENT item), so it
+// keeps its own page timer here and loops forever — the self-contained-timer pattern already
+// used by TickerWidget/PrayerZoneWidget for widgets with no external "next item" to hand off to.
+function DocumentPager({ pageUrls, secondsPerPage, style }: {
+  pageUrls: string[];
+  secondsPerPage: number;
+  style: { objectFit: 'contain' | 'cover' | 'fill'; borderRadius?: number; opacity?: number };
+}) {
+  const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    setPageIndex(0);
+    if (pageUrls.length < 2) return;
+    const id = setInterval(() => setPageIndex(p => (p + 1) % pageUrls.length), secondsPerPage * 1000);
+    return () => clearInterval(id);
+  }, [pageUrls, secondsPerPage]);
+
+  return (
+    <img
+      src={pageUrls[pageIndex]}
+      alt=""
+      style={{ width: '100%', height: '100%', objectFit: style.objectFit, borderRadius: style.borderRadius, opacity: style.opacity }}
+    />
+  );
 }
 
 function ThemePlaceholder({ label, palette }: { label: string; palette: HydratedTheme['palette'] }) {

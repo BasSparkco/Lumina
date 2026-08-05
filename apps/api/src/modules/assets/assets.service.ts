@@ -22,6 +22,11 @@ export const ALLOWED_MIME: Record<string, AssetType> = {
   'audio/mpeg': 'AUDIO',
   'audio/mp4': 'AUDIO',
   'audio/wav': 'AUDIO',
+  'application/pdf': 'DOCUMENT',
+  'application/vnd.ms-powerpoint': 'DOCUMENT',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'DOCUMENT',
+  'application/msword': 'DOCUMENT',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCUMENT',
 };
 
 @Injectable()
@@ -34,7 +39,7 @@ export class AssetsService {
   async upload(
     orgId: string,
     file: Express.Multer.File,
-    queueThumbnail: (assetId: string, key: string, type: AssetType) => Promise<void>,
+    queueThumbnail: (assetId: string, key: string, type: AssetType, mimeType: string) => Promise<void>,
   ) {
     const assetType = ALLOWED_MIME[file.mimetype];
     if (!assetType) throw new BadRequestException(`Unsupported file type: ${file.mimetype}`);
@@ -56,8 +61,79 @@ export class AssetsService {
       },
     });
 
-    await queueThumbnail(asset.id, key, assetType);
+    await queueThumbnail(asset.id, key, assetType, file.mimetype);
 
+    return this.toDto(asset, null);
+  }
+
+  /**
+   * Converts an already-uploaded VIDEO asset into a brand-new, separate AUDIO asset — the
+   * source video is left untouched. `targetKey` is allocated up front (before the worker has
+   * produced anything) so the new Asset row can be created immediately with status PROCESSING,
+   * the same "create now, worker fills in the rest" pattern upload() uses.
+   */
+  async extractAudioFromVideo(
+    orgId: string,
+    sourceId: string,
+    enqueueExtractAudio: (assetId: string, sourceKey: string, targetKey: string, deleteSourceKey?: string) => Promise<void>,
+  ) {
+    const source = await this.prisma.asset.findFirst({ where: { id: sourceId, organizationId: orgId } });
+    if (!source) throw new NotFoundException('Asset not found');
+    if (source.type !== 'VIDEO') throw new BadRequestException('Only video assets can be converted to audio');
+    if (source.status !== 'READY') throw new BadRequestException('The video must finish processing first');
+    if (!source.hasAudioTrack) throw new BadRequestException('This video has no audio track to extract');
+
+    const targetKey = `${orgId}/assets/${crypto.randomUUID()}.m4a`;
+    const asset = await this.prisma.asset.create({
+      data: {
+        name: `${source.name} (Audio)`,
+        type: 'AUDIO',
+        mimeType: 'audio/mp4',
+        storageKey: targetKey,
+        sizeBytes: 0,
+        organizationId: orgId,
+        status: 'PROCESSING',
+      },
+    });
+
+    await enqueueExtractAudio(asset.id, source.storageKey, targetKey);
+    return this.toDto(asset, null);
+  }
+
+  /**
+   * Uploads a video file purely as a means to get its audio track — the video itself is never
+   * kept as an asset. The raw upload lands at a throwaway tmp/ key that the worker deletes once
+   * extraction finishes (success or failure), so it never lingers as an orphaned object with no
+   * Asset row pointing at it.
+   */
+  async uploadAudioFromVideo(
+    orgId: string,
+    file: Express.Multer.File,
+    enqueueExtractAudio: (assetId: string, sourceKey: string, targetKey: string, deleteSourceKey?: string) => Promise<void>,
+  ) {
+    if (ALLOWED_MIME[file.mimetype] !== 'VIDEO') {
+      throw new BadRequestException(`Expected a video file to extract audio from, got: ${file.mimetype}`);
+    }
+
+    const ext = file.originalname.split('.').pop() ?? 'bin';
+    const tempKey = `${orgId}/assets/tmp/${crypto.randomUUID()}.${ext}`;
+    await this.storage.upload(tempKey, file.buffer, file.mimetype);
+
+    const targetKey = `${orgId}/assets/${crypto.randomUUID()}.m4a`;
+    const name = file.originalname.replace(/\.[^.]+$/, '');
+    const asset = await this.prisma.asset.create({
+      data: {
+        name: `${name} (Audio)`,
+        type: 'AUDIO',
+        mimeType: 'audio/mp4',
+        storageKey: targetKey,
+        sizeBytes: 0,
+        organizationId: orgId,
+        status: 'PROCESSING',
+      },
+    });
+
+    await enqueueExtractAudio(asset.id, tempKey, targetKey, tempKey);
     return this.toDto(asset, null);
   }
 
@@ -65,15 +141,17 @@ export class AssetsService {
   async reprocess(
     orgId: string,
     id: string,
-    queueThumbnail: (assetId: string, key: string, type: AssetType) => Promise<void>,
+    queueThumbnail: (assetId: string, key: string, type: AssetType, mimeType: string) => Promise<void>,
   ) {
     const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
     if (asset.status !== 'ERROR') throw new BadRequestException('Only a failed asset can be reprocessed');
-    if (asset.type !== 'IMAGE' && asset.type !== 'VIDEO') throw new BadRequestException('This asset type has nothing to reprocess');
+    if (asset.type !== 'IMAGE' && asset.type !== 'VIDEO' && asset.type !== 'DOCUMENT') {
+      throw new BadRequestException('This asset type has nothing to reprocess');
+    }
 
     const updated = await this.prisma.asset.update({ where: { id }, data: { status: 'PROCESSING' } });
-    await queueThumbnail(asset.id, asset.storageKey, asset.type);
+    await queueThumbnail(asset.id, asset.storageKey, asset.type, asset.mimeType);
     return this.toDto(updated, null);
   }
 
@@ -134,15 +212,17 @@ export class AssetsService {
     const assets = await this.prisma.asset.findMany({
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { playlistItems: true, screens: true, zones: true } } },
     });
     return assets.map(a => {
+      const inUse = a._count.playlistItems + a._count.screens + a._count.zones > 0;
       // TEXT assets have no real object behind storageKey (see createText) — a "url" built
       // from it would 404, so skip it and let the frontend render textContent instead.
-      if (a.type === 'TEXT') return this.toDto(a, null);
+      if (a.type === 'TEXT') return this.toDto(a, null, undefined, undefined, inUse);
       const url = this.storage.publicUrl(a.storageKey);
       const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
       const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
-      return this.toDto(a, url, thumbUrl, downloadUrl);
+      return this.toDto(a, url, thumbUrl, downloadUrl, inUse);
     });
   }
 
@@ -185,6 +265,7 @@ export class AssetsService {
         durationSecs: source.durationSecs,
         width: source.width,
         height: source.height,
+        pageCount: source.pageCount,
         category: source.category,
         tags: source.tags,
         status: 'READY',
@@ -269,10 +350,11 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
+    inUse?: boolean,
   ) {
     return {
       id: asset.id,
@@ -283,6 +365,7 @@ export class AssetsService {
       durationSecs: asset.durationSecs,
       width: asset.width,
       height: asset.height,
+      pageCount: asset.pageCount,
       textContent: asset.textContent,
       textFontFamily: asset.textFontFamily,
       textColor: asset.textColor,
@@ -298,6 +381,7 @@ export class AssetsService {
       downloadUrl: downloadUrl ?? null,
       organizationId: asset.organizationId,
       createdAt: asset.createdAt.toISOString(),
+      inUse,
     };
   }
 }

@@ -44,7 +44,7 @@ export class PlaylistsService {
   // Callers (addItem, findOne) need the same asset shape — sizeBytes coerced from bigint,
   // and storage keys resolved to fetchable URLs — so the frontend's PlaylistItem type is
   // satisfied everywhere an item comes back, not just on a full playlist fetch.
-  private shapeItem<T extends { asset: { type: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint } }>(
+  private shapeItem<T extends { asset: { type: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; sizeBytes: bigint } }>(
     item: T,
   ) {
     // TEXT assets have no real object behind storageKey (see AssetsService.createText) — a
@@ -60,6 +60,11 @@ export class PlaylistsService {
         thumbnailUrl: !isText && item.asset.thumbnailKey
           ? this.storage.publicUrl(item.asset.thumbnailKey)
           : null,
+        pageUrls: item.asset.type === 'DOCUMENT'
+          ? Array.from({ length: item.asset.pageCount ?? 0 }, (_, i) =>
+              this.storage.publicUrl(item.asset.storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
+            )
+          : [],
       },
     };
   }
@@ -99,7 +104,10 @@ export class PlaylistsService {
     await this.prisma.playlist.delete({ where: { id } });
   }
 
-  async addItem(orgId: string, playlistId: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) {
+  async addItem(
+    orgId: string, playlistId: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
+    cropZoom?: number, cropOffsetX?: number, cropOffsetY?: number,
+  ) {
     await this.assertOwns(orgId, playlistId);
     const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
     if (!asset) throw new NotFoundException('Asset not found');
@@ -120,13 +128,17 @@ export class PlaylistsService {
         playlistId, assetId, position, durationSecs,
         muted: initialMuted,
         ...(playFullVideo !== undefined && { playFullVideo }),
+        ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
       },
       include: { asset: true },
     });
     return this.shapeItem(created);
   }
 
-  async updateItem(orgId: string, playlistId: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) {
+  async updateItem(
+    orgId: string, playlistId: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
+    cropZoom?: number | null, cropOffsetX?: number | null, cropOffsetY?: number | null,
+  ) {
     await this.assertOwns(orgId, playlistId);
     const updated = await this.prisma.playlistItem.update({
       where: { id: itemId },
@@ -134,6 +146,10 @@ export class PlaylistsService {
         durationSecs,
         ...(muted !== undefined && { muted }),
         ...(playFullVideo !== undefined && { playFullVideo }),
+        // Explicit null (not just omitted) is how the crop editor's "reset to full image"
+        // clears a previously-set crop, so this checks arg *presence* on the request, not
+        // truthiness — same reasoning as muted/playFullVideo above, but null-inclusive.
+        ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
       },
       include: { asset: true },
     });

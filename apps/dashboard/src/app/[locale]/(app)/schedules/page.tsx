@@ -58,6 +58,7 @@ export default function SchedulesPage() {
   const [saveError, setSaveError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [search, setSearch] = useState('');
 
   const createMut = useMutation({
     mutationFn: () => Promise.all(selectedScreenIds.map(screenId => schedulesApi.create(toPayload(form, screenId)))),
@@ -195,6 +196,14 @@ export default function SchedulesPage() {
   const midnightGapDays = crossesMidnight && days.length > 0
     ? [...new Set(days.filter(d => !days.includes((d + 1) % 7)).map(d => t(`days.${DAY_KEYS[(d + 1) % 7]}`)))]
     : [];
+
+  const filteredSchedules = schedules.filter((s: ScheduleEntry) => {
+    const q = search.toLowerCase();
+    if (!q) return true;
+    return s.name.toLowerCase().includes(q)
+      || (s.screen?.name ?? '').toLowerCase().includes(q)
+      || (s.playlist?.name ?? '').toLowerCase().includes(q);
+  });
 
   function formatRule(s: ScheduleEntry) {
     const parts: string[] = [];
@@ -371,6 +380,15 @@ export default function SchedulesPage() {
         </div>
       )}
 
+      {!editing && schedules.length > 0 && (
+        <div className="relative mb-5 max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={tc('search')}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+        </div>
+      )}
+
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
       {!isLoading && schedules.length === 0 && !editing && (
@@ -380,8 +398,15 @@ export default function SchedulesPage() {
         </div>
       )}
 
+      {!isLoading && !editing && schedules.length > 0 && filteredSchedules.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{tc('noMatches')}</p>
+        </div>
+      )}
+
       <div className="space-y-3">
-        {schedules.map((s: ScheduleEntry) => (
+        {filteredSchedules.map((s: ScheduleEntry) => (
           <div key={s.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">

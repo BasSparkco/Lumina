@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid, Palette } from 'lucide-react';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid, Palette, Search } from 'lucide-react';
 import { screensApi, playlistsApi, layoutsApi, themesApi, orgApi, type Screen, type StreamingType, type PlaylistSummary, type Layout, type Theme } from '@/lib/api';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
@@ -290,6 +290,7 @@ export default function ScreensPage() {
   const [renameGroupValue, setRenameGroupValue] = useState('');
   const [publishedMessage, setPublishedMessage] = useState('');
   const [namingWarningScreen, setNamingWarningScreen] = useState<Screen | null>(null);
+  const [search, setSearch] = useState('');
 
   const pairMut = useMutation({
     mutationFn: () => screensApi.pair(pairCode.trim().toUpperCase()),
@@ -559,7 +560,8 @@ export default function ScreensPage() {
   // its name/history/settings), but it's no longer a screen anyone here is managing day to
   // day — hide it until something re-pairs into it.
   const pairedScreens = screens.filter(s => s.paired);
-  const visibleScreens = activeGroupId ? pairedScreens.filter(s => groupAssignments[s.id] === activeGroupId) : pairedScreens;
+  const groupFilteredScreens = activeGroupId ? pairedScreens.filter(s => groupAssignments[s.id] === activeGroupId) : pairedScreens;
+  const visibleScreens = groupFilteredScreens.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
   const screenLimit = planLimit(currentPlan);
   const atScreenLimit = screenLimit !== null && pairedScreens.length >= screenLimit;
 
@@ -586,6 +588,15 @@ export default function ScreensPage() {
           )
         )}
       </div>
+
+      {pairedScreens.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={tc('search')}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+        </div>
+      )}
 
       {/* Group filter bar */}
       <div className="flex items-center flex-wrap gap-2 mb-4">
@@ -721,7 +732,7 @@ export default function ScreensPage() {
       {!isLoading && visibleScreens.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <Monitor className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">{t('empty')}</p>
+          <p className="text-sm">{pairedScreens.length === 0 ? t('empty') : tc('noMatches')}</p>
         </div>
       )}
 

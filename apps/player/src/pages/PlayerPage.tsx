@@ -15,6 +15,7 @@ import CurrencyWidget from '../components/CurrencyWidget';
 import TickerWidget from '../components/TickerWidget';
 import TimeWidget from '../components/TimeWidget';
 import DateWidget from '../components/DateWidget';
+import QrCodeWidget from '../components/QrCodeWidget';
 import Splash from '../components/Splash';
 
 const HEARTBEAT_INTERVAL = 30_000;
@@ -43,6 +44,8 @@ function zoneHasContent(zone: Zone, state: PlayerState): boolean {
     case 'TIME':
     case 'DATE':
       return true;
+    case 'QR':
+      return !!(cfg.value as string | undefined)?.trim();
     default:
       return !!zone.playlist && zone.playlist.items.length > 0;
   }
@@ -353,6 +356,16 @@ function ZoneRenderer({ zone, state, onAssetChange, volume, forceMuted }: {
           timezone={(cfg.timezone as string | undefined) ?? state.timezone}
           format={(cfg.format as 'short' | 'long' | undefined) ?? 'long'}
           lang={lang}
+        />
+      );
+    case 'QR':
+      if (!(cfg.value as string | undefined)?.trim()) return <Splash text="QR zone: no content set" />;
+      return (
+        <QrCodeWidget
+          value={cfg.value as string | undefined}
+          color={cfg.color as string | undefined}
+          background={cfg.background as string | undefined}
+          sizePercent={cfg.sizePercent as number | undefined}
         />
       );
     default:
