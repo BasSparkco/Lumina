@@ -34,7 +34,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push(`/${locale}/dashboard`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('loginFailed'));
+      setError(err instanceof Error && err.message ? err.message : t('loginFailed'));
       // Keep the email — the backend intentionally returns the same error
       // whether the email or password was wrong, so we can't (and shouldn't)
       // guess which one to blame; only clear the password for re-entry.

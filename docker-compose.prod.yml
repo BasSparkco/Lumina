@@ -79,6 +79,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "4000"
+      HOST: "0.0.0.0"
       DASHBOARD_URL: "https://${DOMAIN}"
       # The player PWA runs on its own subdomain and calls this API directly from the
       # browser — must be CORS-whitelisted separately from DASHBOARD_URL (see main.ts).

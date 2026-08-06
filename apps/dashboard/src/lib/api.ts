@@ -39,7 +39,9 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (token && res.status === 401) { clearToken(); if (typeof window !== 'undefined') window.location.replace(loginPath()); }
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message ?? res.statusText);
+    // res.statusText is always '' on HTTP/2 responses (no reason-phrase), so it can't be
+    // trusted as a non-empty fallback — always fall through to the status code.
+    throw new Error(body.message || res.statusText || `Request failed (${res.status})`);
   }
   // NestJS's default status for DELETE routes is 200, not 204, and these controllers don't
   // override it — so a successful delete comes back as `200` with a genuinely empty body,
