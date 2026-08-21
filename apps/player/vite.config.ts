@@ -11,7 +11,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.(mp4|webm|jpg|jpeg|png|gif|webp)$/,
+            urlPattern: /^https:\/\/.*\.(mp4|webm|jpg|jpeg|png|gif|webp|svg)$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'media-cache',

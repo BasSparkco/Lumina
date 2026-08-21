@@ -7,6 +7,16 @@ import { AssignPlaylistDto } from './dto/assign-playlist.dto';
 import { AssignAssetDto } from './dto/assign-asset.dto';
 import { SetThemeDto } from './dto/set-theme.dto';
 import { SetStreamingTypeDto } from './dto/set-streaming-type.dto';
+import { SetKioskLocationDto } from './dto/set-kiosk-location.dto';
+import { SetKioskAttractPlaylistDto } from './dto/set-kiosk-attract-playlist.dto';
+import { SetKioskAttractThemeDto } from './dto/set-kiosk-attract-theme.dto';
+import { SetEmergencyDto } from './dto/set-emergency.dto';
+import { SetStoppedDto } from './dto/set-stopped.dto';
+import { SetShowClockDto } from './dto/set-show-clock.dto';
+import { UpdatePrayerDto } from './dto/update-prayer.dto';
+import { SetLayoutDto } from './dto/set-layout.dto';
+import { SetVolumeDto } from './dto/set-volume.dto';
+import { SetGroupDto } from './dto/set-group.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -106,7 +116,7 @@ export class ScreensController {
   setEmergency(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { active: boolean; playlistId?: string },
+    @Body() dto: SetEmergencyDto,
   ) {
     return this.screens.setEmergency(user.orgId, id, dto.active, dto.playlistId);
   }
@@ -115,7 +125,7 @@ export class ScreensController {
   setStopped(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { stopped: boolean },
+    @Body() dto: SetStoppedDto,
   ) {
     return this.screens.setStopped(user.orgId, id, dto.stopped);
   }
@@ -124,7 +134,7 @@ export class ScreensController {
   setShowClock(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { showClock: boolean },
+    @Body() dto: SetShowClockDto,
   ) {
     return this.screens.setShowClock(user.orgId, id, dto.showClock);
   }
@@ -133,7 +143,7 @@ export class ScreensController {
   updatePrayer(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean },
+    @Body() dto: UpdatePrayerDto,
   ) {
     return this.screens.updatePrayerConfig(user.orgId, id, dto);
   }
@@ -142,7 +152,7 @@ export class ScreensController {
   setLayout(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { layoutId: string | null },
+    @Body() dto: SetLayoutDto,
   ) {
     return this.screens.setLayout(user.orgId, id, dto.layoutId);
   }
@@ -151,7 +161,7 @@ export class ScreensController {
   setVolume(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { volume: number | null },
+    @Body() dto: SetVolumeDto,
   ) {
     return this.screens.setVolume(user.orgId, id, dto.volume);
   }
@@ -160,8 +170,40 @@ export class ScreensController {
   setGroup(
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
-    @Body() dto: { groupId: string | null },
+    @Body() dto: SetGroupDto,
   ) {
     return this.screens.setGroup(user.orgId, id, dto.groupId);
+  }
+
+  @Put(':id/kiosk-location')
+  setKioskLocation(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: SetKioskLocationDto,
+  ) {
+    return this.screens.setKioskLocation(user.orgId, id, dto.floorId, dto.x, dto.y);
+  }
+
+  @Delete(':id/kiosk-location')
+  clearKioskLocation(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.clearKioskLocation(user.orgId, id);
+  }
+
+  @Put(':id/kiosk-attract-playlist')
+  setKioskAttractPlaylist(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: SetKioskAttractPlaylistDto,
+  ) {
+    return this.screens.setKioskAttractPlaylist(user.orgId, id, dto.playlistId);
+  }
+
+  @Put(':id/kiosk-attract-theme')
+  setKioskAttractTheme(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: SetKioskAttractThemeDto,
+  ) {
+    return this.screens.setKioskAttractTheme(user.orgId, id, dto.themeId);
   }
 }

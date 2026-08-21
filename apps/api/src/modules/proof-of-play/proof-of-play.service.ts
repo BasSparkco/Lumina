@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 
 interface ProofOfPlayEvent {
   assetId?: string;
@@ -17,7 +18,10 @@ interface QueryOptions {
 
 @Injectable()
 export class ProofOfPlayService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orgScoped: OrgScopedService,
+  ) {}
 
   async ingest(orgId: string, screenId: string, events: ProofOfPlayEvent[]) {
     if (events.length === 0) return { ok: true, count: 0 };
@@ -63,8 +67,10 @@ export class ProofOfPlayService {
 
   async exportCsv(orgId: string, opts: { screenId?: string; from?: Date; to?: Date }): Promise<string> {
     if (opts.screenId) {
-      const screen = await this.prisma.screen.findFirst({ where: { id: opts.screenId, organizationId: orgId } });
-      if (!screen) throw new NotFoundException('Screen not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.screen.findFirst({ where: { id: opts.screenId, organizationId: orgId } }),
+        'Screen not found',
+      );
     }
 
     const where = this.whereFor(orgId, opts);

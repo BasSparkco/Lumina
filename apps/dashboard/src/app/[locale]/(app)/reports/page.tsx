@@ -2,11 +2,12 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { BarChart3, ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { screensApi, assetsApi, playlistsApi, type Screen } from '@/lib/api';
+import { BarChart3, ChevronLeft, ChevronRight, Download, Users2 } from 'lucide-react';
+import { screensApi, assetsApi, playlistsApi, kioskAnalyticsApi, type Screen } from '@/lib/api';
 import { proofOfPlayApi, type ProofOfPlayEntry } from '@/lib/mocks/proofOfPlay';
 import { downloadCsv } from '@/lib/csv';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
+import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 
 const PAGE_SIZE = 10;
 const CHART_HEIGHT_PX = 100;
@@ -72,6 +73,8 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
 
   return (
     <div>
+      <PreviewFeatureNotice />
+
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
           <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('screen')}</label>
@@ -183,9 +186,152 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
   );
 }
 
+// Kiosk analytics (7.4) — extends this same reports page/pattern (screen filter, date range,
+// chart + table) with wayfinding-specific aggregates, rather than a separate analytics page. All
+// aggregation happens client-side over the raw event list, same as ProofOfPlayTab above.
+function KioskActivityTab({ screens }: { screens: Screen[] }) {
+  const t = useTranslations('reports');
+  const { format: dateFormat } = useDateFormat();
+
+  const [screenId, setScreenId] = useState<string>('ALL');
+  const [fromDate, setFromDate] = useState('');
+  const [untilDate, setUntilDate] = useState('');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['kioskEvents', screenId, fromDate, untilDate],
+    queryFn: () => kioskAnalyticsApi.list({
+      screenId: screenId === 'ALL' ? undefined : screenId,
+      from: fromDate || undefined,
+      to: untilDate || undefined,
+    }),
+  });
+  // Memoized so this stays referentially stable across renders where `data` hasn't changed —
+  // otherwise `data?.items ?? []` would hand the useMemos below a fresh array every render and
+  // they'd recompute for no reason.
+  const events = useMemo(() => data?.items ?? [], [data]);
+  // The endpoint caps how many events one request returns (see KioskEventsResult) — when the
+  // real count exceeds what came back, topSearches/topDestinations below are only aggregating
+  // over the most recent slice, not the full filtered range, so this needs to be visible rather
+  // than silently rendering an incomplete ranking.
+  const truncated = (data?.total ?? 0) > events.length;
+
+  const sessionCount = useMemo(() => events.filter(e => e.type === 'SESSION_START').length, [events]);
+
+  const topSearches = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of events) if (e.type === 'SEARCH' && e.query) map.set(e.query, (map.get(e.query) ?? 0) + 1);
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+  }, [events]);
+
+  const topDestinations = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of events) if (e.type === 'POI_VIEW' && e.poiName) map.set(e.poiName, (map.get(e.poiName) ?? 0) + 1);
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+  }, [events]);
+
+  const maxSearch = Math.max(1, ...topSearches.map(([, c]) => c));
+  const maxDestination = Math.max(1, ...topDestinations.map(([, c]) => c));
+
+  function exportCsv() {
+    downloadCsv(
+      `kiosk-activity-${new Date().toISOString().slice(0, 10)}.csv`,
+      [t('time'), t('screenColumn'), t('building'), 'Type', t('searchTerm'), t('destination')],
+      events.map(e => [formatDateTime(e.createdAt, dateFormat), e.screenName, e.buildingName ?? '—', e.type, e.query ?? '', e.poiName ?? '']),
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-end gap-3 mb-6">
+        <div>
+          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('screen')}</label>
+          <select value={screenId} onChange={e => setScreenId(e.target.value)}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="ALL">{t('allScreens')}</option>
+            {screens.filter(s => s.streamingType === 'WAYFINDING').map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('fromDate')}</label>
+          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('untilDate')}</label>
+          <input type="date" value={untilDate} onChange={e => setUntilDate(e.target.value)}
+            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
+        <span className="text-xs text-gray-400 dark:text-gray-500 pb-2">{t('sessionCount', { count: sessionCount })}</span>
+        <button onClick={exportCsv} disabled={events.length === 0}
+          className="ms-auto flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+          <Download className="w-4 h-4" /> {t('exportCsv')}
+        </button>
+      </div>
+
+      {isLoading && <p className="text-sm text-gray-400">{t('kioskLoading')}</p>}
+
+      {!isLoading && truncated && (
+        <div className="mb-4 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
+          {t('truncatedWarning', { shown: events.length, total: data?.total ?? 0 })}
+        </div>
+      )}
+
+      {!isLoading && events.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <Users2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">{t('kioskEmpty')}</p>
+        </div>
+      )}
+
+      {!isLoading && events.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">{t('topSearches')}</p>
+            {topSearches.length === 0 ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">{t('noSearches')}</p>
+            ) : (
+              <div className="space-y-2">
+                {topSearches.map(([query, count]) => (
+                  <div key={query} className="flex items-center gap-2 text-xs">
+                    <span className="w-28 truncate text-gray-600 dark:text-gray-300 shrink-0">{query}</span>
+                    <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded h-3 overflow-hidden">
+                      <div className="h-full bg-indigo-500 dark:bg-indigo-600" style={{ width: `${(count / maxSearch) * 100}%` }} />
+                    </div>
+                    <span className="w-8 text-end text-gray-400 dark:text-gray-500 shrink-0">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">{t('topDestinations')}</p>
+            {topDestinations.length === 0 ? (
+              <p className="text-xs text-gray-400 dark:text-gray-500">{t('noDestinations')}</p>
+            ) : (
+              <div className="space-y-2">
+                {topDestinations.map(([name, count]) => (
+                  <div key={name} className="flex items-center gap-2 text-xs">
+                    <span className="w-28 truncate text-gray-600 dark:text-gray-300 shrink-0">{name}</span>
+                    <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded h-3 overflow-hidden">
+                      <div className="h-full bg-emerald-500 dark:bg-emerald-600" style={{ width: `${(count / maxDestination) * 100}%` }} />
+                    </div>
+                    <span className="w-8 text-end text-gray-400 dark:text-gray-500 shrink-0">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const t = useTranslations('reports');
   const { data: screens = [] } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
+  const hasKiosks = screens.some(s => s.streamingType === 'WAYFINDING');
+  const [tab, setTab] = useState<'proofOfPlay' | 'kiosk'>('proofOfPlay');
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
@@ -194,7 +340,32 @@ export default function ReportsPage() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
       </div>
 
-      <ProofOfPlayTab screens={screens} />
+      {hasKiosks && (
+        <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
+          <button
+            onClick={() => setTab('proofOfPlay')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              tab === 'proofOfPlay'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            {t('tabProofOfPlay')}
+          </button>
+          <button
+            onClick={() => setTab('kiosk')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              tab === 'kiosk'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            {t('tabKioskActivity')}
+          </button>
+        </div>
+      )}
+
+      {tab === 'proofOfPlay' || !hasKiosks ? <ProofOfPlayTab screens={screens} /> : <KioskActivityTab screens={screens} />}
     </div>
   );
 }

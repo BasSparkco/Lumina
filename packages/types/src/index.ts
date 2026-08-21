@@ -4,6 +4,7 @@ export * from './playlist';
 export * from './player';
 export * from './theme';
 export * from './fonts';
+export * from './wayfinding';
 
 // Explicit re-exports of runtime values (schemas, functions) alongside the `export *`
 // above: `export *` compiles to a dynamic re-export loop that bundlers' CJS/ESM interop
@@ -39,3 +40,4 @@ export {
   shapeClipStyle,
 } from './theme';
 export { FONT_LIBRARY, FONT_IDS, DEFAULT_FONT_ID, fontStack } from './fonts';
+export { POI_CATEGORY_PRESETS } from './wayfinding';

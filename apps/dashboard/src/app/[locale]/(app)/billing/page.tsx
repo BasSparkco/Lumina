@@ -6,6 +6,7 @@ import { screensApi } from '@/lib/api';
 import { billingApi, PLANS, planLimit, type PlanId } from '@/lib/mocks/billing';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
+import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 
 export default function BillingPage() {
   const qc = useQueryClient();
@@ -35,6 +36,8 @@ export default function BillingPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
       </div>
+
+      <PreviewFeatureNotice />
 
       {!isLoading && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 mb-6">

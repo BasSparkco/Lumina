@@ -1,12 +1,14 @@
-// Mock for the Phase 5 "Audit log" contract — there's no `AuditLog` model or endpoint on
-// the backend yet, so entries are recorded client-side (localStorage) from the dashboard's
-// own mutations (see `hooks/useAuditLog.ts`, used across Members/Playlists/Screens/Assets/
-// Layouts/Schedules/Approvals). Swap for a real `req<T>()`-backed client once the backend
-// track ships real server-side audit logging — that's the only way to *actually* guarantee
-// every change is captured, including ones made directly against the API rather than
-// through this dashboard.
+// Not a mock/test fixture despite the STORAGE_KEY's name (kept as-is — renaming it would wipe
+// every admin's existing browser-stored history) — this is the *only* implementation of audit
+// logging on the dashboard today. There's no `AuditLog` model or endpoint on the backend yet
+// (a real one already exists server-side, unused by this — see apps/api/src/modules/audit/), so
+// entries are recorded client-side (localStorage) from the dashboard's own mutations (see
+// `hooks/useAuditLog.ts`, used across Members/Playlists/Screens/Assets/Layouts/Schedules/
+// Approvals). Swap for a real `req<T>()`-backed client once the backend track ships real
+// server-side audit logging — that's the only way to *actually* guarantee every change is
+// captured, including ones made directly against the API rather than through this dashboard.
 
-export type AuditResourceType = 'MEMBER' | 'PLAYLIST' | 'SCREEN' | 'ASSET' | 'LAYOUT' | 'THEME' | 'SCHEDULE' | 'GROUP';
+export type AuditResourceType = 'MEMBER' | 'PLAYLIST' | 'SCREEN' | 'ASSET' | 'LAYOUT' | 'THEME' | 'SCHEDULE' | 'GROUP' | 'BUILDING';
 export type AuditAction =
   | 'CREATE' | 'UPDATE' | 'DELETE'
   | 'INVITE' | 'ROLE_CHANGE' | 'REMOVE'

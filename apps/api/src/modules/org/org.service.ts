@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { hash } from 'bcryptjs';
 import type { UserRole } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -11,6 +12,7 @@ export class OrgService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly orgScoped: OrgScopedService,
   ) {}
 
   async listMembers(orgId: string) {
@@ -107,9 +109,10 @@ export class OrgService {
   }
 
   private async getMember(orgId: string, memberId: string) {
-    const member = await this.prisma.user.findFirst({ where: { id: memberId, organizationId: orgId } });
-    if (!member) throw new NotFoundException('Member not found');
-    return member;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.user.findFirst({ where: { id: memberId, organizationId: orgId } }),
+      'Member not found',
+    );
   }
 
   private async assertNotLastOwner(orgId: string, excludingMemberId: string) {

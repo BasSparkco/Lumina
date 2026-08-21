@@ -1,5 +1,11 @@
 'use client';
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useLayoutEffect, useEffect, useMemo, useState, type ReactNode } from 'react';
+
+// useLayoutEffect warns "does nothing on the server" when it's part of a component Next
+// server-renders (true here, even though this file is 'use client' — SSR still renders client
+// components for the initial HTML). Falling back to useEffect during SSR is a no-op there
+// either way, so this just silences the warning without changing client behavior.
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 type Theme = 'light' | 'dark';
 const STORAGE_KEY = 'lumina_theme';
@@ -24,14 +30,22 @@ export const themeInitScript = `
 `;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Lazy initializer (not a useEffect) so the correct value is available on the very
-  // first render — this component remounts on every locale switch (it lives inside the
-  // [locale]-scoped layout, which re-executes when that param changes), so relying on an
-  // effect to "correct" the state after mount created a one-tick window where the UI
-  // showed the wrong theme, which looked like switching locale had reset it.
-  const [theme, setTheme] = useState<Theme>(() =>
-    typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-  );
+  // Starts at the server's deterministic default so the client's first render matches the
+  // server-rendered HTML exactly (a lazy initializer reading `document` here — the previous
+  // approach — returns 'light' on the server but the real persisted value on the client's first
+  // render, which is a hydration mismatch for anything downstream that reads `theme`, not just
+  // <html>'s class). themeInitScript above has already set the correct class on <html>
+  // synchronously before hydration, so the *visual* background/etc. are right from first paint
+  // regardless of this value; the layout effect below corrects the state itself before the
+  // browser paints, so nothing that reads `theme` from this context flashes the wrong value
+  // either — including on a remount (e.g. ThemeProvider living somewhere that re-executes on a
+  // param change), since useLayoutEffect runs before paint every time, not just on the true
+  // first mount.
+  const [theme, setTheme] = useState<Theme>('light');
+
+  useIsomorphicLayoutEffect(() => {
+    setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
@@ -42,7 +56,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  return <Ctx.Provider value={{ theme, toggleTheme }}>{children}</Ctx.Provider>;
+  // Without this, every consumer re-renders whenever ThemeProvider re-renders for any reason
+  // (not just an actual theme change) — a fresh object literal here would be a new reference the
+  // context Provider treats as a change regardless of whether its contents actually differ.
+  const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useTheme() {

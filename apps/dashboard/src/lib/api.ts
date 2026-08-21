@@ -101,6 +101,92 @@ export const screensApi = {
   captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
   crashReports: (id: string) => req<CrashReport[]>(`/screens/${id}/crash-reports`),
   fleetStatus: () => req<FleetStatus>('/screens/fleet-status'),
+  setKioskLocation: (id: string, floorId: string, x: number, y: number) =>
+    req<Screen>(`/screens/${id}/kiosk-location`, { method: 'PUT', body: JSON.stringify({ floorId, x, y }) }),
+  clearKioskLocation: (id: string) => req<{ ok: boolean }>(`/screens/${id}/kiosk-location`, { method: 'DELETE' }),
+  setKioskAttractPlaylist: (id: string, playlistId: string | null) =>
+    req<Screen>(`/screens/${id}/kiosk-attract-playlist`, { method: 'PUT', body: JSON.stringify({ playlistId }) }),
+  setKioskAttractTheme: (id: string, themeId: string | null) =>
+    req<Screen>(`/screens/${id}/kiosk-attract-theme`, { method: 'PUT', body: JSON.stringify({ themeId }) }),
+};
+
+// ── Wayfinding ──────────────────────────────────────────────────────────────
+export const wayfindingApi = {
+  listBuildings: () => req<Building[]>('/buildings'),
+  createBuilding: (name: string, address?: string) =>
+    req<Building>('/buildings', { method: 'POST', body: JSON.stringify({ name, address }) }),
+  updateBuilding: (id: string, name: string, address?: string) =>
+    req<Building>(`/buildings/${id}`, { method: 'PUT', body: JSON.stringify({ name, address }) }),
+  removeBuilding: (id: string) => req<void>(`/buildings/${id}`, { method: 'DELETE' }),
+  setEvacuation: (id: string, active: boolean) =>
+    req<{ ok: boolean; screenCount: number }>(`/buildings/${id}/evacuation`, { method: 'PUT', body: JSON.stringify({ active }) }),
+  syncScreenGroup: (id: string) =>
+    req<{ id: string; name: string; _count: { screens: number } }>(`/buildings/${id}/sync-screen-group`, { method: 'POST' }),
+
+  createFloor: (buildingId: string, level: number, label: string, floorPlanAssetId?: string | null) =>
+    req<Floor>(`/buildings/${buildingId}/floors`, { method: 'POST', body: JSON.stringify({ level, label, floorPlanAssetId }) }),
+  updateFloor: (id: string, level: number, label: string, floorPlanAssetId?: string | null) =>
+    req<Floor>(`/floors/${id}`, { method: 'PUT', body: JSON.stringify({ level, label, floorPlanAssetId }) }),
+  removeFloor: (id: string) => req<void>(`/floors/${id}`, { method: 'DELETE' }),
+
+  listPoiCategories: () => req<PoiCategory[]>('/poi-categories'),
+  createPoiCategory: (label: string, icon: string, color: string, labelAr?: string) =>
+    req<PoiCategory>('/poi-categories', { method: 'POST', body: JSON.stringify({ label, icon, color, labelAr }) }),
+  updatePoiCategory: (id: string, label: string, icon: string, color: string, labelAr?: string) =>
+    req<PoiCategory>(`/poi-categories/${id}`, { method: 'PUT', body: JSON.stringify({ label, icon, color, labelAr }) }),
+  removePoiCategory: (id: string) => req<void>(`/poi-categories/${id}`, { method: 'DELETE' }),
+
+  listPois: (floorId: string) => req<Poi[]>(`/floors/${floorId}/pois`),
+  createPoi: (floorId: string, dto: PoiInput) =>
+    req<Poi>(`/floors/${floorId}/pois`, { method: 'POST', body: JSON.stringify(dto) }),
+  updatePoi: (id: string, dto: PoiInput) =>
+    req<Poi>(`/pois/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  removePoi: (id: string) => req<void>(`/pois/${id}`, { method: 'DELETE' }),
+  importPois: (floorId: string, rows: PoiImportRow[]) =>
+    req<{ imported: number }>(`/floors/${floorId}/pois/import`, { method: 'POST', body: JSON.stringify({ rows }) }),
+
+  getRouteGraph: (buildingId: string) => req<RouteGraph>(`/buildings/${buildingId}/route-graph`),
+  createRouteNode: (floorId: string, dto: RouteNodeInput) =>
+    req<RouteNode>(`/floors/${floorId}/route-nodes`, { method: 'POST', body: JSON.stringify(dto) }),
+  updateRouteNode: (id: string, dto: RouteNodeInput) =>
+    req<RouteNode>(`/route-nodes/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  removeRouteNode: (id: string) => req<void>(`/route-nodes/${id}`, { method: 'DELETE' }),
+  createRouteEdge: (buildingId: string, dto: RouteEdgeInput) =>
+    req<RouteEdge>(`/buildings/${buildingId}/route-edges`, { method: 'POST', body: JSON.stringify(dto) }),
+  updateRouteEdge: (id: string, type: RouteEdgeType, weight: number) =>
+    req<RouteEdge>(`/route-edges/${id}`, { method: 'PUT', body: JSON.stringify({ type, weight }) }),
+  removeRouteEdge: (id: string) => req<void>(`/route-edges/${id}`, { method: 'DELETE' }),
+};
+
+// ── Kiosk analytics (7.4) ──────────────────────────────────────────────────
+export interface KioskEvent {
+  id: string;
+  type: 'SESSION_START' | 'SEARCH' | 'POI_VIEW';
+  query: string | null;
+  poiId: string | null;
+  poiName: string | null;
+  createdAt: string;
+  screenId: string;
+  screenName: string;
+  buildingName: string | null;
+}
+export interface KioskEventsResult {
+  items: KioskEvent[];
+  // Total matching the filters server-side, which can exceed items.length — the endpoint caps
+  // how many events one request returns (it's fetched in full for client-side aggregation, not
+  // paged), so total is how the UI detects and surfaces truncation instead of silently rendering
+  // incomplete search/destination rankings.
+  total: number;
+}
+export const kioskAnalyticsApi = {
+  list: (params?: { screenId?: string; from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.screenId) qs.set('screenId', params.screenId);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<KioskEventsResult>(`/kiosk-events${suffix}`);
+  },
 };
 
 // ── Assets ──────────────────────────────────────────────────────────────────
@@ -246,7 +332,7 @@ export const realScreenGroupsApi = {
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME' | 'WAYFINDING';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
 export interface ZoneInput {
   name: string; x: number; y: number; width: number; height: number; zIndex?: number;
@@ -294,7 +380,46 @@ export interface Screen {
   prayerMethod: string; athanEnabled: boolean; timezone: string; timezoneEnabled: boolean;
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
   hasContent: boolean; volume: number | null;
+  kioskLocation: {
+    id: string; floorId: string; x: number; y: number;
+    floor?: { id: string; label: string; building: { id: string; name: string } };
+    attractPlaylistId: string | null; attractThemeId: string | null;
+  } | null;
 }
+export interface Building {
+  id: string; name: string; address: string | null; createdAt: string; updatedAt: string;
+  floors: Floor[];
+}
+export interface Floor {
+  id: string; level: number; label: string; buildingId: string;
+  floorPlanAssetId: string | null;
+  floorPlanAsset: { id: string; name: string; thumbnailKey: string | null } | null;
+  _count?: { pois: number };
+}
+export interface PoiCategory {
+  id: string; label: string; labelAr: string | null; icon: string; color: string;
+  organizationId: string | null;
+}
+export type PoiStatus = 'OPEN' | 'CLOSED' | 'RELOCATED';
+export interface Poi {
+  id: string; name: string; nameAr: string | null; x: number; y: number;
+  description: string | null; descriptionAr: string | null; status: PoiStatus;
+  externalRef: string | null; floorId: string; categoryId: string; category: PoiCategory;
+  iconAssetId: string | null;
+}
+export interface PoiInput {
+  name: string; nameAr?: string; x: number; y: number; categoryId: string;
+  description?: string; descriptionAr?: string; status?: PoiStatus; externalRef?: string; iconAssetId?: string;
+}
+export interface PoiImportRow {
+  name: string; nameAr?: string; x: number; y: number; categoryLabel: string; description?: string;
+}
+export type RouteEdgeType = 'WALK' | 'ELEVATOR' | 'ESCALATOR' | 'STAIRS';
+export interface RouteNode { id: string; floorId: string; x: number; y: number; label: string | null; }
+export interface RouteNodeInput { x: number; y: number; label?: string; }
+export interface RouteEdge { id: string; fromNodeId: string; toNodeId: string; type: RouteEdgeType; weight: number; }
+export interface RouteEdgeInput { fromNodeId: string; toNodeId: string; type?: RouteEdgeType; weight: number; }
+export interface RouteGraph { nodes: RouteNode[]; edges: RouteEdge[]; }
 export interface CrashReport {
   id: string; type: 'UNCAUGHT_EXCEPTION' | 'WATCHDOG_RECOVERY'; summary: string;
   stackTrace: string | null; occurredAt: string;
@@ -307,7 +432,11 @@ export interface FleetStatus {
 // re-imported) so this file's existing "duplicate the server's shape locally" convention holds.
 export type TextFontFamily = string;
 export type TextSize = 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE';
-export interface TextStyle { textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; textBackgroundColor?: string; }
+export type TickerDirection = 'LEFT_TO_RIGHT' | 'RIGHT_TO_LEFT' | 'TOP_TO_BOTTOM' | 'BOTTOM_TO_TOP';
+export interface TextStyle {
+  textFontFamily: TextFontFamily; textColor: string; textSize: TextSize; textBackgroundColor?: string;
+  textTickerEnabled?: boolean; textTickerDirection?: TickerDirection; textTickerSpeed?: number; textTickerCrossOffset?: number;
+}
 export type AssetCategory = 'BACKGROUND' | 'ICON' | 'ILLUSTRATION' | 'STOCK_PHOTO' | 'LOGO' | 'VIDEO_LOOP' | 'AUDIO_JINGLE' | 'GENERIC';
 export interface Asset {
   id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT'; mimeType: string;
@@ -315,6 +444,7 @@ export interface Asset {
   downloadUrl: string | null; textContent: string | null;
   textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
   textBackgroundColor: string | null;
+  textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null;
   hasAudioTrack: boolean; audioEnabled: boolean;
   category: AssetCategory; tags: string[];
   width: number | null; height: number | null; durationSecs: number | null; pageCount: number | null; createdAt: string;
@@ -370,13 +500,13 @@ interface ThemeElementBase {
   editable: boolean; label?: string; style: ThemeElementStyle;
 }
 export type ThemeElement =
-  | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string> } })
+  | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string>; assetId?: string | null } })
   | (ThemeElementBase & { kind: 'IMAGE'; content: { assetId: string | null } })
   | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null } })
   | (ThemeElementBase & { kind: 'DOCUMENT'; content: { assetId: string | null; secondsPerPage: number } })
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
-  | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[] } })
+  | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[]; raster?: { dataUrl: string; width: number; height: number } } })
   | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: ThemeWidgetType; widgetConfig: Record<string, unknown> } });
 
 export interface ThemeInput {

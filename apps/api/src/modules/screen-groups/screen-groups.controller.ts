@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nes
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ScreenGroupsService } from './screen-groups.service';
 import { CreateScreenGroupDto } from './dto/create-screen-group.dto';
+import { SetVolumeDto } from './dto/set-volume.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -45,7 +46,7 @@ export class ScreenGroupsController {
   }
 
   @Put(':id/volume')
-  setVolume(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: { volume: number | null }) {
+  setVolume(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetVolumeDto) {
     return this.groups.setVolume(user.orgId, id, dto.volume);
   }
 }

@@ -1,9 +1,11 @@
 'use client';
 import { useState } from 'react';
+import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search } from 'lucide-react';
 import { playlistsApi, assetsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type Asset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
+import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -216,7 +218,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 <button key={a.id} onClick={() => addMut.mutate({ assetId: a.id, dur: defaultDuration })}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
                   {a.thumbnailUrl
-                    ? <img src={a.thumbnailUrl} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
+                    ? <Image src={a.thumbnailUrl} width={40} height={40} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
                     : <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[a.type]}</div>
                   }
                   <div className="min-w-0">
@@ -263,7 +265,7 @@ function PlaylistDetail({ id }: { id: string }) {
             {item.asset.thumbnailUrl ? (
               <button onClick={() => setViewingItemId(item.id)} title={t('clickToView')}
                 className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-indigo-400 transition-all">
-                <img src={item.asset.thumbnailUrl} className="w-full h-full object-cover" alt="" />
+                <Image src={item.asset.thumbnailUrl} width={40} height={40} className="w-full h-full object-cover" alt="" />
               </button>
             ) : (
               <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
@@ -501,6 +503,11 @@ export default function PlaylistsPage() {
           </button>
         )}
       </div>
+
+      {/* Unlike the rest of this page, the approval workflow below (this card, and the pending-
+          approvals queue further down) is still mock-backed — see PreviewFeatureNotice. Scoped
+          to canApproveContent since that's the only audience who'd see the workflow at all. */}
+      {canApproveContent && !settingsLoading && <PreviewFeatureNotice />}
 
       {canApproveContent && !settingsLoading && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 mb-4 flex items-center justify-between gap-4">

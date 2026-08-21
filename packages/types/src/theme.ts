@@ -59,6 +59,18 @@ export type ThemeElementShape = z.infer<typeof ThemeElementShapeSchema>;
 export const ThemeBrushPointSchema = z.object({ x: z.number(), y: z.number() });
 export type ThemeBrushPoint = z.infer<typeof ThemeBrushPointSchema>;
 
+// The paint layer's raster bitmap — a single full-canvas PNG (base64 data URL) that the brush,
+// eraser, fill bucket, and eyedropper all read/write pixel-by-pixel. `width`/`height` are the
+// bitmap's own native pixel size (fixed per aspect ratio, see PAINT_LAYER_RESOLUTION in the
+// dashboard's paintEngine), not related to the element's 0–100 box, which is always the full
+// canvas (x:0 y:0 width:100 height:100) so the bitmap always covers the whole frame.
+export const ThemeBrushRasterSchema = z.object({
+  dataUrl: z.string(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
+export type ThemeBrushRaster = z.infer<typeof ThemeBrushRasterSchema>;
+
 // Style values for color fields accept either a literal CSS color or a "palette.<role>"
 // reference, resolved at render time via resolveThemeColor().
 export const ThemeElementStyleSchema = z.object({
@@ -116,6 +128,10 @@ export const ThemeElementSchema = z.discriminatedUnion('kind', [
       text: z.string(),
       // Optional locale overrides, e.g. { ar: "..." } — the RTL/faith-market differentiator.
       translations: z.record(z.string(), z.string()).optional(),
+      // When set, the element sources its content AND all text styling (font/color/size/
+      // background/ticker) from that TEXT-type Asset, ignoring `text`/`translations` — the same
+      // "reuse the asset as-is" model IMAGE/VIDEO/DOCUMENT elements already use.
+      assetId: z.string().nullable().optional(),
     }),
   }),
   z.object({
@@ -148,7 +164,15 @@ export const ThemeElementSchema = z.discriminatedUnion('kind', [
   z.object({
     ...themeElementBase,
     kind: z.literal('BRUSH'),
-    content: z.object({ points: z.array(ThemeBrushPointSchema).default([]) }),
+    // `points`: legacy per-stroke vector format (themes saved before the raster paint layer
+    // existed) — kept read-only so old themes keep rendering, never written by new drawing.
+    // `raster`: the current paint layer format — every BRUSH element the editor creates from now
+    // on carries this instead, and there's normally at most one such element per theme (the
+    // singleton paint layer every brush/eraser/fill/eyedropper action reads and writes).
+    content: z.object({
+      points: z.array(ThemeBrushPointSchema).default([]),
+      raster: ThemeBrushRasterSchema.optional(),
+    }),
   }),
   z.object({
     ...themeElementBase,

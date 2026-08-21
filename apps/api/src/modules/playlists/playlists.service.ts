@@ -2,12 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type { UserRole, TransitionStyle, PlaybackOrder } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 
 @Injectable()
 export class PlaylistsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly orgScoped: OrgScopedService,
   ) {}
 
   async create(orgId: string, name: string, creatorRole: UserRole) {
@@ -25,16 +27,18 @@ export class PlaylistsService {
   }
 
   async findOne(orgId: string, id: string) {
-    const playlist = await this.prisma.playlist.findFirst({
-      where: { id, organizationId: orgId },
-      include: {
-        items: {
-          orderBy: { position: 'asc' },
-          include: { asset: true },
+    const playlist = await this.orgScoped.assertOwns(
+      () => this.prisma.playlist.findFirst({
+        where: { id, organizationId: orgId },
+        include: {
+          items: {
+            orderBy: { position: 'asc' },
+            include: { asset: true },
+          },
         },
-      },
-    });
-    if (!playlist) throw new NotFoundException('Playlist not found');
+      }),
+      'Playlist not found',
+    );
 
     const itemsWithUrls = playlist.items.map((item: (typeof playlist.items)[number]) => this.shapeItem(item));
 
@@ -109,8 +113,10 @@ export class PlaylistsService {
     cropZoom?: number, cropOffsetX?: number, cropOffsetY?: number,
   ) {
     await this.assertOwns(orgId, playlistId);
-    const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } }),
+      'Asset not found',
+    );
 
     const last = await this.prisma.playlistItem.findFirst({
       where: { playlistId },
@@ -140,6 +146,7 @@ export class PlaylistsService {
     cropZoom?: number | null, cropOffsetX?: number | null, cropOffsetY?: number | null,
   ) {
     await this.assertOwns(orgId, playlistId);
+    await this.assertItemBelongs(playlistId, itemId);
     const updated = await this.prisma.playlistItem.update({
       where: { id: itemId },
       data: {
@@ -158,25 +165,35 @@ export class PlaylistsService {
 
   async removeItem(orgId: string, playlistId: string, itemId: string) {
     await this.assertOwns(orgId, playlistId);
-    await this.prisma.playlistItem.delete({ where: { id: itemId } });
-    // Re-sequence positions
-    const remaining = await this.prisma.playlistItem.findMany({
-      where: { playlistId },
-      orderBy: { position: 'asc' },
+    await this.assertItemBelongs(playlistId, itemId);
+    // The delete and the re-sequence below used to run as independent statements; a failure
+    // partway through the re-sequence (e.g. a dropped connection) left duplicate/gapped
+    // `position` values, so the player renders items in whatever tie-break order Postgres
+    // happens to return — silent content misordering on live screens.
+    await this.prisma.$transaction(async tx => {
+      await tx.playlistItem.delete({ where: { id: itemId } });
+      const remaining = await tx.playlistItem.findMany({
+        where: { playlistId },
+        orderBy: { position: 'asc' },
+      });
+      await Promise.all(
+        remaining.map((item: (typeof remaining)[number], i: number) =>
+          tx.playlistItem.update({ where: { id: item.id }, data: { position: i } }),
+        ),
+      );
     });
-    await Promise.all(
-      remaining.map((item: (typeof remaining)[number], i: number) =>
-        this.prisma.playlistItem.update({ where: { id: item.id }, data: { position: i } }),
-      ),
-    );
   }
 
   async reorderItems(orgId: string, playlistId: string, orderedIds: string[]) {
     await this.assertOwns(orgId, playlistId);
-    await Promise.all(
-      orderedIds.map((id, i) =>
-        this.prisma.playlistItem.update({ where: { id }, data: { position: i } }),
-      ),
+    const ownedCount = await this.prisma.playlistItem.count({
+      where: { id: { in: orderedIds }, playlistId },
+    });
+    if (ownedCount !== orderedIds.length) throw new NotFoundException('Playlist item not found');
+    // Same atomicity concern as removeItem's re-sequence above — a partial failure mid-batch
+    // must not leave the playlist with duplicate/gapped positions.
+    await this.prisma.$transaction(async tx =>
+      Promise.all(orderedIds.map((id, i) => tx.playlistItem.update({ where: { id }, data: { position: i } }))),
     );
   }
 
@@ -205,8 +222,19 @@ export class PlaylistsService {
   }
 
   private async assertOwns(orgId: string, id: string) {
-    const p = await this.prisma.playlist.findFirst({ where: { id, organizationId: orgId } });
-    if (!p) throw new NotFoundException('Playlist not found');
-    return p;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.playlist.findFirst({ where: { id, organizationId: orgId } }),
+      'Playlist not found',
+    );
+  }
+
+  // updateItem/removeItem/reorderItems take itemId(s) from the request body; assertOwns only
+  // confirms the *playlist* is in the caller's org, so without this a caller could pass any
+  // playlistItem id — including one belonging to another org's playlist — and mutate it.
+  private async assertItemBelongs(playlistId: string, itemId: string) {
+    await this.orgScoped.assertOwns(
+      () => this.prisma.playlistItem.findFirst({ where: { id: itemId, playlistId } }),
+      'Playlist item not found',
+    );
   }
 }

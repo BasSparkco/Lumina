@@ -4,7 +4,9 @@ import type { StreamingType } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
+import { OrgScopedService } from '../../common/org-scoped.service';
 import type { CreateScreenDto } from './dto/create-screen.dto';
+import type { UpdatePrayerDto } from './dto/update-prayer.dto';
 
 const CRASH_ROLLUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -15,6 +17,7 @@ export class ScreensService {
     private readonly jwt: JwtService,
     private readonly gateway: ScreenGateway,
     private readonly storage: StorageService,
+    private readonly orgScoped: OrgScopedService,
   ) {}
 
   // Screen setting changes push to the screen immediately only when the org has opted into
@@ -54,17 +57,28 @@ export class ScreensService {
     const screens = await this.prisma.screen.findMany({
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' },
-      include: { playlist: { select: { id: true, name: true } } },
+      include: {
+        playlist: { select: { id: true, name: true } },
+        // Without this, the dashboard's Screens page (which lists off this endpoint, not
+        // findOne) always saw kioskLocation as undefined — the kiosk floor/pin picker looked
+        // like it forgot the saved location on every refetch even though it was still in the DB.
+        kioskLocation: { include: { floor: { include: { building: { select: { id: true, name: true } } } } } },
+      },
     });
     return screens.map(s => this.withScreenshotUrl(s));
   }
 
   async findOne(orgId: string, id: string) {
-    const screen = await this.prisma.screen.findFirst({
-      where: { id, organizationId: orgId },
-      include: { playlist: { select: { id: true, name: true } } },
-    });
-    if (!screen) throw new NotFoundException('Screen not found');
+    const screen = await this.orgScoped.assertOwns(
+      () => this.prisma.screen.findFirst({
+        where: { id, organizationId: orgId },
+        include: {
+          playlist: { select: { id: true, name: true } },
+          kioskLocation: { include: { floor: { include: { building: { select: { id: true, name: true } } } } } },
+        },
+      }),
+      'Screen not found',
+    );
     return this.withScreenshotUrl(screen);
   }
 
@@ -114,8 +128,10 @@ export class ScreensService {
   async assignPlaylist(orgId: string, screenId: string, playlistId: string | null) {
     const screen = await this.findOne(orgId, screenId);
     if (playlistId) {
-      const playlist = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
-      if (!playlist) throw new NotFoundException('Playlist not found');
+      const playlist = await this.orgScoped.assertOwns(
+        () => this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } }),
+        'Playlist not found',
+      );
       if (playlist.approvalStatus !== 'APPROVED') {
         throw new BadRequestException('Only approved playlists can be assigned to a screen');
       }
@@ -144,8 +160,10 @@ export class ScreensService {
   async setAsset(orgId: string, screenId: string, assetId: string | null) {
     await this.findOne(orgId, screenId);
     if (assetId) {
-      const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } });
-      if (!asset) throw new NotFoundException('Asset not found');
+      const asset = await this.orgScoped.assertOwns(
+        () => this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } }),
+        'Asset not found',
+      );
       if (asset.status !== 'READY') throw new BadRequestException('Only ready assets can be assigned to a screen');
     }
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { assetId } });
@@ -156,12 +174,86 @@ export class ScreensService {
   async setTheme(orgId: string, screenId: string, themeId: string | null) {
     await this.findOne(orgId, screenId);
     if (themeId) {
-      const theme = await this.prisma.theme.findFirst({
-        where: { id: themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
-      });
-      if (!theme) throw new NotFoundException('Theme not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.theme.findFirst({
+          where: { id: themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
+        }),
+        'Theme not found',
+      );
     }
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { themeId } });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return updated;
+  }
+
+  // Binds a screen to a "you are here" floor coordinate for wayfinding (Phase 7) — mirrors
+  // setLayout/setTheme's shape, but the target lives in its own KioskLocation table (it carries
+  // x/y placement, not just a foreign key) rather than a column on Screen. Deliberately doesn't
+  // touch streamingType, same as setAsset/setLayout/setTheme — the dashboard flips that
+  // separately via setStreamingType so switching types and back doesn't lose the binding.
+  async setKioskLocation(orgId: string, screenId: string, floorId: string, x: number, y: number) {
+    await this.findOne(orgId, screenId);
+    await this.orgScoped.assertOwns(
+      () => this.prisma.floor.findFirst({ where: { id: floorId, building: { organizationId: orgId } } }),
+      'Floor not found',
+    );
+    const updated = await this.prisma.kioskLocation.upsert({
+      where: { screenId },
+      create: { screenId, floorId, x, y },
+      update: { floorId, x, y },
+    });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return updated;
+  }
+
+  async clearKioskLocation(orgId: string, screenId: string) {
+    await this.findOne(orgId, screenId);
+    await this.prisma.kioskLocation.deleteMany({ where: { screenId } });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return { ok: true };
+  }
+
+  // Idle/attract-loop content (Phase 7.2) — a Playlist or Theme shown on the kiosk map while
+  // untouched. Requires a KioskLocation to already exist (there's nothing to attach attract
+  // content to otherwise); picking one clears the other, same "only one live at a time" pattern
+  // as assignPlaylist clearing layoutId.
+  async setKioskAttractPlaylist(orgId: string, screenId: string, playlistId: string | null) {
+    await this.findOne(orgId, screenId);
+    const kiosk = await this.prisma.kioskLocation.findUnique({ where: { screenId } });
+    if (!kiosk) throw new NotFoundException('Set a kiosk floor/location before choosing attract-loop content');
+    if (playlistId) {
+      const playlist = await this.orgScoped.assertOwns(
+        () => this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } }),
+        'Playlist not found',
+      );
+      if (playlist.approvalStatus !== 'APPROVED') {
+        throw new BadRequestException('Only approved playlists can be used as attract-loop content');
+      }
+    }
+    const updated = await this.prisma.kioskLocation.update({
+      where: { screenId },
+      data: { attractPlaylistId: playlistId, ...(playlistId ? { attractThemeId: null } : {}) },
+    });
+    await this.pushIfAutoPublish(orgId, screenId);
+    return updated;
+  }
+
+  async setKioskAttractTheme(orgId: string, screenId: string, themeId: string | null) {
+    await this.findOne(orgId, screenId);
+    const kiosk = await this.prisma.kioskLocation.findUnique({ where: { screenId } });
+    if (!kiosk) throw new NotFoundException('Set a kiosk floor/location before choosing attract-loop content');
+    if (themeId) {
+      await this.orgScoped.assertOwns(
+        () => this.prisma.theme.findFirst({
+          where: { id: themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
+        }),
+        'Theme not found',
+      );
+    }
+    const updated = await this.prisma.kioskLocation.update({
+      where: { screenId },
+      data: { attractThemeId: themeId, ...(themeId ? { attractPlaylistId: null } : {}) },
+    });
     await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
@@ -193,17 +285,23 @@ export class ScreensService {
     });
   }
 
+  // Emergency/evacuation override — unlike ordinary content edits (pushIfAutoPublish), this
+  // always pushes instantly regardless of the org's autoPublish setting: a safety toggle can't
+  // sit waiting on someone to remember to click Publish. See also BuildingsService.setEvacuation,
+  // which calls this per-screen for every kiosk in a building during a drill/real evacuation.
   async setEmergency(orgId: string, screenId: string, active: boolean, playlistId?: string) {
     await this.findOne(orgId, screenId);
     if (playlistId) {
-      const pl = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
-      if (!pl) throw new NotFoundException('Playlist not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } }),
+        'Playlist not found',
+      );
     }
     const updated = await this.prisma.screen.update({
       where: { id: screenId },
       data: { emergencyActive: active, ...(playlistId ? { emergencyPlaylistId: playlistId } : {}) },
     });
-    await this.pushIfAutoPublish(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
     return updated;
   }
 
@@ -221,11 +319,7 @@ export class ScreensService {
     return updated;
   }
 
-  async updatePrayerConfig(
-    orgId: string,
-    screenId: string,
-    dto: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean },
-  ) {
+  async updatePrayerConfig(orgId: string, screenId: string, dto: UpdatePrayerDto) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({
       where: { id: screenId },
@@ -248,8 +342,10 @@ export class ScreensService {
   async setLayout(orgId: string, screenId: string, layoutId: string | null) {
     await this.findOne(orgId, screenId);
     if (layoutId) {
-      const layout = await this.prisma.layout.findFirst({ where: { id: layoutId, organizationId: orgId } });
-      if (!layout) throw new NotFoundException('Layout not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.layout.findFirst({ where: { id: layoutId, organizationId: orgId } }),
+        'Layout not found',
+      );
     }
     // Mirrors assignPlaylist: choosing a layout clears the screen's playlist so the two never
     // both claim to be "what's showing" at once.
@@ -272,8 +368,10 @@ export class ScreensService {
   async setGroup(orgId: string, screenId: string, groupId: string | null) {
     await this.findOne(orgId, screenId);
     if (groupId) {
-      const group = await this.prisma.screenGroup.findFirst({ where: { id: groupId, organizationId: orgId } });
-      if (!group) throw new NotFoundException('Screen group not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.screenGroup.findFirst({ where: { id: groupId, organizationId: orgId } }),
+        'Screen group not found',
+      );
     }
     return this.prisma.screen.update({ where: { id: screenId }, data: { groupId } });
   }
@@ -331,9 +429,19 @@ export class ScreensService {
       ? `Unnamed Screen ${(await this.prisma.screen.count({ where: { organizationId: orgId } })) + 1}`
       : screen.name;
 
-    return this.prisma.screen.update({
-      where: { id: screen.id },
+    // Compare-and-swap: `paired: false` is re-checked here, at the moment of the actual write,
+    // not just in the read above — a single UPDATE's WHERE clause is evaluated and applied
+    // atomically per row by Postgres. Two concurrent pair attempts on the same code (e.g. a
+    // client retry after a timeout) used to both pass the `screen.paired` check above and race
+    // on the plain `update` that followed, silently reassigning the screen's organizationId/
+    // playerToken to whichever request's write landed last. Now only the first one's WHERE
+    // clause still matches by the time it runs; the second gets `count: 0` back instead.
+    const result = await this.prisma.screen.updateMany({
+      where: { id: screen.id, paired: false },
       data: { paired: true, pairingCode: null, playerToken: token, organizationId: orgId, name },
     });
+    if (result.count === 0) throw new BadRequestException('Screen already paired');
+
+    return this.prisma.screen.findUniqueOrThrow({ where: { id: screen.id } });
   }
 }

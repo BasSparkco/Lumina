@@ -33,6 +33,8 @@ export interface PairingInitResponse {
 
 export type CheckResponse = { paired: false } | { paired: true; token: string };
 
+export type TickerDirection = 'LEFT_TO_RIGHT' | 'RIGHT_TO_LEFT' | 'TOP_TO_BOTTOM' | 'BOTTOM_TO_TOP';
+
 export interface PlaylistItem {
   id: string;
   position: number;
@@ -59,6 +61,10 @@ export interface PlaylistItem {
     textColor: string | null;
     textSize: 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE' | null;
     textBackgroundColor: string | null;
+    textTickerEnabled: boolean;
+    textTickerDirection: TickerDirection;
+    textTickerSpeed: number | null;
+    textTickerCrossOffset: number | null;
   };
 }
 
@@ -110,7 +116,7 @@ export interface Zone {
   audioVolume: number | null;
 }
 
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME' | 'WAYFINDING';
 
 export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'PLAYLIST' | 'SHAPE' | 'BRUSH' | 'WIDGET';
 export interface ThemeBrushPoint { x: number; y: number; }
@@ -172,13 +178,21 @@ interface ThemeElementBase {
 // Content shapes as hydrated by the API — assetId/playlistId refs are resolved to a usable
 // url/playlist alongside the raw id (mirrors how layout zones get their playlist hydrated).
 export type HydratedThemeElement =
-  | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string> } })
+  | (ThemeElementBase & { kind: 'TEXT'; content: {
+      text: string; translations?: Record<string, string>; assetId?: string | null;
+      // Present only when assetId resolved to a TEXT asset — the asset's own presentation,
+      // reused as-is (mirrors PlaylistItem['asset'] below).
+      textContent?: string | null; textFontFamily?: string | null; textColor?: string | null;
+      textSize?: string | null; textBackgroundColor?: string | null;
+      textTickerEnabled?: boolean; textTickerDirection?: TickerDirection; textTickerSpeed?: number | null;
+      textTickerCrossOffset?: number | null;
+    } })
   | (ThemeElementBase & { kind: 'IMAGE'; content: { assetId: string | null; url: string | null } })
   | (ThemeElementBase & { kind: 'VIDEO'; content: { assetId: string | null; url: string | null } })
   | (ThemeElementBase & { kind: 'DOCUMENT'; content: { assetId: string | null; pageUrls: string[]; secondsPerPage: number } })
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null; playlist: Playlist | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
-  | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[] } })
+  | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[]; raster?: { dataUrl: string; width: number; height: number } } })
   | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE'; widgetConfig: Record<string, unknown> } });
 
 export interface HydratedTheme {
@@ -189,6 +203,47 @@ export interface HydratedTheme {
   palette: ThemePalette;
   typography: ThemeTypography;
   elements: HydratedThemeElement[];
+}
+
+export interface WayfindingPoiCategory {
+  id: string;
+  label: string;
+  labelAr: string | null;
+  icon: string;
+  color: string;
+}
+
+export interface WayfindingPoi {
+  id: string;
+  name: string;
+  nameAr: string | null;
+  x: number;
+  y: number;
+  description: string | null;
+  descriptionAr: string | null;
+  status: 'OPEN' | 'CLOSED' | 'RELOCATED';
+  floorId: string;
+  floorLabel: string;
+  category: WayfindingPoiCategory;
+  iconUrl: string | null;
+}
+
+export type RouteEdgeType = 'WALK' | 'ELEVATOR' | 'ESCALATOR' | 'STAIRS';
+export interface WayfindingRouteNode { id: string; floorId: string; x: number; y: number; label: string | null; }
+export interface WayfindingRouteEdge { id: string; fromNodeId: string; toNodeId: string; type: RouteEdgeType; weight: number; }
+
+export interface WayfindingDirectory {
+  kiosk: { floorId: string; x: number; y: number };
+  building: { id: string; name: string };
+  floors: { id: string; level: number; label: string; floorPlanUrl: string | null }[];
+  pois: WayfindingPoi[];
+  // Route graph (Phase 7.3) — the whole building's nodes/edges, enough for the player to compute
+  // a shortest path to any POI on any floor entirely on-device, offline-capable.
+  routeNodes: WayfindingRouteNode[];
+  routeEdges: WayfindingRouteEdge[];
+  // Idle/attract-loop content (Phase 7.2) — at most one is ever non-null.
+  attractPlaylist: Playlist | null;
+  attractTheme: HydratedTheme | null;
 }
 
 export interface PlayerState {
@@ -208,6 +263,7 @@ export interface PlayerState {
   asset: Playlist | null;
   layout: { id: string; name: string; zones: Zone[] } | null;
   theme: HydratedTheme | null;
+  wayfinding: WayfindingDirectory | null;
   scheduleRules: ScheduleRule[];
   resolvedPlaylistId: string | null;
   defaultPlaylist: Playlist | null;
@@ -223,6 +279,10 @@ export const api = {
   getState: () => request<PlayerState>('/player/state'),
   heartbeat: (currentAssetId: string | null, hasContent?: boolean) =>
     request('/player/heartbeat', { method: 'POST', body: JSON.stringify({ currentAssetId, hasContent }) }),
+  // Kiosk analytics (7.4) — see apps/player/src/lib/kioskAnalytics.ts for the fire-and-forget
+  // wrapper callers actually use.
+  logWayfindingEvents: (events: { type: 'SESSION_START' | 'SEARCH' | 'POI_VIEW'; query?: string; poiId?: string; poiName?: string }[]) =>
+    request('/player/wayfinding-events', { method: 'POST', body: JSON.stringify({ events }) }),
   getWeather: (lat: number, lon: number) =>
     request<WeatherData | null>(`/feeds/weather?lat=${lat}&lon=${lon}`),
   getCurrency: (base = 'USD') =>

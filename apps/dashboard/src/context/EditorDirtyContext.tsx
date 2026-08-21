@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 interface EditorDirtyCtx {
   isDirty: boolean;
@@ -35,11 +35,12 @@ export function EditorDirtyProvider({ children }: { children: ReactNode }) {
     proceed();
   }, []);
 
-  return (
-    <Ctx.Provider value={{ isDirty, setDirty: setIsDirty, guardNavigation }}>
-      {children}
-    </Ctx.Provider>
-  );
+  // This wraps every editor page (see AppLayout) — without this, a fresh object literal here
+  // re-renders the whole editor subtree whenever EditorDirtyProvider re-renders for any reason,
+  // not just an actual isDirty change.
+  const value = useMemo(() => ({ isDirty, setDirty: setIsDirty, guardNavigation }), [isDirty, guardNavigation]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useEditorDirty() {

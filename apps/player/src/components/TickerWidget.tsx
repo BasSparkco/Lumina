@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type TickerItem } from '../lib/api';
+import { cache } from '../lib/db';
 
 interface Props {
   // Exactly one of these is expected to be set — feedUrl for the RSS source, staticText for
@@ -23,14 +24,22 @@ export default function TickerWidget({ feedUrl, staticText, direction = 'horizon
   useEffect(() => {
     if (!feedUrl) { setFeedItems([]); return; }
     let alive = true;
+    // Same offline-cache gap as WeatherWidget/CurrencyWidget — see WeatherWidget's comment.
+    // `feedItems` starts at `[]` rather than `null`, so the guard here is `prev.length` instead
+    // of `prev ??`.
+    const cacheKey = `ticker:${feedUrl}`;
+    void cache.getWidgetData<TickerItem[]>(cacheKey).then(cached => {
+      if (alive && cached?.length) setFeedItems(prev => (prev.length ? prev : cached));
+    });
     const load = async () => {
       try {
         const result = await api.getTicker(feedUrl);
         if (alive && result) setFeedItems(result.items);
+        if (result) void cache.saveWidgetData(cacheKey, result.items);
       } catch { /* keep previous */ }
     };
     void load();
-    const interval = setInterval(load, 5 * 60 * 1000); // refresh every 5m
+    const interval = setInterval(() => { void load(); }, 5 * 60 * 1000); // refresh every 5m
     return () => { alive = false; clearInterval(interval); };
   }, [feedUrl]);
 

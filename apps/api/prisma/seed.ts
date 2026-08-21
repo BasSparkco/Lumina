@@ -1,7 +1,7 @@
 import { PrismaClient, type Prisma } from '@lumina/db';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
-import { ThemeInputSchema } from '@lumina/types';
+import { ThemeInputSchema, POI_CATEGORY_PRESETS } from '@lumina/types';
 import { THEME_PRESETS } from './theme-presets';
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
@@ -66,6 +66,22 @@ async function main() {
         palette: validated.palette,
         typography: validated.typography,
         elements: validated.elements as unknown as Prisma.InputJsonValue,
+        organizationId: null,
+      },
+    });
+  }
+
+  // System POI category presets — organizationId: null so every org can see and use them,
+  // same pattern as the theme presets above.
+  for (const preset of POI_CATEGORY_PRESETS) {
+    const existing = await prisma.poiCategory.findFirst({ where: { organizationId: null, label: preset.label } });
+    if (existing) continue;
+    await prisma.poiCategory.create({
+      data: {
+        label: preset.label,
+        labelAr: preset.labelAr,
+        icon: preset.icon,
+        color: preset.color,
         organizationId: null,
       },
     });

@@ -28,8 +28,11 @@ interface ScreenSocketData {
 
 type AppSocket = Socket<Record<string, never>, Record<string, never>, Record<string, never>, ScreenSocketData>;
 
+// cors is deliberately omitted here — this decorator's options are evaluated at module-import
+// time, before main.ts has computed the real DASHBOARD_URL/PLAYER_URL allowlist, so a static
+// value here can only ever be wrong or stale. RedisIoAdapter.createIOServer overrides cors with
+// that allowlist at actual server-creation time instead; see its comment for why.
 @WebSocketGateway({
-  cors: { origin: '*', credentials: true },
   transports: ['websocket', 'polling'],
 })
 export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {

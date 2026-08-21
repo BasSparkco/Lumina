@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type WeatherData } from '../lib/api';
+import { cache } from '../lib/db';
 
 interface Props {
   latitude: number;
@@ -13,14 +14,24 @@ export default function WeatherWidget({ latitude, longitude, lang = 'en' }: Prop
 
   useEffect(() => {
     let alive = true;
+    // Unlike the layout/theme/playlist state this player already restores from IndexedDB on a
+    // cold boot, this widget started from `null` every time — so a reboot while offline showed
+    // "Loading weather…" forever, since there was never a successful fetch this session to fall
+    // back to. `prev ?? cached` avoids the cache clobbering a fresher result if the live fetch
+    // below happens to resolve first.
+    const cacheKey = `weather:${latitude}:${longitude}`;
+    void cache.getWidgetData<WeatherData>(cacheKey).then(cached => {
+      if (alive && cached) setData(prev => prev ?? cached);
+    });
     const load = async () => {
       try {
         const result = await api.getWeather(latitude, longitude);
         if (alive) setData(result);
+        void cache.saveWidgetData(cacheKey, result);
       } catch { /* keep previous */ }
     };
     void load();
-    const interval = setInterval(load, 10 * 60 * 1000); // refresh every 10m
+    const interval = setInterval(() => { void load(); }, 10 * 60 * 1000); // refresh every 10m
     return () => { alive = false; clearInterval(interval); };
   }, [latitude, longitude]);
 

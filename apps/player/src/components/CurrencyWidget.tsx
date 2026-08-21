@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type CurrencyData } from '../lib/api';
+import { cache } from '../lib/db';
 
 const DISPLAY_PAIRS = ['USD', 'EUR', 'GBP', 'SAR', 'AED', 'KWD', 'QAR', 'BHD', 'OMR'];
 
@@ -15,14 +16,20 @@ export default function CurrencyWidget({ base = 'USD', currencies = DISPLAY_PAIR
 
   useEffect(() => {
     let alive = true;
+    // Same offline-cache gap as WeatherWidget — see its comment for why `prev ?? cached` matters.
+    const cacheKey = `currency:${base}`;
+    void cache.getWidgetData<CurrencyData>(cacheKey).then(cached => {
+      if (alive && cached) setData(prev => prev ?? cached);
+    });
     const load = async () => {
       try {
         const result = await api.getCurrency(base);
         if (alive) setData(result);
+        void cache.saveWidgetData(cacheKey, result);
       } catch { /* keep previous */ }
     };
     void load();
-    const interval = setInterval(load, 60 * 60 * 1000); // refresh hourly
+    const interval = setInterval(() => { void load(); }, 60 * 60 * 1000); // refresh hourly
     return () => { alive = false; clearInterval(interval); };
   }, [base]);
 

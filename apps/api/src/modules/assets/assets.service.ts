@@ -1,13 +1,35 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AssetCategory, AssetType, TextSize } from '@lumina/db';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import type { AssetCategory, AssetType, TextSize, TickerDirection } from '@lumina/db';
 import { DEFAULT_FONT_ID } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 
 // Server-side defaults applied whenever a TEXT asset's style isn't specified — keeps the DB
 // column meaning "explicitly chosen" vs. "use the default," while callers (dashboard, player)
 // never have to special-case a null style themselves.
 const DEFAULT_TEXT_STYLE = { textFontFamily: DEFAULT_FONT_ID, textColor: '#FFFFFF', textSize: 'MEDIUM' as TextSize };
+
+// A few declared mimetypes can't be pinned to one exact magic-byte match: legacy OLE-based
+// Office files (.doc/.ppt) all share the same outer "compound file" container signature
+// (file-type reports both as application/x-cfb, since telling them apart requires parsing
+// internal OLE streams), and OOXML files (.docx/.pptx) are technically zip archives, so a
+// zip-signature match is accepted as a fallback alongside the specific OOXML mime file-type
+// usually manages to detect. Anything not listed here must match its declared mimetype exactly.
+const MAGIC_BYTE_COMPAT: Record<string, string[]> = {
+  'audio/mp4': ['audio/mp4', 'video/mp4'],
+  'audio/wav': ['audio/wav', 'audio/x-wav', 'audio/vnd.wave'],
+  'application/msword': ['application/x-cfb'],
+  'application/vnd.ms-powerpoint': ['application/x-cfb'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': [
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/zip',
+  ],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/zip',
+  ],
+};
 
 // Exported so the developer-facing library seed script (prisma/seed-library.ts) validates
 // files against the exact same mimetype allowlist as the upload endpoint.
@@ -34,6 +56,7 @@ export class AssetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly orgScoped: OrgScopedService,
   ) {}
 
   async upload(
@@ -43,6 +66,21 @@ export class AssetsService {
   ) {
     const assetType = ALLOWED_MIME[file.mimetype];
     if (!assetType) throw new BadRequestException(`Unsupported file type: ${file.mimetype}`);
+
+    // `file.mimetype` is just the client-supplied Content-Type header — accepting it at face
+    // value means a file uploaded with a spoofed header but arbitrary bytes inside gets stored
+    // and served back with that same attacker-chosen type. Sniffing the actual content closes
+    // that gap; a mismatch (including "no recognizable signature at all," which none of these
+    // allowed types should ever produce for a genuine file) is rejected rather than silently
+    // trusted.
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detected = await fileTypeFromBuffer(file.buffer);
+    const acceptableMimes = MAGIC_BYTE_COMPAT[file.mimetype] ?? [file.mimetype];
+    if (!detected || !acceptableMimes.includes(detected.mime)) {
+      throw new BadRequestException(
+        `File content doesn't match its declared type (${file.mimetype})${detected ? ` — detected ${detected.mime}` : ''}.`,
+      );
+    }
 
     const ext = file.originalname.split('.').pop() ?? 'bin';
     const key = `${orgId}/assets/${crypto.randomUUID()}.${ext}`;
@@ -77,8 +115,10 @@ export class AssetsService {
     sourceId: string,
     enqueueExtractAudio: (assetId: string, sourceKey: string, targetKey: string, deleteSourceKey?: string) => Promise<void>,
   ) {
-    const source = await this.prisma.asset.findFirst({ where: { id: sourceId, organizationId: orgId } });
-    if (!source) throw new NotFoundException('Asset not found');
+    const source = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id: sourceId, organizationId: orgId } }),
+      'Asset not found',
+    );
     if (source.type !== 'VIDEO') throw new BadRequestException('Only video assets can be converted to audio');
     if (source.status !== 'READY') throw new BadRequestException('The video must finish processing first');
     if (!source.hasAudioTrack) throw new BadRequestException('This video has no audio track to extract');
@@ -143,8 +183,10 @@ export class AssetsService {
     id: string,
     queueThumbnail: (assetId: string, key: string, type: AssetType, mimeType: string) => Promise<void>,
   ) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
     if (asset.status !== 'ERROR') throw new BadRequestException('Only a failed asset can be reprocessed');
     if (asset.type !== 'IMAGE' && asset.type !== 'VIDEO' && asset.type !== 'DOCUMENT') {
       throw new BadRequestException('This asset type has nothing to reprocess');
@@ -159,7 +201,10 @@ export class AssetsService {
     orgId: string,
     name: string,
     content: string,
-    style: { textFontFamily?: string; textColor?: string; textSize?: TextSize; textBackgroundColor?: string } = {},
+    style: {
+      textFontFamily?: string; textColor?: string; textSize?: TextSize; textBackgroundColor?: string;
+      textTickerEnabled?: boolean; textTickerDirection?: TickerDirection; textTickerSpeed?: number; textTickerCrossOffset?: number;
+    } = {},
   ) {
     // No object ever gets uploaded for a TEXT asset — the content lives in `textContent` —
     // so storageKey is just a unique placeholder, never a real S3 key. remove() below skips
@@ -178,6 +223,10 @@ export class AssetsService {
         // Unlike font/color/size, no default here — null means transparent, i.e. the player's
         // own black background shows through, which is the historical (pre-this-field) look.
         textBackgroundColor: style.textBackgroundColor ?? null,
+        textTickerEnabled: style.textTickerEnabled ?? false,
+        textTickerDirection: style.textTickerDirection ?? 'RIGHT_TO_LEFT',
+        textTickerSpeed: style.textTickerSpeed ?? null,
+        textTickerCrossOffset: style.textTickerCrossOffset ?? null,
         organizationId: orgId,
         status: 'READY',
       },
@@ -188,10 +237,15 @@ export class AssetsService {
   async updateText(
     orgId: string,
     id: string,
-    dto: { name?: string; content?: string; textFontFamily?: string; textColor?: string; textSize?: TextSize; textBackgroundColor?: string },
+    dto: {
+      name?: string; content?: string; textFontFamily?: string; textColor?: string; textSize?: TextSize; textBackgroundColor?: string;
+      textTickerEnabled?: boolean; textTickerDirection?: TickerDirection; textTickerSpeed?: number; textTickerCrossOffset?: number;
+    },
   ) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
     if (asset.type !== 'TEXT') throw new BadRequestException('Only text assets can be edited this way');
 
     const updated = await this.prisma.asset.update({
@@ -203,6 +257,10 @@ export class AssetsService {
         ...(dto.textColor !== undefined ? { textColor: dto.textColor } : {}),
         ...(dto.textSize !== undefined ? { textSize: dto.textSize } : {}),
         ...(dto.textBackgroundColor !== undefined ? { textBackgroundColor: dto.textBackgroundColor } : {}),
+        ...(dto.textTickerEnabled !== undefined ? { textTickerEnabled: dto.textTickerEnabled } : {}),
+        ...(dto.textTickerDirection !== undefined ? { textTickerDirection: dto.textTickerDirection } : {}),
+        ...(dto.textTickerSpeed !== undefined ? { textTickerSpeed: dto.textTickerSpeed } : {}),
+        ...(dto.textTickerCrossOffset !== undefined ? { textTickerCrossOffset: dto.textTickerCrossOffset } : {}),
       },
     });
     return this.toDto(updated, null);
@@ -251,8 +309,10 @@ export class AssetsService {
 
   /** Copies a library asset into the org's own asset collection — same storageKey (no re-upload), new row so rename/delete/playlist references work exactly like any other org asset. */
   async copyFromLibrary(orgId: string, id: string) {
-    const source = await this.prisma.asset.findFirst({ where: { id, organizationId: null } });
-    if (!source) throw new NotFoundException('Library asset not found');
+    const source = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: null } }),
+      'Library asset not found',
+    );
 
     const copy = await this.prisma.asset.create({
       data: {
@@ -280,8 +340,10 @@ export class AssetsService {
   }
 
   async findOne(orgId: string, id: string) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
     if (asset.type === 'TEXT') return this.toDto(asset, null);
 
     const url = this.storage.publicUrl(asset.storageKey);
@@ -291,14 +353,18 @@ export class AssetsService {
   }
 
   async rename(orgId: string, id: string, name: string) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
     return this.toDto(await this.prisma.asset.update({ where: { id }, data: { name } }), null);
   }
 
   async setAudioEnabled(orgId: string, id: string, audioEnabled: boolean) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
     if (asset.type !== 'VIDEO' || !asset.hasAudioTrack) {
       throw new BadRequestException('Only videos with a detected audio track have an audio choice');
     }
@@ -306,8 +372,10 @@ export class AssetsService {
   }
 
   async remove(orgId: string, id: string) {
-    const asset = await this.prisma.asset.findFirst({ where: { id, organizationId: orgId } });
-    if (!asset) throw new NotFoundException('Asset not found');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
 
     // Check for playlist/screen/zone references *before* touching storage — Asset -> PlaylistItem
     // has no onDelete: Cascade (Screen.assetId/Zone.assetId are ON DELETE SET NULL, so those
@@ -350,7 +418,7 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
@@ -371,6 +439,10 @@ export class AssetsService {
       textColor: asset.textColor,
       textSize: asset.textSize,
       textBackgroundColor: asset.textBackgroundColor,
+      textTickerEnabled: asset.textTickerEnabled,
+      textTickerDirection: asset.textTickerDirection,
+      textTickerSpeed: asset.textTickerSpeed,
+      textTickerCrossOffset: asset.textTickerCrossOffset,
       hasAudioTrack: asset.hasAudioTrack,
       audioEnabled: asset.audioEnabled,
       status: asset.status,

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, Palette, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X } from 'lucide-react';
+import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { EditorDirtyProvider, useEditorDirty } from '@/context/EditorDirtyContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -20,7 +20,7 @@ const nav: { href: string; key: string; icon: typeof Monitor; visible?: (p: Perm
   { href: '/assets', key: 'assets', icon: ImageIcon },
   { href: '/playlists', key: 'playlists', icon: List },
   { href: '/layouts', key: 'layouts', icon: LayoutTemplate },
-  { href: '/themes', key: 'themes', icon: Palette },
+  { href: '/wayfinding', key: 'wayfinding', icon: MapPin },
   { href: '/schedules', key: 'schedules', icon: CalendarClock },
   { href: '/power-schedule', key: 'powerSchedule', icon: PowerCircle },
   { href: '/members', key: 'members', icon: Users, visible: p => p.canManageMembers },

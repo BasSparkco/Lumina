@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Coordinates,
-  CalculationMethod,
-  PrayerTimes,
-} from 'adhan';
+import { getDailyPrayerTimes, type PrayerMethod } from '@lumina/prayer';
 
 const PRAYER_NAMES_EN: Record<string, string> = {
   fajr: 'Fajr',
@@ -23,20 +19,6 @@ const PRAYER_NAMES_AR: Record<string, string> = {
   isha: 'العشاء',
 };
 
-export type PrayerMethod =
-  | 'MuslimWorldLeague'
-  | 'Egyptian'
-  | 'Karachi'
-  | 'UmmAlQura'
-  | 'Dubai'
-  | 'MoonsightingCommittee'
-  | 'NorthAmerica'
-  | 'Kuwait'
-  | 'Qatar'
-  | 'Singapore'
-  | 'Tehran'
-  | 'Turkey';
-
 interface Props {
   latitude: number;
   longitude: number;
@@ -55,13 +37,6 @@ type DisplayPrayer = 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 const DISPLAY_PRAYERS: DisplayPrayer[] = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 const DEFAULT_ATHAN_URL = '/athan.mp3';
 
-function computeTimes(lat: number, lon: number, method: PrayerMethod, date: Date) {
-  const coords = new Coordinates(lat, lon);
-  const params = CalculationMethod[method]();
-  const times = new PrayerTimes(coords, date, params);
-  return times;
-}
-
 function formatTime(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
@@ -78,7 +53,7 @@ export default function PrayerZoneWidget({ latitude, longitude, method, athanEna
   const isRtl = lang === 'ar';
 
   function buildRows(date: Date): PrayerRow[] {
-    const times = computeTimes(latitude, longitude, method, date);
+    const times = getDailyPrayerTimes({ latitude, longitude, method, date });
     return DISPLAY_PRAYERS.map(key => ({
       key,
       time: times[key],

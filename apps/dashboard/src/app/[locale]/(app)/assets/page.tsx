@@ -1,16 +1,19 @@
 'use client';
 import { useRef, useState } from 'react';
+import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines } from 'lucide-react';
-import { assetsApi, type Asset, type TextSize, type AssetCategory } from '@/lib/api';
+import { assetsApi, type Asset, type TextSize, type AssetCategory, type TickerDirection } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { FontPicker, fontStack } from '@/components/FontPicker';
+import { TickerTextPreview } from '@/components/TickerTextPreview';
 import { DEFAULT_FONT_ID } from '@lumina/types';
+import '@/lib/fontImports';
 
 const typeIcon: Record<string, React.ReactNode> = {
   IMAGE: <ImageIcon className="w-4 h-4 text-blue-500" />,
@@ -50,11 +53,23 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
   const [color, setColor] = useState(asset?.textColor ?? '#FFFFFF');
   const [size, setSize] = useState<TextSize>(asset?.textSize ?? 'MEDIUM');
   const [backgroundColor, setBackgroundColor] = useState(asset?.textBackgroundColor ?? '#000000');
+  const [tickerEnabled, setTickerEnabled] = useState(asset?.textTickerEnabled ?? false);
+  const [tickerDirection, setTickerDirection] = useState<TickerDirection>(asset?.textTickerDirection ?? 'RIGHT_TO_LEFT');
+  const [tickerSpeed, setTickerSpeed] = useState(asset?.textTickerSpeed ?? 80);
+  const [tickerCrossPosition, setTickerCrossPosition] = useState(asset?.textTickerCrossOffset ?? 50);
+  const tickerIsVertical = tickerDirection === 'TOP_TO_BOTTOM' || tickerDirection === 'BOTTOM_TO_TOP';
 
   const saveMut = useMutation({
-    mutationFn: () => asset
-      ? assetsApi.updateText(asset.id, { name: name.trim(), content, textFontFamily: fontFamily, textColor: color, textSize: size, textBackgroundColor: backgroundColor })
-      : assetsApi.createText(name.trim(), content, { textFontFamily: fontFamily, textColor: color, textSize: size, textBackgroundColor: backgroundColor }),
+    mutationFn: () => {
+      const style = {
+        textFontFamily: fontFamily, textColor: color, textSize: size, textBackgroundColor: backgroundColor,
+        textTickerEnabled: tickerEnabled, textTickerDirection: tickerDirection, textTickerSpeed: tickerSpeed,
+        textTickerCrossOffset: tickerCrossPosition,
+      };
+      return asset
+        ? assetsApi.updateText(asset.id, { name: name.trim(), content, ...style })
+        : assetsApi.createText(name.trim(), content, style);
+    },
     onSuccess: (saved) => onSaved(saved, asset?.name),
   });
 
@@ -72,6 +87,55 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
         <textarea value={content} onChange={e => setContent(e.target.value)} rows={4} maxLength={5000}
           placeholder={t('newTextContentPlaceholder')}
           className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3 resize-none" />
+
+        <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
+          <input type="checkbox" checked={tickerEnabled} onChange={e => setTickerEnabled(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500" />
+          <span className="text-sm text-gray-700 dark:text-gray-300">{t('style.tickerEnabled')}</span>
+        </label>
+
+        {tickerEnabled && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.tickerDirection')}</label>
+              <select value={tickerDirection} onChange={e => setTickerDirection(e.target.value as TickerDirection)}
+                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="RIGHT_TO_LEFT">{t('style.tickerDirectionRightToLeft')}</option>
+                <option value="LEFT_TO_RIGHT">{t('style.tickerDirectionLeftToRight')}</option>
+                <option value="TOP_TO_BOTTOM">{t('style.tickerDirectionTopToBottom')}</option>
+                <option value="BOTTOM_TO_TOP">{t('style.tickerDirectionBottomToTop')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+                {t('style.tickerSpeed')} — {tickerSpeed}px/s
+              </label>
+              <input type="range" min={10} max={600} step={1} value={tickerSpeed}
+                onChange={e => setTickerSpeed(Number(e.target.value))}
+                className="w-full accent-indigo-600" />
+            </div>
+          </div>
+        )}
+
+        {tickerEnabled && (
+          <div className="mb-3">
+            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+              {tickerIsVertical ? t('style.tickerHorizontalPosition') : t('style.tickerVerticalPosition')}
+            </label>
+            {tickerIsVertical ? (
+              <input type="range" min={0} max={100} step={1} value={tickerCrossPosition}
+                onChange={e => setTickerCrossPosition(Number(e.target.value))}
+                className="w-full accent-indigo-600" />
+            ) : (
+              <div className="h-24 flex items-center justify-center">
+                <input type="range" min={0} max={100} step={1} value={tickerCrossPosition}
+                  onChange={e => setTickerCrossPosition(Number(e.target.value))}
+                  style={{ width: '6rem', transform: 'rotate(-90deg)' }}
+                  className="accent-indigo-600" />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
@@ -109,13 +173,27 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
         </div>
 
         <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.preview')}</label>
-        <div className="w-full aspect-video rounded-lg flex items-center justify-center p-4 mb-4 overflow-hidden" style={{ background: backgroundColor }}>
-          <p style={{
-            color, fontFamily: fontStack(fontFamily), fontSize: FONT_SIZE_PREVIEW[size],
-            textAlign: 'center', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
-          }}>
-            {content || t('newTextContentPlaceholder')}
-          </p>
+        <div className="w-full aspect-video rounded-lg p-4 mb-4 overflow-hidden relative" style={{ background: backgroundColor }}>
+          {tickerEnabled ? (
+            <TickerTextPreview
+              text={content || t('newTextContentPlaceholder')}
+              color={color}
+              fontFamily={fontStack(fontFamily)}
+              fontSize={FONT_SIZE_PREVIEW[size]}
+              direction={tickerDirection}
+              speedPx={tickerSpeed}
+              crossPosition={tickerCrossPosition}
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <p style={{
+                color, fontFamily: fontStack(fontFamily), fontSize: FONT_SIZE_PREVIEW[size],
+                textAlign: 'center', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0,
+              }}>
+                {content || t('newTextContentPlaceholder')}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -462,7 +540,13 @@ export default function AssetsPage() {
                 disabled={!asset.thumbnailUrl && !(asset.type === 'TEXT' && canEditContent)}
                 className="absolute inset-0 w-full h-full flex items-center justify-center disabled:cursor-default">
                 {asset.thumbnailUrl ? (
-                  <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+                  <Image
+                    src={asset.thumbnailUrl}
+                    alt={asset.name}
+                    fill
+                    sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover"
+                  />
                 ) : asset.type === 'TEXT' ? (
                   <p
                     style={{
@@ -635,7 +719,13 @@ export default function AssetsPage() {
               <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                   {asset.thumbnailUrl ? (
-                    <img src={asset.thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+                    <Image
+                    src={asset.thumbnailUrl}
+                    alt={asset.name}
+                    fill
+                    sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover"
+                  />
                   ) : (
                     <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
                   )}

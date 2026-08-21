@@ -10,6 +10,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 
 const ROLES: UserRole[] = ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER'];
 
@@ -104,6 +105,8 @@ export default function MembersPage() {
           <UserPlus className="w-4 h-4" /> {t('inviteMember')}
         </button>
       </div>
+
+      <PreviewFeatureNotice />
 
       {/* Invite modal */}
       {showInvite && (

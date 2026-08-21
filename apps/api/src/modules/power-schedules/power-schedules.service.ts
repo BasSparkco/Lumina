@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 import type { CreatePowerScheduleDto } from './dto/create-power-schedule.dto';
 import type { PowerSchedule, Screen } from '@lumina/db';
 
@@ -7,7 +8,10 @@ const DAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu:
 
 @Injectable()
 export class PowerSchedulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orgScoped: OrgScopedService,
+  ) {}
 
   async create(orgId: string, dto: CreatePowerScheduleDto) {
     await this.assertOneTarget(orgId, dto.screenId, dto.groupId);
@@ -34,12 +38,13 @@ export class PowerSchedulesService {
   }
 
   async findOne(orgId: string, id: string) {
-    const s = await this.prisma.powerSchedule.findFirst({
-      where: { id, organizationId: orgId },
-      include: { screen: { select: { id: true, name: true } }, group: { select: { id: true, name: true } } },
-    });
-    if (!s) throw new NotFoundException('Power schedule not found');
-    return s;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.powerSchedule.findFirst({
+        where: { id, organizationId: orgId },
+        include: { screen: { select: { id: true, name: true } }, group: { select: { id: true, name: true } } },
+      }),
+      'Power schedule not found',
+    );
   }
 
   async update(orgId: string, id: string, dto: CreatePowerScheduleDto) {
@@ -78,8 +83,10 @@ export class PowerSchedulesService {
   }
 
   async previewNow(orgId: string, screenId: string) {
-    const screen = await this.prisma.screen.findFirst({ where: { id: screenId, organizationId: orgId } });
-    if (!screen) throw new NotFoundException('Screen not found');
+    const screen = await this.orgScoped.assertOwns(
+      () => this.prisma.screen.findFirst({ where: { id: screenId, organizationId: orgId } }),
+      'Screen not found',
+    );
     const { poweredOn } = await this.resolveForScreen(screen);
     return { poweredOn };
   }
@@ -116,12 +123,16 @@ export class PowerSchedulesService {
       throw new BadRequestException('Exactly one of screenId or groupId must be set');
     }
     if (screenId) {
-      const screen = await this.prisma.screen.findFirst({ where: { id: screenId, organizationId: orgId } });
-      if (!screen) throw new NotFoundException('Screen not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.screen.findFirst({ where: { id: screenId, organizationId: orgId } }),
+        'Screen not found',
+      );
     }
     if (groupId) {
-      const group = await this.prisma.screenGroup.findFirst({ where: { id: groupId, organizationId: orgId } });
-      if (!group) throw new NotFoundException('Screen group not found');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.screenGroup.findFirst({ where: { id: groupId, organizationId: orgId } }),
+        'Screen group not found',
+      );
     }
   }
 }

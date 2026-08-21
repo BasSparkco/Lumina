@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { resolveThemeColor, fontStack, shapeClipStyle, shapeOutlineGeometry, brushPolylinePoints, mediaCropStyle } from '@lumina/types';
+import { resolveThemeColor, fontStack, shapeClipStyle, brushPolylinePoints, mediaCropStyle } from '@lumina/types';
+import { ShapeOutline } from '@lumina/ui';
 import type { HydratedTheme, HydratedThemeElement, PlayerState } from '../lib/api';
-import ZonePlayer from './ZonePlayer';
+import ZonePlayer, { FONT_SIZE_CLAMPS } from './ZonePlayer';
 import LiveWidget from './LiveWidget';
+import TextAssetTicker from './TextAssetTicker';
 
 // style.fontFamily is either the 'heading'/'body' sentinel (defer to the theme's own
 // typography) or a font id from the shared FONT_LIBRARY chosen directly on this element.
@@ -59,6 +61,51 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
 
   switch (element.kind) {
     case 'TEXT': {
+      // An assetId means this element reuses a TEXT-type Asset's own content AND styling
+      // as-is (font/color/size/background/ticker) — same model as IMAGE/VIDEO/DOCUMENT
+      // elements reusing an asset's pixels/frames — instead of the literal `text`/style.* below.
+      if (element.content.assetId && element.content.textContent != null) {
+        const c = element.content;
+        return c.textTickerEnabled ? (
+          <TextAssetTicker
+            text={c.textContent ?? ''}
+            color={c.textColor ?? '#fff'}
+            backgroundColor={c.textBackgroundColor ?? undefined}
+            fontFamily={fontStack(c.textFontFamily)}
+            fontSize={FONT_SIZE_CLAMPS[c.textSize ?? 'MEDIUM'] ?? FONT_SIZE_CLAMPS['MEDIUM']!}
+            direction={c.textTickerDirection ?? 'RIGHT_TO_LEFT'}
+            speedPx={c.textTickerSpeed ?? 80}
+            crossPosition={c.textTickerCrossOffset ?? 50}
+          />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '5%',
+              boxSizing: 'border-box',
+              backgroundColor: c.textBackgroundColor ?? undefined,
+            }}
+          >
+            <p
+              style={{
+                color: c.textColor ?? '#fff',
+                fontFamily: fontStack(c.textFontFamily),
+                fontSize: FONT_SIZE_CLAMPS[c.textSize ?? 'MEDIUM'],
+                textAlign: 'center',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                margin: 0,
+              }}
+            >
+              {c.textContent}
+            </p>
+          </div>
+        );
+      }
       // translations are stored per-element for a future per-screen locale setting; today
       // the primary `text` is what renders, same as every other content field.
       const text = element.content.text;
@@ -130,7 +177,17 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
       }
       return <div style={{ width: '100%', height: '100%', backgroundColor: backgroundColor ?? 'transparent', borderRadius: style.borderRadius, opacity: style.opacity }} />;
     case 'BRUSH':
-      return (
+      // The paint layer's raster bitmap takes priority — every theme drawn with the current
+      // editor has this. `points` only still renders for themes saved before the raster paint
+      // layer existed (a plain vector stroke, never produced by the editor anymore).
+      return element.content.raster ? (
+        // eslint-disable-next-line @next/next/no-img-element -- data URL, not a static/local image
+        <img
+          src={element.content.raster.dataUrl}
+          alt=""
+          style={{ width: '100%', height: '100%', display: 'block', objectFit: 'fill', opacity: style.opacity }}
+        />
+      ) : (
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block', opacity: style.opacity }}>
           <polyline
             points={brushPolylinePoints(element.content.points)}
@@ -147,33 +204,6 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
     default:
       return null;
   }
-}
-
-// Renders `shapeFill: 'outline'` as a stroked ring/silhouette instead of a solid fill — a plain
-// CSS `border` on a clip-path'd box only follows the box's rectangular edge, not an arbitrary
-// polygon, so arrow/star/pentagon/etc. need a real SVG stroke to look like a clean outline.
-function ShapeOutline({ shape, color, strokeWidthPx, opacity }: {
-  shape: string | undefined;
-  color: string;
-  strokeWidthPx: number | undefined;
-  opacity: number | undefined;
-}) {
-  const geo = shapeOutlineGeometry(shape as Parameters<typeof shapeOutlineGeometry>[0]);
-  const sw = strokeWidthPx ?? 4;
-  const inset = sw / 2;
-  return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%', display: 'block', opacity }}>
-      {geo.kind === 'rect' && (
-        <rect x={inset} y={inset} width={100 - sw} height={100 - sw} rx={geo.rx} fill="none" stroke={color} strokeWidth={sw} />
-      )}
-      {geo.kind === 'ellipse' && (
-        <ellipse cx={50} cy={50} rx={50 - inset} ry={50 - inset} fill="none" stroke={color} strokeWidth={sw} />
-      )}
-      {geo.kind === 'polygon' && (
-        <polygon points={geo.points} fill="none" stroke={color} strokeWidth={sw} strokeLinejoin="round" />
-      )}
-    </svg>
-  );
 }
 
 // A DOCUMENT element has no playlist wrapping it (unlike a MEDIA zone's DOCUMENT item), so it

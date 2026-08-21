@@ -36,9 +36,12 @@ model Organization {
   auditLogs     AuditLog[]
   screenGroups  ScreenGroup[]
   proofOfPlays  ProofOfPlayLog[]
+  kioskEvents   KioskEvent[]
   screenAlerts  ScreenAlert[]
   crashReports  CrashReport[]
   themes        Theme[]
+  buildings     Building[]
+  poiCategories PoiCategory[]
 }
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
@@ -56,6 +59,8 @@ model User {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   auditLogs AuditLog[]
+
+  @@index([organizationId])
 }
 
 enum UserRole {
@@ -76,6 +81,8 @@ model OrgInvite {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 model AuditLog {
@@ -91,6 +98,10 @@ model AuditLog {
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Backs AuditService.query's org-scoped, createdAt-desc-paginated listing — the one place this
+  // audit specifically flagged as likely to grow large with zero indexing behind it.
+  @@index([organizationId, createdAt])
 }
 
 // ─── Screens ─────────────────────────────────────────────────────────────────
@@ -156,8 +167,14 @@ model Screen {
   schedules       Schedule[]
   powerSchedules  PowerSchedule[]
   proofOfPlays    ProofOfPlayLog[]
+  kioskEvents     KioskEvent[]
   alerts          ScreenAlert[]
   crashReports    CrashReport[]
+  kioskLocation   KioskLocation?
+
+  // Backs ScreensService.list — the org-scoped, createdAt-desc fleet listing every Screens page
+  // load hits.
+  @@index([organizationId, createdAt])
 }
 
 enum ScreenStatus {
@@ -170,6 +187,7 @@ enum StreamingType {
   PLAYLIST
   LAYOUT
   THEME
+  WAYFINDING
 }
 
 model ScreenGroup {
@@ -186,6 +204,8 @@ model ScreenGroup {
 
   screens        Screen[]
   powerSchedules PowerSchedule[]
+
+  @@index([organizationId, name])
 }
 
 model ProofOfPlayLog {
@@ -204,6 +224,35 @@ model ProofOfPlayLog {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, screenId, playedAt])
+}
+
+enum KioskEventType {
+  SESSION_START
+  SEARCH
+  POI_VIEW
+}
+
+// Kiosk analytics (7.4) — extends the proof-of-play/reporting infra with wayfinding-specific
+// events rather than a separate analytics system: same ingest-from-player / query-from-dashboard
+// shape as ProofOfPlayLog above, just a different payload (a search query or a viewed POI instead
+// of a played asset). `poiName` is denormalized (not just `poiId`) so a since-deleted or renamed
+// POI still reads sensibly in historical reports, the same reasoning ProofOfPlayLog's screenName
+// isn't denormalized doesn't apply here — POIs churn far more than screens do.
+model KioskEvent {
+  id        String         @id @default(cuid())
+  type      KioskEventType
+  query     String?
+  poiId     String?
+  poiName   String?
+  createdAt DateTime       @default(now())
+
+  screenId String
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, screenId, createdAt])
 }
 
 model ScreenAlert {
@@ -272,6 +321,14 @@ model Asset {
   textColor           String?         // "#RRGGBB"
   textSize            TextSize?
   textBackgroundColor String?         // "#RRGGBB"; null = transparent (shows the player's black behind it)
+  // News-ticker mode for TEXT assets only — scrolls textContent instead of showing it static.
+  textTickerEnabled   Boolean          @default(false)
+  textTickerDirection TickerDirection  @default(RIGHT_TO_LEFT)
+  textTickerSpeed     Int?             // px/sec; null = player default (80)
+  // Position (0-100%) along the axis perpendicular to the scroll direction — e.g. vertical
+  // placement for a left/right-scrolling ticker, horizontal placement for an up/down-scrolling
+  // one. null = 50 (centered), matching the pre-this-field look.
+  textTickerCrossOffset Int?
   // Set by the worker's video probe once processing completes — whether the source file has an
   // audio stream at all. Always false for non-VIDEO types and for videos not yet processed.
   hasAudioTrack Boolean @default(false)
@@ -293,6 +350,8 @@ model Asset {
   proofOfPlays    ProofOfPlayLog[]
   screens         Screen[]
   zones           Zone[]
+  floorPlanFor    Floor[]          @relation("FloorPlanAsset")
+  poiIconFor      Poi[]            @relation("PoiIconAsset")
 
   @@index([organizationId, category])
 }
@@ -310,6 +369,13 @@ enum TextSize {
   MEDIUM
   LARGE
   XLARGE
+}
+
+enum TickerDirection {
+  LEFT_TO_RIGHT
+  RIGHT_TO_LEFT
+  TOP_TO_BOTTOM
+  BOTTOM_TO_TOP
 }
 
 enum AssetStatus {
@@ -351,6 +417,9 @@ model Playlist {
   emergencyScreens  Screen[]     @relation("EmergencyPlaylist")
   zones             Zone[]
   schedules         Schedule[]
+  kioskAttractFor   KioskLocation[]
+
+  @@index([organizationId, updatedAt])
 }
 
 enum ApprovalStatus {
@@ -411,6 +480,8 @@ model Layout {
 
   zones   Zone[]
   screens Screen[]
+
+  @@index([organizationId, createdAt])
 }
 
 enum ZoneType {
@@ -479,6 +550,11 @@ model Zone {
 
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id])
+
+  // layoutId backs LayoutsService's zone-replace deleteMany/create; playlistId backs
+  // PlaylistsService.remove's in-use check (prisma.zone.count({ where: { playlistId } })).
+  @@index([layoutId])
+  @@index([playlistId])
 }
 
 // ─── Themes ──────────────────────────────────────────────────────────────────
@@ -510,7 +586,189 @@ model Theme {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  screens Screen[]
+  screens         Screen[]
+  kioskAttractFor KioskLocation[]
+
+  @@index([organizationId, createdAt])
+}
+
+// ─── Wayfinding (Phase 7) ──────────────────────────────────────────────────────
+// A Building holds an ordered set of Floors, each with a floor-plan Asset (reused IMAGE
+// type — no new storage pipeline). Pois are pinned to a Floor by percentage x/y, same
+// convention as Zone/ThemeElement. A KioskLocation binds a physical Screen to a floor
+// coordinate ("you are here") and is what StreamingType.WAYFINDING renders from.
+
+model Building {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  floors Floor[]
+
+  @@index([organizationId])
+}
+
+model Floor {
+  id    String @id @default(cuid())
+  // Sort/display order and vertical position (e.g. -1 for a basement, 0 for ground) — doubles
+  // as "floor order" since a plain numeric level is both at once, no separate order field needed.
+  level Int
+  label String // e.g. "Ground Floor", "B1", "Level 2"
+
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  floorPlanAssetId String?
+  floorPlanAsset   Asset?  @relation("FloorPlanAsset", fields: [floorPlanAssetId], references: [id], onDelete: SetNull)
+
+  pois           Poi[]
+  kioskLocations KioskLocation[]
+  routeNodes     RouteNode[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([buildingId, level])
+  @@index([buildingId])
+}
+
+// organizationId null = a system default category (store/restroom/elevator/stairs/exit/food/ATM/
+// etc., seeded once), readable by every org but not editable — mirrors the Theme preset pattern.
+model PoiCategory {
+  id      String  @id @default(cuid())
+  label   String
+  labelAr String?
+  icon    String // icon id from the shared icon set, same convention as FONT_LIBRARY ids
+  color   String // "#RRGGBB"
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  pois Poi[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+enum PoiStatus {
+  OPEN
+  CLOSED
+  RELOCATED
+}
+
+model Poi {
+  id String @id @default(cuid())
+  // Arabic is optional so a POI created without it still falls back to `name` (matches how
+  // TEXT-asset styling fields default to "use the player's default" rather than requiring both).
+  name   String
+  nameAr String?
+  x      Float // percentage 0–100 from left, same convention as Zone.x
+  y      Float // percentage 0–100 from top, same convention as Zone.y
+  description   String?
+  descriptionAr String?
+  status PoiStatus @default(OPEN)
+  // Opaque id from an external mall/CMMS tenant system, for future two-way sync — unused today.
+  externalRef String?
+
+  floorId String
+  floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   PoiCategory @relation(fields: [categoryId], references: [id])
+
+  iconAssetId String?
+  iconAsset   Asset?  @relation("PoiIconAsset", fields: [iconAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([floorId])
+  @@index([categoryId])
+}
+
+// The "you are here" pin binding a physical screen to a floor coordinate — mirrors how
+// Screen.themeId/layoutId bind a screen to content today, but kept as its own table (rather
+// than columns on Screen) since it also carries the x/y placement, not just a foreign key.
+model KioskLocation {
+  id String @id @default(cuid())
+  x  Float // percentage 0–100 from left, same convention as Zone.x
+  y  Float // percentage 0–100 from top, same convention as Zone.y
+
+  screenId String @unique
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  floorId String
+  floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  // Idle/attract-loop content (Phase 7.2) — what the kiosk shows when untouched for a while.
+  // Reuses Playlist/Theme rather than a new content model, same reasoning as every other
+  // wayfinding piece. At most one of these is ever set — ScreensService.setKioskAttractPlaylist/
+  // setKioskAttractTheme each clear the other, mirroring Screen's own
+  // asset/playlist/layout/theme "only one live at a time" pattern.
+  attractPlaylistId String?
+  attractPlaylist   Playlist? @relation(fields: [attractPlaylistId], references: [id], onDelete: SetNull)
+  attractThemeId    String?
+  attractTheme      Theme?    @relation(fields: [attractThemeId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([floorId])
+}
+
+// ─── Wayfinding: route graph (Phase 7.3) ───────────────────────────────────────
+// Nodes sit at floor coordinates (same x/y percentage convention as Poi/KioskLocation); edges
+// connect them and carry the weight (distance/time) the routing engine sums to find a shortest
+// path. Cross-floor edges (a node on one floor connected to a node on another) are how the graph
+// models an elevator/escalator/stairs — the routing engine treats every edge as bidirectional.
+
+model RouteNode {
+  id    String  @id @default(cuid())
+  x     Float // percentage 0–100 from left, same convention as Poi.x
+  y     Float // percentage 0–100 from top, same convention as Poi.y
+  label String?
+
+  floorId String
+  floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
+
+  edgesFrom RouteEdge[] @relation("RouteEdgeFrom")
+  edgesTo   RouteEdge[] @relation("RouteEdgeTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([floorId])
+}
+
+enum RouteEdgeType {
+  WALK
+  ELEVATOR
+  ESCALATOR
+  STAIRS
+}
+
+model RouteEdge {
+  id     String        @id @default(cuid())
+  type   RouteEdgeType @default(WALK)
+  weight Float // distance/time cost, set by whoever draws the edge in the dashboard graph editor
+
+  fromNodeId String
+  fromNode   RouteNode @relation("RouteEdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNodeId   String
+  toNode     RouteNode @relation("RouteEdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fromNodeId])
+  @@index([toNodeId])
 }
 
 // ─── Scheduling ───────────────────────────────────────────────────────────────
@@ -538,6 +796,12 @@ model Schedule {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // screenId backs getSchedulesForScreen — filtered by screenId alone (no organizationId), and
+  // called on every player state poll across the whole fleet, so it needs its own index rather
+  // than relying on an organizationId-prefixed one.
+  @@index([screenId])
+  @@index([organizationId])
 }
 
 // Recurring window during which a screen's display should be considered "powered on."
@@ -562,4 +826,11 @@ model PowerSchedule {
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // screenId/groupId back the runtime power-on/off resolver (resolveForScreen), which queries
+  // by exactly one of these alone with no organizationId filter — same reasoning as Schedule's
+  // screenId index above.
+  @@index([screenId])
+  @@index([groupId])
+  @@index([organizationId])
 }

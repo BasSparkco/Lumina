@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Upload, Clipboard, RefreshCw } from 'lucide-react';
+import { Upload, Clipboard, RefreshCw, Wand2 } from 'lucide-react';
 import { assetsApi } from '@/lib/api';
+import { removeAssetBackground } from '@/lib/backgroundRemoval';
 
 type Mode = 'existing' | 'upload' | 'paste';
 
@@ -19,6 +20,9 @@ interface ImagePickerProps {
     uploadFailed: string;
     pasteHint: string;
     pasteError: string;
+    removeBackground: string;
+    removingBackground: string;
+    removeBackgroundFailed: string;
   };
 }
 
@@ -39,6 +43,8 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
+  const [removingBg, setRemovingBg] = useState(false);
+  const [bgProgress, setBgProgress] = useState(0);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Once `selected` resolves to a real asset, its url always wins in the `preview` fallback below
@@ -89,6 +95,28 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
   }
 
   const preview = (selected && (selected.thumbnailUrl ?? selected.url)) || localPreview;
+
+  // Runs entirely client-side (no server round trip, no third-party API): loads an ONNX
+  // segmentation model on first use (cached by the library in IndexedDB afterward) and produces a
+  // transparent-background PNG, which is uploaded as a brand new asset so the original stays
+  // untouched and reusable elsewhere. Only offered once a real asset is selected — background
+  // removal needs a persisted source image to run against.
+  async function handleRemoveBackground() {
+    if (!selected) return;
+    setError('');
+    setRemovingBg(true);
+    setBgProgress(0);
+    try {
+      const asset = await removeAssetBackground(selected, setBgProgress);
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      onChange(asset.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : labels.removeBackgroundFailed);
+    } finally {
+      setRemovingBg(false);
+      setBgProgress(0);
+    }
+  }
 
   return (
     <div className="space-y-1.5">
@@ -181,10 +209,32 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
       {error && <p className="text-[10px] text-red-500">{error}</p>}
 
       {preview && (
-        <div className="overflow-hidden rounded border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+        <div
+          className="overflow-hidden rounded border border-gray-200 bg-gray-50 bg-[length:16px_16px] bg-[image:repeating-conic-gradient(#e5e7eb_0%_25%,transparent_0%_50%)] dark:border-gray-700 dark:bg-gray-800 dark:bg-[image:repeating-conic-gradient(#374151_0%_25%,transparent_0%_50%)]"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary remote asset URL / local object URL, not a static/local image */}
           <img src={preview} alt="" className="block max-h-28 w-full object-contain" />
         </div>
+      )}
+
+      {selected && (
+        <button
+          type="button"
+          disabled={disabled || busy || removingBg}
+          onClick={() => void handleRemoveBackground()}
+          className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-gray-300 px-2 py-1.5 text-[11px] text-gray-600 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+        >
+          {removingBg ? (
+            <>
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              {labels.removingBackground} {bgProgress > 0 ? `${bgProgress}%` : ''}
+            </>
+          ) : (
+            <>
+              <Wand2 className="h-3 w-3" /> {labels.removeBackground}
+            </>
+          )}
+        </button>
       )}
     </div>
   );

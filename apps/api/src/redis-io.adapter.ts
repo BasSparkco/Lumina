@@ -7,7 +7,15 @@ import type { Server, ServerOptions } from 'socket.io';
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor!: ReturnType<typeof createAdapter>;
 
-  constructor(private readonly app: INestApplication) {
+  // ScreenGateway's own @WebSocketGateway({ cors: { origin: '*' } }) decorator is a static object
+  // evaluated at module-import time — before main.ts has even computed the real allowlist, let
+  // alone passed it here — so it can never be made to agree with the HTTP CORS config that way.
+  // Overriding cors here instead, at server-creation time (well after that's all settled), is
+  // what actually keeps the two in sync rather than just hoping the decorator's literal matches.
+  constructor(
+    private readonly app: INestApplication,
+    private readonly allowedOrigins: string[],
+  ) {
     super(app);
   }
 
@@ -19,7 +27,10 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   override createIOServer(port: number, options?: ServerOptions): Server {
-    const server = super.createIOServer(port, options) as Server;
+    const server = super.createIOServer(port, {
+      ...options,
+      cors: { origin: this.allowedOrigins, credentials: true },
+    }) as Server;
     server.adapter(this.adapterConstructor);
     return server;
   }

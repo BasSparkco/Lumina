@@ -206,6 +206,430 @@ enforced server-side and audited.
 
 ---
 
+## Phase 7 — Wayfinding signage (new content type, planned)
+
+Goal: a genuinely new signage kind — interactive directory/wayfinding kiosks (malls, hospitals,
+campuses, office towers, airports) — sitting alongside today's passive slideshow/theme signage.
+Everything shipped so far assumes a screen plays *at* a passive viewer; wayfinding is the first
+content type where a viewer touches the screen and asks it a question ("where is X, and how do I
+get there"). That's a different interaction model, not just a new zone/widget type, so it's scoped
+as its own phase rather than squeezed into the OptiSigns-parity widget batches.
+
+Reuse-first: floor plans are just `Asset` (IMAGE), POI pins reuse the percentage-based x/y
+placement already proven by `Zone`/`ThemeElement`, kiosk styling reuses `Theme` palette/typography,
+"store closed" pushes reuse the existing publish/WS pipeline, and fire-evacuation mode reuses the
+existing per-screen `emergencyActive` override. The genuinely new pieces are: touch input in the
+player, a POI/floor data model, and a route-finding engine.
+
+### 7.1 — Data model & static directory (non-interactive first)
+
+Ship the data model and a **non-touch** rotating directory board first — it's useful on its own
+(cheap non-touch panels are common in malls) and de-risks the content model before touch/routing
+complexity.
+
+- ☑ `Building` model (org-scoped: name, address, floor order) (2026-08-15) — `floor order` is
+  just `Floor.level` sorted, no separate field needed
+- ☑ `Floor` model (belongs to `Building`; level number/label, floor-plan `Asset` reference — reuses
+  `Asset` IMAGE type, no new storage pipeline needed) (2026-08-15)
+- ☑ `PoiCategory` model (icon, color, i18n label — store/restroom/elevator/stairs/exit/food/ATM/etc.)
+  (2026-08-15) — 12 system presets seeded with `organizationId: null` (same pattern as
+  `THEME_PRESETS`), curated in `packages/types/src/wayfinding.ts` (`POI_CATEGORY_PRESETS`,
+  lucide-react icon names); orgs can add their own custom categories alongside the presets but
+  can't edit/delete the system rows
+- ☑ `Poi` (point of interest) model: name (i18n), categoryId, floorId, x/y (%, same convention as
+  `Zone.x/y`), icon/logo `Asset`, description, status (`OPEN`/`CLOSED`/`RELOCATED`), external ref
+  id (for syncing against a mall/CMMS tenant system later) (2026-08-15) — i18n done as explicit
+  `nameAr`/`descriptionAr` columns (nullable, falls back to the base field), not a Json blob, so
+  the alphabetical-listing exit criteria in 7.2 can sort/filter directly in SQL
+- ☑ `KioskLocation`: screenId + floorId + x/y — the "you are here" pin binding a physical screen to
+  a coordinate, mirrors how `Screen.themeId`/`layoutId` bind a screen to content today (2026-08-15)
+  — its own table (not columns on `Screen`) since it also carries x/y placement; `ScreensService`
+  got `setKioskLocation`/`clearKioskLocation` mirroring `setLayout`/`setTheme`'s shape exactly,
+  deliberately not touching `streamingType` so flipping types and back doesn't lose the binding
+- ☑ New `StreamingType` value `WAYFINDING` (alongside `ASSET`/`PLAYLIST`/`LAYOUT`/`THEME`)
+  (2026-08-15) — also had to widen `SetStreamingTypeDto`'s `@IsIn` allowlist and the dashboard/
+  player's standalone `StreamingType` unions in `lib/api.ts`, same multi-spot pattern as the past
+  shape-enum work; caught the DTO gap via a live PUT that 400'd until fixed
+- ☑ IA decision: Wayfinding management (Buildings/Floors/POI Categories/POIs) gets its own
+  top-level sidebar entry, the same as Layouts — it's a genuinely separate content type, not a
+  sub-page of something else. The one thing that *doesn't* live there is the per-screen kiosk
+  binding (which floor a screen sits on + its "you are here" pin) — that stays on the Screens
+  page next to the existing streaming-type picker, same as how asset/playlist/layout/theme
+  pickers are already inline there rather than requiring a trip to another section (2026-08-16)
+- ☑ Dashboard: Buildings/Floors admin (upload floor plan, order floors), POI table CRUD + CSV bulk
+  import (common ask — malls already maintain a tenant spreadsheet) — **backend done** in an
+  earlier session: full CRUD API for buildings/floors/POI categories/POIs under a new
+  `WayfindingModule` (`apps/api/src/modules/wayfinding/`), plus `POST /floors/:floorId/pois/import`
+  accepting dashboard-parsed CSV rows matched against category *label* (case-insensitive, not id —
+  friendlier for a spreadsheet a mall already maintains), failing the whole batch with a 1-based
+  row number on the first unresolved category rather than silently dropping rows. **Dashboard UI
+  shipped (2026-08-16)**: new `/wayfinding` sidebar section (`apps/dashboard/src/app/[locale]/
+  (app)/wayfinding/`) with a Buildings → Floors → Categories/POIs drill-down, floor-plan upload via
+  `ImagePicker`, POI Categories (system presets read-only + org custom), POI table, and CSV import.
+- ☑ Dashboard: POI pin-drop editor overlaid on the floor plan image — same percentage-canvas
+  mechanics as the Layouts/Themes editors (`react-rnd`), just placing pins instead of zones
+  (2026-08-16) — shipped as a shared `PoiMapEditor` component
+  (`apps/dashboard/src/components/PoiMapEditor.tsx`), reused for both POI placement in the
+  Wayfinding section and the kiosk "you are here" pin on the Screens page
+- ☑ Screens page: per-screen kiosk binding — a `WAYFINDING` streaming-type option alongside
+  Asset/Playlist/Layout/Theme, with an inline floor picker + `PoiMapEditor` to place/move the
+  "you are here" pin, calling the existing `setKioskLocation`/`clearKioskLocation` endpoints
+  (2026-08-16) — building this surfaced a real bug in the *existing* `ScreensService.list()`
+  (used by `GET /screens`, what the dashboard's Screens page actually reads): it never included
+  the `kioskLocation` relation, only `findOne` did, so the picker looked like it forgot the saved
+  floor/pin on every list refresh even though the row was intact in the DB. Fixed by adding the
+  same include `findOne` already had. Full flow browser-tested end to end (build → set kiosk
+  floor/pin → reload → still there).
+- ☑ Player: static/non-touch directory mode — rotates through POIs by category/floor on a timer,
+  no interaction (works today's offline-cache/publish pipeline unchanged) (2026-08-17) —
+  `PlayerService.getState` now includes `screen.kioskLocation.floor.building.floors.pois` and
+  returns a `wayfinding` field (building + ordered floors + all of the building's POIs grouped by
+  floor/category) whenever `streamingType === 'WAYFINDING'`, following the exact null-gating
+  convention `theme`/`layout` already use; new `apps/player/src/components/
+  WayfindingDirectoryBoard.tsx` renders it as a full-screen dark board that cycles one floor at a
+  time (12s dwell, self-contained `setInterval` — same pattern as `ThemeRenderer`'s
+  `DocumentPager`), grouping that floor's POIs by category with a "You are here" badge on the
+  kiosk's own floor and CLOSED/RELOCATED status tags; category icons render via `lucide-react`
+  (newly added to the player's deps — `PoiCategory.icon` already stored lucide component names for
+  this). `resolvePlaylist`/`computeHasContent` both got a `wayfinding` branch alongside their
+  existing `theme`/`layout` ones so schedule-resolution and the awaiting-content heartbeat badge
+  stay honest for kiosk screens. Verified two ways: a throwaway Prisma script exercising the exact
+  nested include against the dev DB (floors/POIs/categories came back correctly shaped, cleaned up
+  after itself), and a real browser render (player dev server + Playwright route-mocking
+  `/player/state`) confirming the grouping, status tags, "you are here" badge, and floor-rotation
+  dots all look right with no console errors.
+
+**Exit criteria:** An admin uploads a mall's floor plans, bulk-imports its tenant list with
+categories, and a non-touch screen at the entrance cycles through the directory. **Met** — data
+model, admin dashboard UI, kiosk floor/pin binding, and the player's directory-board renderer are
+all done and tested end to end.
+
+### 7.2 — Interactive touch kiosk
+
+- ☑ Player: touch input support — first interactive surface in the player (everything else is
+  passive); pan/zoom on the floor plan, tap a POI for a detail card (2026-08-20) — new
+  `apps/player/src/components/WayfindingKioskMap.tsx`, pointer-events-based (not raw touch
+  events) so a mouse works too for dev/testing; pinch-to-zoom and single-finger pan share one
+  gesture state machine keyed off `pointersRef`'s active-pointer count, tap-vs-drag disambiguated
+  by movement threshold + duration rather than relying on native `click` (which pointer capture
+  on the container would otherwise swallow) — POI hits resolved via
+  `document.elementFromPoint(...).closest('[data-poi-id]')` at tap time instead of manual
+  transform-matrix math. `PlayerService.getState` now includes each floor's `floorPlanUrl` (was
+  missing — 7.1 only needed the grouped list, not the image) and each `Poi`'s `x`/`y`. `PlayerPage`
+  picks this over the existing passive `WayfindingDirectoryBoard` via a runtime
+  `navigator.maxTouchPoints`/`ontouchstart` check — no new per-screen config, a non-touch panel
+  automatically keeps the 7.1 rotating board. Verified via player dev server + Playwright
+  route-mocking `/player/state` (same method 7.1 used): pin placement accuracy across two POIs
+  and the kiosk's own "you are here" marker, tap-to-open and tap-backdrop-to-close on both an
+  open and a closed/status-tagged POI, floor switching (including a floor with no uploaded plan
+  falling back to an empty-state box rather than breaking), double-tap-to-zoom, and the
+  reset-view button all confirmed against screenshots, no console errors.
+- ☑ Player: "you are here" marker rendered from `KioskLocation` (2026-08-20) — shipped together
+  with the map above (a pulsing pin at `kiosk.x`/`kiosk.y` on the kiosk's own floor); folded in
+  rather than tracked separately since the map view is the thing it's rendered on top of
+- ☑ Player: on-screen directory — alphabetical list + category filter + search (on-screen keyboard)
+  (2026-08-20) — new `apps/player/src/components/WayfindingDirectoryPanel.tsx`, opened via a
+  "Directory" button added to `WayfindingKioskMap`'s header. Searches/lists across every floor in
+  the building, not just the one currently shown — a visitor looking a store up usually doesn't
+  know which floor it's on — so picking a result has to be able to switch floors under the
+  existing detail-card flow. That collided with `WayfindingKioskMap`'s existing
+  floor-change effect (which resets `selectedPoi`/pan-zoom whenever `floorId` changes, correct
+  for the floor-tab case but wrong for a directory pick that wants to land on a specific POI);
+  fixed with a `skipNextFloorResetRef` the directory-pick path sets right before changing floors
+  so that one reset is skipped. Category filter is single-select toggle chips built from the
+  unique categories present in `directory.pois` (no separate category-list endpoint needed). The
+  on-screen keyboard is a docked QWERTY (letters + space + backspace), built new rather than
+  relying on any OS/browser virtual keyboard — kiosk hardware is assumed touch-only with no
+  physical keyboard and OS soft-keyboards are unreliable/absent on kiosk-mode browsers. `tsc
+  --noEmit` and ESLint clean. Verified via a throwaway Playwright script against the player dev
+  server (same route-mocking-`/player/state` method 7.1/7.2 used so far): alphabetical list with
+  category chips and status tags render correctly, live search-as-you-type filtering via the
+  on-screen keyboard, and — the trickiest path — picking a result on a *different* floor than the
+  one currently shown correctly switches the floor tab and opens that POI's detail card in the
+  same action, confirmed by screenshot.
+- ☑ Player: idle/attract-loop mode (2026-08-20) — after 90s with no touch anywhere in the kiosk UI
+  (map, directory panel, keyboard, detail card — one capture-phase pointerdown listener on the
+  whole component, not just the pan/zoom viewport), `WayfindingKioskMap` swaps in a fullscreen
+  overlay showing whichever attract content is configured, with a "Tap to browse the directory"
+  hint; any tap anywhere dismisses it back to the normal kiosk view and restarts the idle clock.
+  No timer is armed at all if neither attract field is set, so a kiosk with nothing configured
+  just stays on the map. Reused the existing `ZonePlayer`/`ThemeRenderer` components directly
+  (a playlist or theme is rendered exactly like it would be anywhere else in the player) rather
+  than inventing new rendering — `WayfindingKioskMap` now takes the full `PlayerState` (was just
+  `directory`) so `ThemeRenderer` has what it needs for widget zones, and forwards
+  `onAssetChange` through to whichever content is playing so attract-loop playback shows up in
+  the heartbeat/proof-of-play stream like any other content.
+- ☑ Dashboard: attract-loop content picker per kiosk (2026-08-20) — new `KioskAttractContentPanel`
+  in `apps/dashboard/src/app/[locale]/(app)/screens/page.tsx`, rendered next to
+  `KioskLocationPanel` once a kiosk floor/pin is actually set (the backend rejects attract
+  content before that, so the picker doesn't show until there's something to attach it to). Two
+  tab buttons switch which dropdown is showing (`Playlist` / `Theme`, plain local view state —
+  switching tabs to look around doesn't itself clear anything); picking an option is what fires
+  the mutation. No shared "pick a playlist" component existed anywhere in the dashboard (every
+  other screen inlines its own `<select>` bound to the same `playlists`/`themes` queries), so this
+  matches that established pattern rather than introducing a new abstraction for one caller.
+  Backend: `KioskLocation.attractPlaylistId`/`attractThemeId` (migration
+  `20260820144527_add_kiosk_attract_content`), `ScreensService.setKioskAttractPlaylist`/
+  `setKioskAttractTheme` each clear the other field, mirroring `assignPlaylist` clearing
+  `layoutId` — same "only one live at a time" convention used everywhere else a screen's content
+  type is chosen. `PlayerService.getState` hydrates whichever is set into
+  `wayfinding.attractPlaylist`/`attractTheme`. `tsc --noEmit` and ESLint clean across
+  `api`/`dashboard`/`player` (one pre-existing lint error in `screens/page.tsx`'s unused type
+  imports and two pre-existing `PlayerPage.tsx` promise-handling errors confirmed via `git stash`
+  to predate this session, left alone). Verified via a throwaway Playwright script against the
+  player dev server (temporarily shortening the idle constant to make the wait practical, reverted
+  after): idle timeout correctly triggers the attract overlay for both a playlist-image and a
+  theme-with-widgets case, and a tap correctly wakes it back to the kiosk map — confirmed by
+  screenshot for all three states. Dashboard picker itself verified via `tsc`/lint only, not
+  browser-driven (no lumina API dev server was reachable in this session to click through it live).
+- ☑ Offline resilience: floor plans + POI data cached like today's playlist/theme cache, kiosk
+  stays usable through a network drop (2026-08-20) — audited first: `PlayerState` (including
+  `wayfinding`) already round-trips through the player's IndexedDB cache for free (`cache.ts`'s
+  `saveState`/`getState` store the whole blob generically, no field allowlist). The actual gap was
+  images: floor plans and POI icons are plain `<img src>` tags, and the kiosk map/directory board
+  only ever render the *current* floor, so every other floor's plan (and most POI icons) would
+  stay unfetched — and thus uncached by the service worker — until a visitor happened to browse
+  there while still online. Fixed with `prefetchWayfindingImages()` in `PlayerPage.tsx`, called
+  from `applyState` (so it re-runs on every fresh state — initial load, publish push, reconnect,
+  periodic refresh, not just first mount): fires an out-of-band `new Image().src = url` for every
+  floor's `floorPlanUrl` and every POI's `iconUrl` up front, which is enough to get them into both
+  the browser's HTTP cache and the service worker's `media-cache` runtime-caching rule the same
+  way a real `<img>` render would — no new caching mechanism, just triggering the existing one
+  earlier. Also closed a real, separate gap the audit surfaced: `vite.config.ts`'s Workbox
+  `CacheFirst` regex only matched common raster extensions (jpg/png/gif/webp) and would've silently
+  never cached an SVG floor plan — added `svg` to the pattern. `tsc --noEmit` and ESLint clean.
+  Verified via a throwaway Playwright script asserting on actual network requests (not just
+  visual/screenshot): with 3 floors and a POI icon in a mocked `/player/state`, only floor 1 is
+  ever rendered as an `<img>`, but all 3 floor plans *and* the POI icon showed up as real browser
+  requests within 2s of load — confirming floors 2/3 and the icon were prefetched, not just the
+  one actually on screen.
+
+**Exit criteria:** A visitor walks up to a paired touch kiosk, searches or browses for a store, and
+sees it highlighted on the map with a "you are here" reference point — all without network access.
+**Met** — touch pan/zoom/tap, the on-screen directory (search + category filter + on-screen
+keyboard), idle/attract-loop mode with a dashboard content picker, and prefetch-driven offline
+resilience for floor plans/POI icons are all done and tested.
+
+### 7.3 — Route finding & multi-floor navigation ✅ COMPLETE (2026-08-20)
+
+- ☑ `RouteNode`/`RouteEdge` graph model (2026-08-20) — mirrors `Poi`'s x/y-percentage-on-`Floor`
+  convention exactly; `RouteEdgeType` enum (`WALK`/`ELEVATOR`/`ESCALATOR`/`STAIRS`, migration
+  `20260820170320_add_route_graph`) typed per edge rather than per node, since the same node (an
+  elevator lobby) can have both a WALK edge to a neighboring node and an ELEVATOR edge to the
+  floor above. Every edge is treated as bidirectional by the routing engine — no separate
+  "reverse" row. Backend: new `apps/api/src/modules/wayfinding/routes.{service,controller}.ts`
+  (`RoutesService`/`RoutesController`, registered in `WayfindingModule` alongside
+  Buildings/PoiCategories/Pois), CRUD for nodes (`POST/PUT/DELETE .../route-nodes`) and edges
+  (`POST/PUT/DELETE .../route-edges`), plus `GET /buildings/:buildingId/route-graph` returning the
+  whole building's nodes+edges in one call — used by both the dashboard editor (which needs every
+  floor's nodes to offer as the far end of a cross-floor edge) and, via `PlayerService.getState`,
+  by the player. Cross-floor edge creation validates both endpoint nodes belong to the *same*
+  building (not just the same org) so a stray id can't wire two unrelated buildings' graphs
+  together.
+- ☑ Dashboard: route graph editor (2026-08-20) — new `RouteGraphEditor` component
+  (`apps/dashboard/src/components/RouteGraphEditor.tsx`), same percentage-canvas/`react-rnd`
+  mechanics as `PoiMapEditor` but for a multi-node graph instead of one pin: three explicit modes
+  (Select / Add node / Connect nodes, icon toggle group) rather than overloading a single click,
+  since "click empty canvas" and "click a node" need to mean different things depending on intent.
+  Connect mode arms on the first node click and completes on the second, auto-computing a default
+  WALK weight from the two nodes' on-canvas distance (editable after). Edges render as an SVG
+  overlay with a wide invisible hit-line so a thin edge stays easy to click. Wired into a new
+  `RouteGraphSection`/`NodeInspector`/`EdgeInspector` set in `wayfinding/page.tsx`, rendered below
+  the existing POI/floor-plan grid on `FloorDetail`. Cross-floor connections are a separate
+  "Cross-floor connections" panel on the node inspector (pick another floor, pick a node on it,
+  pick ELEVATOR/ESCALATOR/STAIRS, set weight) rather than trying to draw an off-canvas line — the
+  graph is per-building (`GET .../route-graph`), so the panel can offer every other floor's nodes
+  without a page navigation. Nodes with a cross-floor edge get an amber ring badge so they're
+  visually distinct from plain same-floor nodes. i18n (en/ar) under a new `wayfinding.routeGraph`
+  namespace. `tsc --noEmit` and ESLint clean across `api`/`dashboard`. Live-smoke-tested end to end
+  against the real dev stack (Playwright driving a real headless Chromium against the dashboard +
+  API + dev Postgres, not mocked): created a test building/two floors, added three nodes in Add
+  Node mode, connected them in Connect mode (screenshotted mid-connect and post-connect), edited an
+  edge's type/weight via the inspector, added a real node on the second floor, and created a
+  cross-floor ELEVATOR edge from the node inspector — confirmed by screenshot at each step,
+  including the amber cross-floor badge appearing on the source node. All test data (building,
+  floors, nodes, edges) deleted afterward; verified via a direct Prisma query that `RouteNode`/
+  `RouteEdge` counts are back to 0.
+- ☑ Routing engine: shortest-path, computed on-device in the player (2026-08-20) — new
+  `apps/player/src/lib/routing.ts`: plain O(n²) Dijkstra (no heap — a building's route graph is at
+  most a few hundred nodes, nowhere near needing one), run entirely client-side so kiosk routing
+  keeps working offline, same philosophy as the local schedule resolver. `findNearestNode()`
+  snaps an arbitrary point (the kiosk's own "you are here" pin, or a selected POI's pin — neither
+  is itself a graph node) to the closest `RouteNode` on that point's floor before searching.
+  `PlayerService.getState` hydrates the whole building's `routeNodes`/`routeEdges` into the
+  `wayfinding` payload (edges fetched separately from the floors→pois nested include, since an
+  edge can connect nodes on two different floors and so doesn't fit that per-floor tree).
+- ☑ Accessible-route mode (2026-08-20) — `computeRoute(..., accessible)` filters `STAIRS` edges out
+  of the graph before searching when accessible mode is on, exactly the "weight/exclude stairs"
+  spec from this section's own goal line; a wheelchair-icon toggle in the directions panel flips it
+  and recomputes live (the whole search re-runs client-side, fast enough at this graph size to not
+  need debouncing).
+- ☑ Player: draw the computed path + step-by-step text list (2026-08-20) — `WayfindingKioskMap`
+  gained a "Directions" button on a POI's detail card (shown whenever a route exists between the
+  kiosk and that POI); tapping it swaps the card for a directions panel with a numbered step list
+  from `routing.ts`'s `buildDirectionSteps()`. Steps are necessarily approximate turn-by-turn — the
+  graph carries distance/time and edge type, not headings, so "turn left" isn't derivable — but
+  every floor change *is* precise ("Take the elevator to Level 1"), which is the part a visitor
+  actually needs help with. The path itself draws as a green SVG polyline over whichever floor is
+  currently on screen (`floorRoutePoints`, `viewBox="0 0 100 100"` so it shares the same
+  percentage-coordinate space as POI pins), anchored to the kiosk's exact "you are here" position
+  and the POI's exact pin at the start/end of the route rather than stopping short at the nearest
+  graph node. Switching floor tabs while the panel is open re-draws just that floor's segment,
+  letting a visitor follow the route floor by floor — which surfaced (and this fixed) a real
+  pre-existing bug: the header/floor-tabs sat *underneath* the detail-card backdrop the whole time
+  (an absolutely-positioned `backdrop` with `z-index: auto` paints above static in-flow content
+  regardless of DOM order), so floor tabs had been unclickable any time a POI card was open since
+  7.2 shipped — fixed with an explicit `zIndex: 2` on the header. Also fixed a layout collision the
+  new wheelchair-toggle button exposed: it and the card's existing close (X) button both tried to
+  occupy the same top-right corner, rendering as one overlapping icon — moved the toggle to its own
+  absolutely-positioned slot rather than a flex `marginInlineStart: auto` that assumed it had that
+  corner to itself.
+- ☑ QR handoff (2026-08-20) — reuses the existing `QrCodeWidget` component and `qrcode` package
+  directly, per this section's own "no new mechanism" note: the directions panel's "Continue on
+  your phone" button renders `QrCodeWidget` with `value` set to the destination name plus the full
+  numbered step list as plain text (no route-viewing web page exists to link to, so the QR payload
+  is the directions themselves — readable by any phone's camera/QR app without needing a Lumina
+  page to load).
+  `tsc --noEmit` and ESLint clean across `api`/`dashboard`/`player`. Live-smoke-tested end to end
+  with a scripted Playwright session against the player dev server (same route-mocked-`/player/state`
+  method 7.1/7.2 used): a 2-floor building with a kiosk on floor 1 and a POI on floor 2 connected
+  via an ELEVATOR edge — tapped the POI, opened Directions (confirmed the 3-step list: "Head
+  straight…", "Take the elevator to Level 1.", "Continue to \<POI\>."), toggled accessible mode
+  (confirmed the icon-collision fix), switched back to the floor-1 tab with the panel still open
+  (confirmed the path segment redrew from the kiosk's pin to the elevator node, and that the fix
+  actually restored floor-tab clickability), and opened the QR panel (confirmed a real, correctly
+  rendered scannable code). Zero console/page errors across the whole run.
+
+**Exit criteria:** A visitor picks a destination on a different floor; the kiosk draws a route
+(including which elevator to use) and offers a QR code to continue on their phone. **Met** — the
+route graph data model, dashboard editor, on-device Dijkstra routing engine with accessible mode,
+path-drawing + step-by-step directions, and QR handoff are all done and tested end to end.
+
+### 7.4 — Ops, accessibility & analytics ✅ COMPLETE (2026-08-20)
+
+- ☑ Live POI status pushes (closed/relocated) over the existing WS publish pipeline (2026-08-20) —
+  `PoisService.create`/`update`/`remove`/`import` now push a bare `{ type: 'publish' }` command
+  (same payload-free "go re-fetch" signal playlist/layout publish already uses) to every screen
+  whose `KioskLocation` sits on a floor in the affected POI's building, resolved via a
+  `pushToKiosksInBuilding(buildingId)` helper; `WayfindingModule` gained `WsModule` as an import so
+  `PoisService` can inject `ScreenGateway` directly, the same pattern `ScreensService`/
+  `ScreenGroupsService` already use. Deliberately unconditional — not gated behind
+  `ScreensService`'s `pushIfAutoPublish`/org `autoPublish` setting — since POI status is live
+  directory data a facilities manager expects to land in seconds, not a draft staged behind a
+  Publish button.
+- ☑ Fire/evacuation mode (2026-08-20) — reuses `Screen.emergencyActive` exactly as scoped, no
+  parallel override system. Two parts: (1) `ScreensService.setEmergency` now pushes unconditionally
+  (`gateway.sendToScreen` directly) instead of going through the autoPublish-gated
+  `pushIfAutoPublish` every other screen-setting change uses — a safety toggle can't sit waiting on
+  an org's publish preference, and this was true (and arguably a latent gap) even for the
+  general-purpose emergency override this phase didn't otherwise touch. (2) New
+  `BuildingsService.setEvacuation(orgId, buildingId, active)` (`PUT /buildings/:id/evacuation`) fans
+  that same per-screen call out to every kiosk pinned in the building in one call — `WayfindingModule`
+  gained `ScreensModule` as an import for this. On the player, `PlayerPage.tsx` now checks
+  `state.emergencyActive && state.wayfinding` (with no `emergencyPlaylist` set) ahead of the normal
+  wayfinding branch and renders a new `WayfindingEvacuationView.tsx`: routes from the kiosk's "you
+  are here" pin to the nearest POI whose category is labeled "Exit" (the same system preset every
+  building already has from 7.1), explicitly excluding `ELEVATOR` edges — `routing.ts`'s
+  `computeRoute` traded its boolean `accessible` param for a `{ accessible?, avoidElevators? }`
+  options object so evacuation mode could add its own exclusion the same way 7.3's wheelchair mode
+  excludes `STAIRS`. Draws the path + numbered steps in a full-screen red banner and auto-reads the
+  directions aloud on entry (see TTS below) rather than waiting for a tap, since an evacuation
+  screen is meant to be reacted to instantly. Dashboard: a `BuildingOpsPanel` above the floor list
+  on the Wayfinding building view shows a live "N kiosks in evacuation mode" badge (derived from the
+  screens list's `emergencyActive`, not a separate tracked flag) with a confirm-gated
+  trigger/clear button — deliberately not routed through the existing "confirm before delete"
+  opt-out setting, since a safety-critical action should always confirm regardless of that
+  preference.
+- ☑ Text-to-speech route readout + larger-touch-target accessibility mode (2026-08-20) — new
+  `apps/player/src/lib/tts.ts` wraps the plain browser `SpeechSynthesisUtterance` API (no new
+  dependency, same "kiosk hardware is a browser" assumption the on-screen keyboard already makes);
+  a speaker-icon button next to the existing wheelchair-accessible toggle in `WayfindingKioskMap`'s
+  directions panel reads `buildDirectionSteps()`'s output aloud, tracked via the utterance's own
+  `onend`/`onerror` callbacks rather than polling so the button's state can't drift out of sync with
+  actual playback. Accessibility mode is a persisted (`localStorage`) header toggle that scales up
+  touch-critical chrome — the Directory button, floor tabs, POI pins and the "you are here" marker,
+  the wheelchair/TTS/close buttons' surrounding hit area, and step-list text — by a flat 1.35×
+  factor rather than rewriting every style as a function; verified visually (larger pins/buttons
+  render correctly in both languages, see screenshots from the language-toggle test below).
+- ☑ Multi-language directory switching (2026-08-20) — the player had no i18n library at all (unlike
+  the dashboard's next-intl setup) and the wayfinding data's `nameAr`/`descriptionAr`/`labelAr`
+  fields went completely unread until now. New `apps/player/src/lib/wayfindingLang.ts`: a small
+  inline EN/AR string dictionary (the player only needs a handful of fixed UI strings, not a full
+  framework) plus `pickName`/`pickDescription`/`pickCategoryLabel` helpers that fall back to the
+  base field when no Arabic value is set. A persisted EN/AR toggle button in `WayfindingKioskMap`'s
+  header flips `dir="rtl"`/`"ltr"` on the container and is threaded into `WayfindingDirectoryPanel`
+  and the evacuation view; the passive `WayfindingDirectoryBoard` (no touch, so no toggle of its
+  own) reads whatever language was last persisted rather than carrying a second disconnected
+  language state. `routing.ts`'s `buildDirectionSteps()` gained a `lang` parameter with its own
+  localized sentence templates so turn-by-turn text (and therefore the TTS readout) comes out in
+  the selected language. **Known accepted trade-off:** the on-screen keyboard
+  (`WayfindingDirectoryPanel`) is still Latin/QWERTY-only — a visitor can search a Store's Arabic
+  name once it's on screen, but can't type Arabic into the search box via the on-screen keyboard;
+  a full Arabic keyboard layout was out of scope for this pass. Verified live via Playwright against
+  the player dev server (route-mocked `/player/state`, same method prior wayfinding phases used):
+  language toggle flips the whole kiosk to RTL Arabic with correctly localized chrome and
+  bilingual POI data, confirmed by screenshot in both languages and combined with accessibility
+  mode.
+- ☑ Kiosk analytics: popular searches/destinations, session counts (2026-08-20) — extends the
+  proof-of-play ingest/query shape rather than a new analytics system: new `KioskEvent` model
+  (migration `20260820191956_add_kiosk_events`, type `SESSION_START`/`SEARCH`/`POI_VIEW`, with
+  `poiName` denormalized since POIs churn far more than screens do) and a new
+  `KioskAnalyticsModule` mirroring `ProofOfPlayModule` file-for-file — `KioskAnalyticsService.ingest`
+  wired into `PlayerController`'s existing screen-authenticated (`PlayerJwtGuard`) surface as
+  `POST /player/wayfinding-events`, `.list` exposed as an admin-authenticated `GET /kiosk-events`.
+  Player side: new `apps/player/src/lib/kioskAnalytics.ts` fires a single-event POST per occurrence
+  (fire-and-forget, errors swallowed) rather than building a buffered-flush pipeline like proof-of-
+  play's — kiosk interactions are low-frequency enough not to need one. `WayfindingKioskMap` logs
+  one `SESSION_START` per mount and a `POI_VIEW` on every POI selection (pin tap or directory pick);
+  `WayfindingDirectoryPanel` logs a debounced `SEARCH` (1.2s after typing settles, not per
+  keystroke). Dashboard: the Reports page gained a "Kiosk activity" tab (only shown when the org has
+  any `WAYFINDING` screens) alongside the existing Proof-of-play tab, same filter/chart/CSV-export
+  pattern, aggregating top searches and top destinations client-side from the raw event list.
+  Verified end to end against the real dev stack: created a building/floor/kiosk, exercised POI
+  create+status-update (confirming the push-to-kiosks path executed without error), confirmed
+  `GET /kiosk-events` (admin-authenticated) succeeds and `POST /player/wayfinding-events` correctly
+  401s without a player token, then cleaned up all test data — verified via a direct Prisma count
+  that no building/screen/group/event rows were left behind.
+- ☑ `ScreenGroup`-based building/floor grouping for bulk operations (2026-08-20) — reuses the
+  existing generic `ScreenGroup` model/CRUD/bulk-publish-volume endpoints as-is rather than a
+  building-aware grouping concept: new `BuildingsService.syncScreenGroup(orgId, buildingId)`
+  (`POST /buildings/:id/sync-screen-group`) creates-or-reuses a `ScreenGroup` named
+  `"{building name} kiosks"` and syncs its membership to exactly this building's currently
+  kiosk-bound screens. `Screen.groupId` is a single scalar FK (one group per screen), so syncing
+  reassigns membership outright — an explicit, idempotent "sync" action, not a silent side effect.
+  Dashboard: a "Sync kiosk screen group" button in the same `BuildingOpsPanel` as the evacuation
+  toggle, with a success toast naming the group and its screen count; the synced group then shows
+  up on the existing Screen Groups page with its bulk publish/volume controls unchanged. Verified
+  live against the dev stack in the same backend test as the kiosk-analytics item above: synced a
+  test building, confirmed a `ScreenGroup` named `"Verify74 Mall kiosks"` was created containing
+  exactly the one test kiosk screen, then cleaned it up.
+
+`tsc --noEmit` and lint clean across `api`/`dashboard`/`player` for every file this section touched
+(the dashboard's `eslint` config currently fails to load for unrelated, pre-existing reasons —
+confirmed via `git stash` to predate this session — so the dashboard changes were verified by
+`tsc` only, consistent with how this gap has been handled in prior sessions).
+
+**Exit criteria:** A facilities manager marks a tenant "temporarily relocated" from the dashboard
+and every kiosk reflects it within seconds; in a drill, evacuation mode overrides all kiosks in the
+building instantly. **Met** — POI status pushes are unconditional (not gated by autoPublish) and
+resolve every kiosk in the affected building; evacuation mode flips every kiosk in a building via
+one call and was verified live to toggle `Screen.emergencyActive` on and back off correctly, with
+the player rendering a real evacuation-route view (routing to the nearest Exit POI, elevators
+excluded) confirmed by screenshot.
+
+### Later / stretch (post-Phase 7)
+
+- ☐ Outdoor/campus wayfinding — GPS-based, multi-building routing between outdoor and indoor graphs
+- ☐ Mobile companion hand-off — continue navigation on a visitor's phone past the QR handoff (live
+  blue-dot if GPS/BLE beacons are available)
+- ☐ BLE beacon / indoor-positioning integration for blue-dot accuracy indoors
+- ☐ Sponsored directory placements / ad slots in the attract loop (mall revenue model)
+- ☐ Live wait-time or occupancy integration per POI (e.g. restaurant wait, gate status)
+- ☐ Voice-directed navigation
+- ☐ 3D/isometric map rendering option
+
+---
+
 ## Editor feature work (2026-07 batch)
 
 ### Editor UX upgrade — Themes/Layouts parity ✅ COMPLETE (2026-07-28)

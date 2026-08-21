@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fontStack, mediaCropStyle } from '@lumina/types';
 import type { Playlist, PlaylistItem } from '../lib/api';
+import TextAssetTicker from './TextAssetTicker';
 
 interface Props {
   playlist: Playlist;
@@ -12,7 +13,8 @@ interface Props {
   forceMuted?: boolean;
 }
 
-const FONT_SIZE_CLAMPS: Record<string, string> = {
+// Exported for ThemeRenderer's asset-backed TEXT element, which needs the same size mapping.
+export const FONT_SIZE_CLAMPS: Record<string, string> = {
   SMALL: 'clamp(1rem, 3vw, 2.5rem)',
   MEDIUM: 'clamp(1.5rem, 5vw, 5rem)',
   LARGE: 'clamp(2rem, 7vw, 7rem)',
@@ -140,7 +142,20 @@ export default function ZonePlayer({ playlist, onAssetChange, volume = 100, forc
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         />
       )}
-      {item.asset.type === 'TEXT' && (
+      {item.asset.type === 'TEXT' && item.asset.textTickerEnabled && (
+        <TextAssetTicker
+          key={item.id}
+          text={item.asset.textContent ?? ''}
+          color={item.asset.textColor ?? '#fff'}
+          backgroundColor={item.asset.textBackgroundColor ?? undefined}
+          fontFamily={fontStack(item.asset.textFontFamily)}
+          fontSize={FONT_SIZE_CLAMPS[item.asset.textSize ?? 'MEDIUM'] ?? FONT_SIZE_CLAMPS['MEDIUM']!}
+          direction={item.asset.textTickerDirection}
+          speedPx={item.asset.textTickerSpeed ?? 80}
+          crossPosition={item.asset.textTickerCrossOffset ?? 50}
+        />
+      )}
+      {item.asset.type === 'TEXT' && !item.asset.textTickerEnabled && (
         <div
           key={item.id}
           style={{

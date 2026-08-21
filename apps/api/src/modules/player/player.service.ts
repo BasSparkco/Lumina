@@ -90,6 +90,33 @@ export class PlayerService {
         playlist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },
+        kioskLocation: {
+          include: {
+            floor: {
+              include: {
+                building: {
+                  include: {
+                    floors: {
+                      orderBy: { level: 'asc' },
+                      include: {
+                        floorPlanAsset: true,
+                        pois: {
+                          orderBy: { name: 'asc' },
+                          include: { category: true, iconAsset: true },
+                        },
+                        routeNodes: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            attractPlaylist: {
+              include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
+            },
+            attractTheme: true,
+          },
+        },
         group: { select: { volume: true } },
       },
     });
@@ -126,6 +153,15 @@ export class PlayerService {
 
     // Item 10 (volume control) — screen's own value wins, else its group's, else full volume.
     const volume = screen.volume ?? screen.group?.volume ?? 100;
+
+    // Route graph edges (Phase 7.3) — can't be pulled through the floors->pois nested include
+    // above since an edge connects two RouteNodes that may sit on different floors, so it's
+    // fetched separately, scoped to the kiosk's whole building, same as RoutesService.graph.
+    const routeEdges = screen.streamingType === 'WAYFINDING' && screen.kioskLocation
+      ? await this.prisma.routeEdge.findMany({
+          where: { fromNode: { floor: { buildingId: screen.kioskLocation.floor.building.id } } },
+        })
+      : [];
 
     const hydrateZones = (zones: NonNullable<typeof screen.layout>['zones']) =>
       zones.map((z: (typeof zones)[number]) => ({
@@ -181,6 +217,79 @@ export class PlayerService {
             elements: await this.hydrateThemeElements(screen.theme.elements),
           }
         : null,
+      wayfinding: screen.streamingType === 'WAYFINDING' && screen.kioskLocation
+        ? {
+            kiosk: {
+              floorId: screen.kioskLocation.floorId,
+              x: screen.kioskLocation.x,
+              y: screen.kioskLocation.y,
+            },
+            building: {
+              id: screen.kioskLocation.floor.building.id,
+              name: screen.kioskLocation.floor.building.name,
+            },
+            floors: screen.kioskLocation.floor.building.floors.map(f => ({
+              id: f.id,
+              level: f.level,
+              label: f.label,
+              floorPlanUrl: f.floorPlanAsset ? this.storage.publicUrl(f.floorPlanAsset.storageKey) : null,
+            })),
+            pois: screen.kioskLocation.floor.building.floors.flatMap(f => f.pois.map(p => ({
+              id: p.id,
+              name: p.name,
+              nameAr: p.nameAr,
+              x: p.x,
+              y: p.y,
+              description: p.description,
+              descriptionAr: p.descriptionAr,
+              status: p.status,
+              floorId: f.id,
+              floorLabel: f.label,
+              category: {
+                id: p.category.id,
+                label: p.category.label,
+                labelAr: p.category.labelAr,
+                icon: p.category.icon,
+                color: p.category.color,
+              },
+              iconUrl: p.iconAsset ? this.storage.publicUrl(p.iconAsset.storageKey) : null,
+            }))),
+            // Route graph (Phase 7.3) — the whole building's nodes/edges, so the player can
+            // compute a shortest path to any POI on any floor entirely on-device (offline-capable,
+            // same philosophy as the local schedule resolver).
+            routeNodes: screen.kioskLocation.floor.building.floors.flatMap(f => f.routeNodes.map(n => ({
+              id: n.id,
+              floorId: f.id,
+              x: n.x,
+              y: n.y,
+              label: n.label,
+            }))),
+            routeEdges: routeEdges.map(e => ({
+              id: e.id,
+              fromNodeId: e.fromNodeId,
+              toNodeId: e.toNodeId,
+              type: e.type,
+              weight: e.weight,
+            })),
+            // Idle/attract-loop content (Phase 7.2) — at most one of these is ever set
+            // (ScreensService.setKioskAttractPlaylist/setKioskAttractTheme each clear the
+            // other), the player just shows whichever is non-null after its idle timeout.
+            attractPlaylist: screen.kioskLocation.attractPlaylist
+              ? this.hydratePlaylist(screen.kioskLocation.attractPlaylist)
+              : null,
+            attractTheme: screen.kioskLocation.attractTheme
+              ? {
+                  id: screen.kioskLocation.attractTheme.id,
+                  name: screen.kioskLocation.attractTheme.name,
+                  category: screen.kioskLocation.attractTheme.category,
+                  aspectRatio: screen.kioskLocation.attractTheme.aspectRatio,
+                  palette: screen.kioskLocation.attractTheme.palette,
+                  typography: screen.kioskLocation.attractTheme.typography,
+                  elements: await this.hydrateThemeElements(screen.kioskLocation.attractTheme.elements),
+                }
+              : null,
+          }
+        : null,
       scheduleRules: rules.map(r => ({
         id: r.id,
         name: r.name,
@@ -217,6 +326,7 @@ export class PlayerService {
   private hydrateAssetAsPlaylist(asset: {
     id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null;
     textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null;
+    textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null;
     hasAudioTrack: boolean; audioEnabled: boolean;
   }, crop?: { cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null }) {
     return this.hydratePlaylist({
@@ -280,15 +390,17 @@ export class PlayerService {
 
   /**
    * Theme elements reference assets/playlists by id (like layout zones do). Resolve IMAGE/VIDEO
-   * elements to a signed-URL, DOCUMENT elements to per-page signed-URLs, and PLAYLIST elements
-   * to a fully hydrated playlist — everything else (TEXT/SHAPE/WIDGET) passes through untouched.
+   * elements to a signed-URL, DOCUMENT elements to per-page signed-URLs, PLAYLIST elements to a
+   * fully hydrated playlist, and TEXT elements with an assetId to that TEXT asset's own
+   * content/styling/ticker fields — everything else (SHAPE/WIDGET/BRUSH, and TEXT with no
+   * assetId) passes through untouched.
    */
   private async hydrateThemeElements(elements: unknown): Promise<unknown> {
     if (!Array.isArray(elements)) return [];
     const els = elements as { kind: string; content: Record<string, unknown> }[];
 
     const assetIds = [...new Set(
-      els.filter(e => e.kind === 'IMAGE' || e.kind === 'VIDEO' || e.kind === 'DOCUMENT')
+      els.filter(e => e.kind === 'IMAGE' || e.kind === 'VIDEO' || e.kind === 'DOCUMENT' || e.kind === 'TEXT')
         .map(e => e.content.assetId as string | null)
         .filter((id): id is string => !!id),
     )];
@@ -302,8 +414,19 @@ export class PlayerService {
       ? await this.prisma.asset.findMany({ where: { id: { in: assetIds } } })
       : [];
     const assetMap = new Map(assets.map(a => [a.id, {
-      url: this.storage.publicUrl(a.storageKey),
+      // TEXT assets have no real object behind storageKey (see AssetsService.createText) — skip
+      // resolving a url for them, same as hydratePlaylist below.
+      url: a.type === 'TEXT' ? null : this.storage.publicUrl(a.storageKey),
       pageUrls: a.type === 'DOCUMENT' ? this.documentPageUrls(a.storageKey, a.pageCount) : [],
+      textContent: a.textContent,
+      textFontFamily: a.textFontFamily,
+      textColor: a.textColor,
+      textSize: a.textSize,
+      textBackgroundColor: a.textBackgroundColor,
+      textTickerEnabled: a.textTickerEnabled,
+      textTickerDirection: a.textTickerDirection,
+      textTickerSpeed: a.textTickerSpeed,
+      textTickerCrossOffset: a.textTickerCrossOffset,
     }]));
 
     const playlists = playlistIds.length
@@ -317,6 +440,31 @@ export class PlayerService {
     );
 
     return els.map(e => {
+      if (e.kind === 'TEXT') {
+        const assetId = e.content.assetId as string | null | undefined;
+        const resolved = assetId ? assetMap.get(assetId) : undefined;
+        return {
+          ...e,
+          content: {
+            text: e.content.text,
+            translations: e.content.translations,
+            assetId: assetId ?? null,
+            ...(resolved
+              ? {
+                  textContent: resolved.textContent,
+                  textFontFamily: resolved.textFontFamily,
+                  textColor: resolved.textColor,
+                  textSize: resolved.textSize,
+                  textBackgroundColor: resolved.textBackgroundColor,
+                  textTickerEnabled: resolved.textTickerEnabled,
+                  textTickerDirection: resolved.textTickerDirection,
+                  textTickerSpeed: resolved.textTickerSpeed,
+                  textTickerCrossOffset: resolved.textTickerCrossOffset,
+                }
+              : {}),
+          },
+        };
+      }
       if (e.kind === 'IMAGE' || e.kind === 'VIDEO') {
         const assetId = e.content.assetId as string | null;
         return { ...e, content: { assetId, url: assetId ? (assetMap.get(assetId)?.url ?? null) : null } };
@@ -346,7 +494,7 @@ export class PlayerService {
     transitionStyle: string;
     transitionDurationMs: number;
     playbackOrder: string;
-    items: { id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean; cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null } }[];
+    items: { id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean; cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null } }[];
   }) {
     const items = playlist.items.map(item => {
       // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
@@ -380,6 +528,10 @@ export class PlayerService {
           textColor: item.asset.textColor,
           textSize: item.asset.textSize,
           textBackgroundColor: item.asset.textBackgroundColor,
+          textTickerEnabled: item.asset.textTickerEnabled,
+          textTickerDirection: item.asset.textTickerDirection,
+          textTickerSpeed: item.asset.textTickerSpeed,
+          textTickerCrossOffset: item.asset.textTickerCrossOffset,
         },
       };
     });

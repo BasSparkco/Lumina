@@ -1,11 +1,10 @@
 import { create } from 'zustand';
-import type { Playlist } from '../lib/api';
 
+// Playback position/current playlist are NOT tracked here — that lives in ZonePlayer's own local
+// state, since each zone plays independently. This store is purely pairing/auth identity.
 interface PlayerState {
   screenId: string | null;
   token: string | null;
-  playlist: Playlist | null;
-  currentIndex: number;
   // Set by `unpair()`, read once by PairingPage's mount effect. Carried through the store
   // rather than router navigation state — PlayerPage's own `[token]`-watching effect also
   // navigates to '/' as soon as `token` goes null, racing our explicit navigate call, so
@@ -14,18 +13,14 @@ interface PlayerState {
   pendingPairingCode: string | null;
   setScreenId: (id: string) => void;
   setToken: (token: string) => void;
-  setPlaylist: (p: Playlist | null) => void;
-  nextItem: () => void;
   unpair: (pairingCode: string) => void;
   forget: () => void;
   clearPendingPairingCode: () => void;
 }
 
-export const usePlayerStore = create<PlayerState>((set, get) => ({
+export const usePlayerStore = create<PlayerState>(set => ({
   screenId: localStorage.getItem('screen_id'),
   token: localStorage.getItem('player_token'),
-  playlist: null,
-  currentIndex: 0,
   pendingPairingCode: null,
 
   setScreenId(id) {
@@ -38,22 +33,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ token });
   },
 
-  setPlaylist(p) {
-    set({ playlist: p, currentIndex: 0 });
-  },
-
-  nextItem() {
-    const { playlist, currentIndex } = get();
-    if (!playlist || playlist.items.length === 0) return;
-    set({ currentIndex: (currentIndex + 1) % playlist.items.length });
-  },
-
   // Drops the stale token (dead credentials) so the router falls back to PairingPage —
   // `screenId` is kept so re-pairing lands back on the *same* screen entity (name/history/
   // settings) instead of the device minting a brand new orphan one.
   unpair(pairingCode) {
     localStorage.removeItem('player_token');
-    set({ token: null, playlist: null, currentIndex: 0, pendingPairingCode: pairingCode });
+    set({ token: null, pendingPairingCode: pairingCode });
   },
 
   // Unlike `unpair`, the underlying screen row is gone — there's no old screenId left to
@@ -62,7 +47,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   forget() {
     localStorage.removeItem('player_token');
     localStorage.removeItem('screen_id');
-    set({ token: null, screenId: null, playlist: null, currentIndex: 0, pendingPairingCode: null });
+    set({ token: null, screenId: null, pendingPairingCode: null });
   },
 
   clearPendingPairingCode() {

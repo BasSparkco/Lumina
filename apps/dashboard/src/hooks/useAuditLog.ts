@@ -1,6 +1,6 @@
 'use client';
 import { useQueryClient } from '@tanstack/react-query';
-import { auditLogApi, type AuditLogEntry } from '@/lib/mocks/auditLog';
+import { auditLogApi, type AuditLogEntry } from '@/lib/auditLog';
 
 /** Records an audit-log entry and pushes it straight into the `['auditLog']` query cache,
  * so every call site updates the visible log immediately instead of waiting on a

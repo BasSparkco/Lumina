@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { Activity, AlertTriangle, Tv2, List, ImageIcon, HardDrive } from 'lucide-react';
+import { Activity, AlertTriangle, Tv2, List, ImageIcon, HardDrive, RefreshCw } from 'lucide-react';
 import { screensApi, assetsApi, playlistsApi, type Screen } from '@/lib/api';
 import { getUptimePercents } from '@/lib/mocks/uptime';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
@@ -47,10 +47,21 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, []);
 
-  const { data: screens = [], isLoading: screensLoading } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
+  const qc = useQueryClient();
+  const { data: allScreens = [], isLoading: screensLoading, isFetching: screensFetching } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: fleetStatus } = useQuery({ queryKey: ['fleetStatus'], queryFn: screensApi.fleetStatus });
+
+  // Unpairing keeps the row around server-side (see screens/page.tsx) so it can still be
+  // re-paired into later — it's no longer a screen anyone's actively managing, so it's excluded
+  // here the same way the Screens page excludes it, keeping the two counts in agreement.
+  const screens = useMemo(() => allScreens.filter((s: Screen) => s.paired), [allScreens]);
+
+  function refresh() {
+    void qc.invalidateQueries({ queryKey: ['screens'] });
+    void qc.invalidateQueries({ queryKey: ['fleetStatus'] });
+  }
 
   const uptimeByScreen = useMemo(() => getUptimePercents(screens.map((s: Screen) => s.id)), [screens]);
   const crashCountByScreen = useMemo(
@@ -74,9 +85,18 @@ export default function DashboardPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+        </div>
+        <button
+          onClick={refresh}
+          disabled={screensFetching}
+          title={t('refresh')}
+          className="flex items-center gap-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 shrink-0">
+          <RefreshCw className={`w-3.5 h-3.5 ${screensFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
+        </button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">

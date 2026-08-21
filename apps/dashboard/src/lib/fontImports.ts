@@ -3,7 +3,13 @@
 // final render use real font files bundled at build time — no runtime fetch to Google's CDN,
 // which matters for kiosk/TV players that may have no outbound internet access.
 //
-// Import this module exactly once, near the app root, before anything renders text.
+// Unlike the player (which can be asked to render any theme at any time, so it bundles every
+// font for offline use — see apps/player/src/lib/fontImports.ts), the dashboard only ever
+// renders arbitrary fonts in two places: FontPicker's live-preview dropdown, and wherever a
+// chosen font is actually rendered (the text-asset editor, the theme editor's canvas). Import
+// this module from those call sites only — assets/page.tsx and layouts/ThemesSection.tsx as of
+// this writing — never from the root layout, or every route pays for all 43 families on every
+// page load regardless of whether it ever shows a font picker.
 import '@fontsource/inter/index.css';
 import '@fontsource/roboto/index.css';
 import '@fontsource/open-sans/index.css';

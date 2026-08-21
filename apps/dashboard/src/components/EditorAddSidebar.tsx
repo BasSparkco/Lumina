@@ -28,6 +28,11 @@ interface EditorAddSidebarProps {
   sections: EditorAddSidebarSection[];
   openLabel: string;
   closeLabel: string;
+  // Lets an external trigger (e.g. a canvas right-click "Add element" action) open the mobile
+  // drawer. Uncontrolled (both omitted) by default — the FAB/backdrop/close-button still manage
+  // their own state exactly as before.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 function SectionList({
@@ -97,9 +102,8 @@ function SectionList({
 // Floating "insert" panel shared by the layouts (zones) and themes (elements) editors — deliberately
 // lives outside the editor panel's own layout flow (not a flex sibling of the canvas/cards column)
 // so opening it never shrinks the editing area. A persistent, non-overlapping right rail needs
-// roughly 1900px+ of viewport before a centered 1400px-max editor panel leaves enough natural gutter
-// for it — below that (i.e. on the vast majority of real laptop/desktop screens, not just phones/
-// tablets) it collapses to a floating toggle + slide-in drawer instead, so the editing area stays
+// roughly 1440px+ of viewport before a centered editor panel leaves enough natural gutter for it —
+// below that it collapses to a floating toggle + slide-in drawer instead, so the editing area stays
 // exactly as wide as it was before this panel existed. The toggle sits opposite the main nav's own
 // mobile hamburger (which opens from the start side), so the two never compete for the same corner.
 export function EditorAddSidebar({
@@ -107,15 +111,19 @@ export function EditorAddSidebar({
   sections,
   openLabel,
   closeLabel,
+  open: openProp,
+  onOpenChange,
 }: EditorAddSidebarProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const mobileOpen = openProp ?? internalOpen;
+  const setMobileOpen = onOpenChange ?? setInternalOpen;
 
   return (
     <>
       {/* Persistent rail — only on wide-enough viewports that it fits in the natural gutter
           beside the centered editor panel without costing it any width. Not part of the editor's
           own flex layout. */}
-      <aside className="fixed inset-y-0 end-0 z-20 hidden w-64 flex-col border-s border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm min-[1920px]:flex dark:border-gray-800 dark:bg-gray-900/95">
+      <aside className="fixed inset-y-0 end-0 z-20 hidden w-64 flex-col border-s border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm min-[1440px]:flex dark:border-gray-800 dark:bg-gray-900/95">
         <div className="border-b border-gray-100 px-3 py-3 text-xs font-semibold text-gray-500 dark:border-gray-800 dark:text-gray-400">
           {title}
         </div>
@@ -130,7 +138,7 @@ export function EditorAddSidebar({
         <button
           onClick={() => setMobileOpen(true)}
           title={openLabel}
-          className="fixed end-4 bottom-6 z-20 inline-flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-indigo-600 text-white shadow-lg min-[1920px]:hidden dark:border-gray-800"
+          className="fixed end-4 bottom-6 z-20 inline-flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-indigo-600 text-white shadow-lg min-[1440px]:hidden dark:border-gray-800"
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -138,13 +146,13 @@ export function EditorAddSidebar({
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 min-[1920px]:hidden"
+          className="fixed inset-0 z-30 bg-black/40 min-[1440px]:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 end-0 z-40 flex w-72 flex-col bg-white shadow-lg transition-transform duration-200 ease-in-out min-[1920px]:hidden dark:bg-gray-900 ${
+        className={`fixed inset-y-0 end-0 z-40 flex w-72 flex-col bg-white shadow-lg transition-transform duration-200 ease-in-out min-[1440px]:hidden dark:bg-gray-900 ${
           mobileOpen ? 'translate-x-0' : 'translate-x-full rtl:-translate-x-full'
         }`}
       >

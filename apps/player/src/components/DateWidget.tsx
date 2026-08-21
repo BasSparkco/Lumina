@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useNow } from '../lib/useNow';
 
 interface Props {
   timezone?: string;
@@ -7,15 +7,10 @@ interface Props {
 }
 
 export default function DateWidget({ timezone, format = 'long', lang = 'en' }: Props) {
-  const [now, setNow] = useState(() => new Date());
+  // The date only flips at midnight, but polling once a minute means a long-lived screen never
+  // shows a stale date without needing a full reload to notice the day changed.
+  const now = useNow(60_000);
   const isRtl = lang === 'ar';
-
-  useEffect(() => {
-    // The date only flips at midnight, but polling once a minute means a long-lived screen never
-    // shows a stale date without needing a full reload to notice the day changed.
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
-  }, []);
 
   const date = now.toLocaleDateString(isRtl ? 'ar' : 'en-US', {
     weekday: format === 'long' ? 'long' : undefined,

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { ThemeProvider, themeInitScript } from '@/context/ThemeContext';
 import { QueryProvider } from '@/context/QueryProvider';
 import { AuthProvider } from '@/context/AuthContext';
-import '@/lib/fontImports';
+import { AppToaster } from '@/components/AppToaster';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -26,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="dark:bg-gray-950">
         <ThemeProvider>
+          <AppToaster />
           <QueryProvider>
             <AuthProvider>{children}</AuthProvider>
           </QueryProvider>

@@ -1,10 +1,12 @@
 'use client';
 import { useState } from 'react';
+import NextImage from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid, Palette, Search } from 'lucide-react';
-import { screensApi, playlistsApi, layoutsApi, themesApi, orgApi, type Screen, type StreamingType, type PlaylistSummary, type Layout, type Theme } from '@/lib/api';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid, Palette, Search, Navigation } from 'lucide-react';
+import { screensApi, playlistsApi, layoutsApi, themesApi, orgApi, assetsApi, wayfindingApi, type Screen, type StreamingType, type PlaylistSummary, type Layout, type Theme } from '@/lib/api';
+import { PoiMapEditor } from '@/components/PoiMapEditor';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
@@ -138,6 +140,160 @@ function PrayerPanel({ screen }: { screen: Screen }) {
   );
 }
 
+// The kiosk's floor + "you are here" pin — kept inline on Screens (not only reachable from the
+// Wayfinding section) the same way asset/playlist/layout/theme pickers already are, since a
+// screen's own content binding is something you configure right where the screen lives.
+function KioskLocationPanel({ screen }: { screen: Screen }) {
+  const qc = useQueryClient();
+  const { canEditContent } = usePermissions();
+  const t = useTranslations('screens');
+  const { data: buildings = [] } = useQuery({ queryKey: ['buildings'], queryFn: wayfindingApi.listBuildings });
+  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+  const [floorId, setFloorId] = useState(screen.kioskLocation?.floorId ?? '');
+
+  const { data: pois = [] } = useQuery({
+    queryKey: ['pois', floorId],
+    queryFn: () => wayfindingApi.listPois(floorId),
+    enabled: !!floorId,
+  });
+
+  const setLocationMut = useMutation({
+    mutationFn: ({ x, y }: { x: number; y: number }) => screensApi.setKioskLocation(screen.id, floorId, x, y),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['screens'] }),
+  });
+  const clearMut = useMutation({
+    mutationFn: () => screensApi.clearKioskLocation(screen.id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['screens'] }),
+  });
+
+  const selectedFloor = buildings.flatMap(b => b.floors.map(f => ({ ...f, buildingName: b.name }))).find(f => f.id === floorId);
+  const floorPlanUrl = selectedFloor?.floorPlanAssetId
+    ? (assets.find(a => a.id === selectedFloor.floorPlanAssetId)?.url ?? null)
+    : null;
+  const activePin = floorId === screen.kioskLocation?.floorId && screen.kioskLocation ? { x: screen.kioskLocation.x, y: screen.kioskLocation.y } : null;
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300 font-medium text-xs">
+          <Navigation className="w-3.5 h-3.5" /> {t('kiosk.floor')}
+        </div>
+        {screen.kioskLocation && canEditContent && (
+          <button onClick={() => clearMut.mutate()} disabled={clearMut.isPending}
+            className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-500">
+            {t('kiosk.clear')}
+          </button>
+        )}
+      </div>
+
+      {buildings.length === 0 ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500 py-2">{t('kiosk.noBuildings')}</p>
+      ) : (
+        <>
+          <select
+            value={floorId} disabled={!canEditContent}
+            onChange={e => setFloorId(e.target.value)}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50 mb-2">
+            <option value="">{t('kiosk.noFloor')}</option>
+            {buildings.map(b => (
+              <optgroup key={b.id} label={b.name}>
+                {b.floors.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </optgroup>
+            ))}
+          </select>
+
+          {floorId && (
+            <>
+              {!floorPlanUrl && <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">{t('kiosk.noFloorPlan')}</p>}
+              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('kiosk.location')}</label>
+              <PoiMapEditor
+                imageUrl={floorPlanUrl}
+                pins={pois.map(p => ({ id: p.id, x: p.x, y: p.y, color: p.category.color, label: p.name }))}
+                activePin={activePin}
+                onActivePinChange={(x, y) => setLocationMut.mutate({ x, y })}
+                disabled={!canEditContent}
+              />
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Idle/attract-loop content (Phase 7.2) — reuses Playlist/Theme, no new content model. Only
+// rendered once a kiosk floor/pin is set (see the ScreensPage call site below): the backend
+// rejects setting attract content before a KioskLocation row exists, so hiding the picker until
+// then avoids a picker the first save would just 404 out of.
+function KioskAttractContentPanel({ screen }: { screen: Screen }) {
+  const qc = useQueryClient();
+  const { canEditContent } = usePermissions();
+  const t = useTranslations('screens');
+  const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
+  const { data: themes = [] } = useQuery({ queryKey: ['themes'], queryFn: themesApi.list });
+
+  // Which selector is showing — independent of what's actually saved, so switching tabs to look
+  // around doesn't itself clear the other field; only picking an option does that (the backend
+  // already clears the other field server-side when one is set, so there's nothing to do here
+  // beyond deciding which dropdown to render).
+  const [tab, setTab] = useState<'PLAYLIST' | 'THEME'>(screen.kioskLocation?.attractThemeId ? 'THEME' : 'PLAYLIST');
+
+  const setPlaylistMut = useMutation({
+    mutationFn: (playlistId: string | null) => screensApi.setKioskAttractPlaylist(screen.id, playlistId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['screens'] }),
+  });
+  const setThemeMut = useMutation({
+    mutationFn: (themeId: string | null) => screensApi.setKioskAttractTheme(screen.id, themeId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['screens'] }),
+  });
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-1 text-gray-600 dark:text-gray-300 font-medium text-xs">
+        <Palette className="w-3.5 h-3.5" /> {t('kiosk.attract.title')}
+      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{t('kiosk.attract.hint')}</p>
+
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <button
+          onClick={() => setTab('PLAYLIST')}
+          className={`text-xs py-1 rounded font-medium ${tab === 'PLAYLIST' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+        >
+          {t('kiosk.attract.playlist')}
+        </button>
+        <button
+          onClick={() => setTab('THEME')}
+          className={`text-xs py-1 rounded font-medium ${tab === 'THEME' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+        >
+          {t('kiosk.attract.theme')}
+        </button>
+      </div>
+
+      {tab === 'PLAYLIST' ? (
+        <select
+          value={screen.kioskLocation?.attractPlaylistId ?? ''}
+          disabled={!canEditContent}
+          onChange={e => setPlaylistMut.mutate(e.target.value || null)}
+          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50"
+        >
+          <option value="">{t('kiosk.attract.noneOption')}</option>
+          {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      ) : (
+        <select
+          value={screen.kioskLocation?.attractThemeId ?? ''}
+          disabled={!canEditContent}
+          onChange={e => setThemeMut.mutate(e.target.value || null)}
+          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50"
+        >
+          <option value="">{t('kiosk.attract.noneOption')}</option>
+          {themes.map(th => <option key={th.id} value={th.id}>{th.name}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}
+
 function ScreenshotPanel({ screen }: { screen: Screen }) {
   const qc = useQueryClient();
   const { canEditContent } = usePermissions();
@@ -167,7 +323,9 @@ function ScreenshotPanel({ screen }: { screen: Screen }) {
       </div>
       {screen.screenshotUrl ? (
         <>
-          <img src={screen.screenshotUrl} alt={t('screenshot.title')} className="w-full rounded aspect-video object-cover bg-black" />
+          <div className="relative w-full aspect-video rounded overflow-hidden bg-black">
+            <NextImage src={screen.screenshotUrl} alt={t('screenshot.title')} fill sizes="400px" className="object-cover" />
+          </div>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             {t('screenshot.capturedAt', { when: formatDateTime(screen.screenshotUpdatedAt!, dateFormat) })}
           </p>
@@ -262,7 +420,7 @@ export default function ScreensPage() {
   const t = useTranslations('screens');
   const tc = useTranslations('common');
   const ta = useTranslations('auditLog');
-  const { data: screens = [], isLoading } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
+  const { data: screens = [], isLoading, isFetching } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
   const { data: currentPlan = 'FREE' } = useQuery({ queryKey: ['billingPlan'], queryFn: billingApi.getCurrentPlan });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: layouts = [] } = useQuery({ queryKey: ['layouts'], queryFn: layoutsApi.list });
@@ -291,6 +449,7 @@ export default function ScreensPage() {
   const [publishedMessage, setPublishedMessage] = useState('');
   const [namingWarningScreen, setNamingWarningScreen] = useState<Screen | null>(null);
   const [search, setSearch] = useState('');
+  const [showUnpaired, setShowUnpaired] = useState(false);
 
   const pairMut = useMutation({
     mutationFn: () => screensApi.pair(pairCode.trim().toUpperCase()),
@@ -560,6 +719,7 @@ export default function ScreensPage() {
   // its name/history/settings), but it's no longer a screen anyone here is managing day to
   // day — hide it until something re-pairs into it.
   const pairedScreens = screens.filter(s => s.paired);
+  const unpairedScreens = screens.filter(s => !s.paired);
   const groupFilteredScreens = activeGroupId ? pairedScreens.filter(s => groupAssignments[s.id] === activeGroupId) : pairedScreens;
   const visibleScreens = groupFilteredScreens.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
   const screenLimit = planLimit(currentPlan);
@@ -572,21 +732,30 @@ export default function ScreensPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
         </div>
-        {canEditContent && (
-          atScreenLimit ? (
-            <button
-              onClick={() => canManageBilling && router.push(`/${locale}/billing`)}
-              title={canManageBilling ? undefined : t('limitReachedContactAdmin')}
-              className="flex items-center gap-2 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-200 dark:hover:bg-amber-900">
-              <AlertTriangle className="w-4 h-4" /> {t('limitReached', { limit: screenLimit })}
-            </button>
-          ) : (
-            <button onClick={() => { setShowPair(true); setPairError(''); }}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
-              <Plus className="w-4 h-4" /> {t('pairScreen')}
-            </button>
-          )
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void qc.invalidateQueries({ queryKey: ['screens'] })}
+            disabled={isFetching}
+            title={t('refresh')}
+            className="flex items-center gap-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 px-3 py-2 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
+          </button>
+          {canEditContent && (
+            atScreenLimit ? (
+              <button
+                onClick={() => canManageBilling && router.push(`/${locale}/billing`)}
+                title={canManageBilling ? undefined : t('limitReachedContactAdmin')}
+                className="flex items-center gap-2 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-200 dark:hover:bg-amber-900">
+                <AlertTriangle className="w-4 h-4" /> {t('limitReached', { limit: screenLimit })}
+              </button>
+            ) : (
+              <button onClick={() => { setShowPair(true); setPairError(''); }}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+                <Plus className="w-4 h-4" /> {t('pairScreen')}
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {pairedScreens.length > 0 && (
@@ -781,9 +950,9 @@ export default function ScreensPage() {
 
               <div>
                 <label className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.label')}</label>
-                <div className="grid grid-cols-4 gap-1">
-                  {(['ASSET', 'PLAYLIST', 'LAYOUT', 'THEME'] as const).map(st => {
-                    const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : st === 'LAYOUT' ? LayoutGrid : Palette;
+                <div className="grid grid-cols-5 gap-1">
+                  {(['ASSET', 'PLAYLIST', 'LAYOUT', 'THEME', 'WAYFINDING'] as const).map(st => {
+                    const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : st === 'LAYOUT' ? LayoutGrid : st === 'THEME' ? Palette : Navigation;
                     return (
                       <button key={st} type="button" disabled={!canEditContent}
                         onClick={() => streamingTypeMut.mutate({ id: screen.id, streamingType: st })}
@@ -847,6 +1016,9 @@ export default function ScreensPage() {
                   </select>
                 </div>
               )}
+
+              {screen.streamingType === 'WAYFINDING' && <KioskLocationPanel screen={screen} />}
+              {screen.streamingType === 'WAYFINDING' && screen.kioskLocation && <KioskAttractContentPanel screen={screen} />}
 
               {/* Timezone — collapsible, and only relevant when something actually consults it:
                   Playlist mode's schedule rules, or Layout mode's prayer/weather zones. */}
@@ -1010,6 +1182,47 @@ export default function ScreensPage() {
           );
         })}
       </div>
+
+      {/* Unpaired screens — kept server-side after Unpair so re-pairing the same device lands
+          back on its name/history/settings, but that means they'd otherwise accumulate forever
+          with no way to see or clean them up. Collapsed by default since day-to-day management
+          only cares about the paired list above. */}
+      {unpairedScreens.length > 0 && (
+        <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-4">
+          <button
+            onClick={() => setShowUnpaired(v => !v)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+            <Unplug className="w-4 h-4" />
+            {showUnpaired
+              ? t('unpairedSection.hide', { count: unpairedScreens.length })
+              : t('unpairedSection.show', { count: unpairedScreens.length })}
+          </button>
+          {showUnpaired && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-3 max-w-2xl">{t('unpairedSection.hint')}</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {unpairedScreens.map(screen => (
+                  <div key={screen.id} className="flex items-center justify-between gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{screen.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {screen.lastSeenAt ? t('lastSeen', { when: formatDateTime(screen.lastSeenAt, dateFormat) }) : t('neverSeen')}
+                      </p>
+                    </div>
+                    {canEditContent && (
+                      <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(screen); }}
+                        title={t('deleteTitle')} aria-label={t('deleteTitle')}
+                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

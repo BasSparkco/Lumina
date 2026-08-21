@@ -1,6 +1,7 @@
+import type { PrayerMethod } from '@lumina/prayer';
 import type { PlayerState } from '../lib/api';
 import Splash from './Splash';
-import PrayerZoneWidget, { type PrayerMethod } from './PrayerZoneWidget';
+import PrayerZoneWidget from './PrayerZoneWidget';
 import WeatherWidget from './WeatherWidget';
 import CurrencyWidget from './CurrencyWidget';
 import TickerWidget from './TickerWidget';

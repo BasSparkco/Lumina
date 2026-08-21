@@ -1,12 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@lumina/db';
 import { ThemeInputSchema } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 import type { ThemeDto } from './dto/theme.dto';
 
 @Injectable()
 export class ThemesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orgScoped: OrgScopedService,
+  ) {}
 
   private validate(dto: ThemeDto) {
     const result = ThemeInputSchema.safeParse({
@@ -34,11 +38,12 @@ export class ThemesService {
   }
 
   async findOne(orgId: string, id: string) {
-    const theme = await this.prisma.theme.findFirst({
-      where: { id, OR: [{ organizationId: null }, { organizationId: orgId }] },
-    });
-    if (!theme) throw new NotFoundException('Theme not found');
-    return theme;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.theme.findFirst({
+        where: { id, OR: [{ organizationId: null }, { organizationId: orgId }] },
+      }),
+      'Theme not found',
+    );
   }
 
   async create(orgId: string, dto: ThemeDto) {
@@ -91,8 +96,13 @@ export class ThemesService {
   }
 
   async remove(orgId: string, id: string) {
-    const theme = await this.prisma.theme.findFirst({ where: { id, organizationId: orgId } });
-    if (!theme) throw new NotFoundException('Theme not found');
+    // Deliberately not findOne's OR-preset lookup — a preset (organizationId: null) must never be
+    // deletable, so this re-checks strict org ownership rather than reusing the broader visibility
+    // query above.
+    await this.orgScoped.assertOwns(
+      () => this.prisma.theme.findFirst({ where: { id, organizationId: orgId } }),
+      'Theme not found',
+    );
 
     const screenCount = await this.prisma.screen.count({ where: { themeId: id } });
     if (screenCount > 0) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useNow } from '../lib/useNow';
 
 interface Props {
   timezone?: string;
@@ -8,13 +8,8 @@ interface Props {
 }
 
 export default function TimeWidget({ timezone, hour12 = true, showSeconds = false, lang = 'en' }: Props) {
-  const [now, setNow] = useState(() => new Date());
+  const now = useNow(1000);
   const isRtl = lang === 'ar';
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const time = now.toLocaleTimeString(isRtl ? 'ar' : 'en-US', {
     hour: '2-digit',

@@ -1,11 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 import type { CreateLayoutDto } from './dto/create-layout.dto';
 
 @Injectable()
 export class LayoutsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orgScoped: OrgScopedService,
+  ) {}
 
   private readonly zonesInclude = {
     zones: {
@@ -26,12 +30,16 @@ export class LayoutsService {
         throw new BadRequestException(`Zone "${z.name}" can't play both a playlist and an asset — pick one.`);
       }
       if (z.playlistId) {
-        const playlist = await this.prisma.playlist.findFirst({ where: { id: z.playlistId, organizationId: orgId } });
-        if (!playlist) throw new NotFoundException(`Playlist not found for zone "${z.name}"`);
+        await this.orgScoped.assertOwns(
+          () => this.prisma.playlist.findFirst({ where: { id: z.playlistId, organizationId: orgId } }),
+          `Playlist not found for zone "${z.name}"`,
+        );
       }
       if (z.assetId) {
-        const asset = await this.prisma.asset.findFirst({ where: { id: z.assetId, organizationId: orgId } });
-        if (!asset) throw new NotFoundException(`Asset not found for zone "${z.name}"`);
+        const asset = await this.orgScoped.assertOwns(
+          () => this.prisma.asset.findFirst({ where: { id: z.assetId, organizationId: orgId } }),
+          `Asset not found for zone "${z.name}"`,
+        );
         if (asset.status !== 'READY') throw new BadRequestException(`Asset for zone "${z.name}" isn't ready yet`);
       }
     }
@@ -81,28 +89,33 @@ export class LayoutsService {
   }
 
   async findOne(orgId: string, id: string) {
-    const layout = await this.prisma.layout.findFirst({
-      where: { id, organizationId: orgId },
-      include: this.zonesInclude,
-    });
-    if (!layout) throw new NotFoundException('Layout not found');
-    return layout;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.layout.findFirst({
+        where: { id, organizationId: orgId },
+        include: this.zonesInclude,
+      }),
+      'Layout not found',
+    );
   }
 
   async update(orgId: string, id: string, dto: CreateLayoutDto) {
     await this.findOne(orgId, id);
     await this.validateZones(orgId, dto.zones);
 
-    // Replace all zones atomically
-    await this.prisma.zone.deleteMany({ where: { layoutId: id } });
-
-    return this.prisma.layout.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        zones: { create: dto.zones.map(z => this.zoneCreateData(z)) },
-      },
-      include: this.zonesInclude,
+    // Replace all zones atomically — deleteMany and the create-via-update below used to run as
+    // two independent statements with nothing tying them together. If the create step failed
+    // (a constraint error, a dropped connection), the layout was left with zero zones and every
+    // screen assigned to it blanked instantly until someone re-saved it.
+    return this.prisma.$transaction(async tx => {
+      await tx.zone.deleteMany({ where: { layoutId: id } });
+      return tx.layout.update({
+        where: { id },
+        data: {
+          name: dto.name,
+          zones: { create: dto.zones.map(z => this.zoneCreateData(z)) },
+        },
+        include: this.zonesInclude,
+      });
     });
   }
 

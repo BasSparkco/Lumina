@@ -1,12 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScreenGateway } from '../ws/screen.gateway';
+import { OrgScopedService } from '../../common/org-scoped.service';
 
 @Injectable()
 export class ScreenGroupsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: ScreenGateway,
+    private readonly orgScoped: OrgScopedService,
   ) {}
 
   async create(orgId: string, name: string) {
@@ -22,12 +24,13 @@ export class ScreenGroupsService {
   }
 
   async findOne(orgId: string, id: string) {
-    const group = await this.prisma.screenGroup.findFirst({
-      where: { id, organizationId: orgId },
-      include: { screens: { select: { id: true, name: true, status: true } } },
-    });
-    if (!group) throw new NotFoundException('Screen group not found');
-    return group;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.screenGroup.findFirst({
+        where: { id, organizationId: orgId },
+        include: { screens: { select: { id: true, name: true, status: true } } },
+      }),
+      'Screen group not found',
+    );
   }
 
   async rename(orgId: string, id: string, name: string) {
@@ -61,8 +64,9 @@ export class ScreenGroupsService {
   }
 
   private async assertOwns(orgId: string, id: string) {
-    const group = await this.prisma.screenGroup.findFirst({ where: { id, organizationId: orgId } });
-    if (!group) throw new NotFoundException('Screen group not found');
-    return group;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.screenGroup.findFirst({ where: { id, organizationId: orgId } }),
+      'Screen group not found',
+    );
   }
 }

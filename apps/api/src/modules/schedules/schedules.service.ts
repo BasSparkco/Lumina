@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgScopedService } from '../../common/org-scoped.service';
 import type { CreateScheduleDto } from './dto/create-schedule.dto';
 import type { Schedule } from '@lumina/db';
 
 @Injectable()
 export class SchedulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orgScoped: OrgScopedService,
+  ) {}
 
   async create(orgId: string, dto: CreateScheduleDto) {
     // Verify screen + playlist belong to this org
@@ -38,12 +42,13 @@ export class SchedulesService {
   }
 
   async findOne(orgId: string, id: string) {
-    const s = await this.prisma.schedule.findFirst({
-      where: { id, organizationId: orgId },
-      include: { playlist: { select: { id: true, name: true } }, screen: { select: { id: true, name: true } } },
-    });
-    if (!s) throw new NotFoundException('Schedule not found');
-    return s;
+    return this.orgScoped.assertOwns(
+      () => this.prisma.schedule.findFirst({
+        where: { id, organizationId: orgId },
+        include: { playlist: { select: { id: true, name: true } }, screen: { select: { id: true, name: true } } },
+      }),
+      'Schedule not found',
+    );
   }
 
   async update(orgId: string, id: string, dto: CreateScheduleDto) {
@@ -120,12 +125,16 @@ export class SchedulesService {
   }
 
   private async assertScreenOwned(orgId: string, screenId: string) {
-    const screen = await this.prisma.screen.findFirst({ where: { id: screenId, organizationId: orgId } });
-    if (!screen) throw new NotFoundException('Screen not found');
+    await this.orgScoped.assertOwns(
+      () => this.prisma.screen.findFirst({ where: { id: screenId, organizationId: orgId } }),
+      'Screen not found',
+    );
   }
 
   private async assertPlaylistOwned(orgId: string, playlistId: string) {
-    const pl = await this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } });
-    if (!pl) throw new NotFoundException('Playlist not found');
+    await this.orgScoped.assertOwns(
+      () => this.prisma.playlist.findFirst({ where: { id: playlistId, organizationId: orgId } }),
+      'Playlist not found',
+    );
   }
 }

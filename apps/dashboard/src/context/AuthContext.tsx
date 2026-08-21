@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { authApi, clearToken, getToken, loginPath, setToken, type User } from '@/lib/api';
 
 interface AuthCtx {
@@ -43,7 +43,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') window.location.replace(loginPath());
   }, []);
 
-  return <Ctx.Provider value={{ user, loading, login, register, logout }}>{children}</Ctx.Provider>;
+  // useAuth() is consumed across a dozen pages including the large editor components — without
+  // this, a fresh object literal here re-renders every one of them whenever AuthProvider
+  // re-renders for any reason, not just an actual user/loading change.
+  const value = useMemo(() => ({ user, loading, login, register, logout }), [user, loading, login, register, logout]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

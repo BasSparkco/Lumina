@@ -13,9 +13,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { memoryStorage } from 'multer';
-import type { AssetCategory, TextSize } from '@lumina/db';
+import type { AssetCategory, TextSize, TickerDirection } from '@lumina/db';
 import { FONT_IDS } from '@lumina/types';
 import { AssetsService } from './assets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -26,6 +26,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 
 const TEXT_SIZES = ['SMALL', 'MEDIUM', 'LARGE', 'XLARGE'] as const;
+const TICKER_DIRECTIONS = ['LEFT_TO_RIGHT', 'RIGHT_TO_LEFT', 'TOP_TO_BOTTOM', 'BOTTOM_TO_TOP'] as const;
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 
 class RenameAssetDto { @IsString() name!: string; }
@@ -36,6 +37,10 @@ class TextStyleDto {
   @IsOptional() @Matches(HEX_COLOR, { message: 'textColor must be a hex color like #RRGGBB' }) textColor?: string;
   @IsOptional() @IsIn(TEXT_SIZES) textSize?: TextSize;
   @IsOptional() @Matches(HEX_COLOR, { message: 'textBackgroundColor must be a hex color like #RRGGBB' }) textBackgroundColor?: string;
+  @IsOptional() @IsBoolean() textTickerEnabled?: boolean;
+  @IsOptional() @IsIn(TICKER_DIRECTIONS) textTickerDirection?: TickerDirection;
+  @IsOptional() @IsInt() @Min(10) @Max(600) textTickerSpeed?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100) textTickerCrossOffset?: number;
 }
 
 class CreateTextAssetDto extends TextStyleDto {
@@ -97,6 +102,10 @@ export class AssetsController {
       textColor: dto.textColor,
       textSize: dto.textSize,
       textBackgroundColor: dto.textBackgroundColor,
+      textTickerEnabled: dto.textTickerEnabled,
+      textTickerDirection: dto.textTickerDirection,
+      textTickerSpeed: dto.textTickerSpeed,
+      textTickerCrossOffset: dto.textTickerCrossOffset,
     });
   }
 

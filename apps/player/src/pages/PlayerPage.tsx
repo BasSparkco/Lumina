@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { shapeClipStyle } from '@lumina/types';
+import type { PrayerMethod } from '@lumina/prayer';
 import { api, ApiError, type Playlist, type PlayerState, type Zone } from '../lib/api';
 import { cache } from '../lib/db';
 import { connectSocket, disconnectSocket } from '../lib/socket';
@@ -9,13 +10,16 @@ import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/sch
 import { usePlayerStore } from '../store/playerStore';
 import ZonePlayer from '../components/ZonePlayer';
 import ThemeRenderer from '../components/ThemeRenderer';
-import PrayerZoneWidget, { type PrayerMethod } from '../components/PrayerZoneWidget';
+import PrayerZoneWidget from '../components/PrayerZoneWidget';
 import WeatherWidget from '../components/WeatherWidget';
 import CurrencyWidget from '../components/CurrencyWidget';
 import TickerWidget from '../components/TickerWidget';
 import TimeWidget from '../components/TimeWidget';
 import DateWidget from '../components/DateWidget';
 import QrCodeWidget from '../components/QrCodeWidget';
+import WayfindingDirectoryBoard from '../components/WayfindingDirectoryBoard';
+import WayfindingKioskMap from '../components/WayfindingKioskMap';
+import WayfindingEvacuationView from '../components/WayfindingEvacuationView';
 import Splash from '../components/Splash';
 
 const HEARTBEAT_INTERVAL = 30_000;
@@ -57,7 +61,9 @@ function zoneHasContent(zone: Zone, state: PlayerState): boolean {
 // its power window isn't missing content, so neither should flip the badge on.
 function computeHasContent(state: PlayerState, activePlaylist: Playlist | null): boolean {
   if (state.emergencyActive && state.emergencyPlaylist) return state.emergencyPlaylist.items.length > 0;
+  if (state.emergencyActive && state.wayfinding) return true; // evacuation view always renders something
   if (state.layout) return state.layout.zones.some(z => zoneHasContent(z, state));
+  if (state.wayfinding) return state.wayfinding.pois.length > 0;
   return !!activePlaylist && activePlaylist.items.length > 0;
 }
 
@@ -79,6 +85,31 @@ async function captureAndUploadScreenshot() {
   }
 }
 
+// Evaluated once per render of a wayfinding screen, not cached — a kiosk isn't expected to
+// switch between touch and non-touch hardware mid-session, but re-checking is free either way.
+function isTouchCapable() {
+  return typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
+}
+
+// Offline resilience for wayfinding (Phase 7.2) — the touch kiosk lets a visitor jump to any
+// floor and the directory board rotates through all of them, but the map/board only ever
+// *renders* one floor's plan at a time, so every other floor's image (and every POI icon) would
+// otherwise stay unfetched — and thus uncached — until a visitor happens to browse there while
+// online. Firing an out-of-band `Image` load for everything up front gets it into the browser's
+// HTTP cache and the service worker's `media-cache` runtime-caching rule (see vite.config.ts)
+// the same way a normal `<img>` render would, without waiting on the user to visit each floor.
+function prefetchWayfindingImages(wayfinding: PlayerState['wayfinding']) {
+  if (!wayfinding) return;
+  const urls = [
+    ...wayfinding.floors.map(f => f.floorPlanUrl),
+    ...wayfinding.pois.map(p => p.iconUrl),
+  ].filter((url): url is string => !!url);
+  for (const url of urls) {
+    const img = new Image();
+    img.src = url;
+  }
+}
+
 export default function PlayerPage() {
   const { token, unpair, forget } = usePlayerStore();
   const navigate = useNavigate();
@@ -94,6 +125,18 @@ export default function PlayerPage() {
   // only ever see the `activePlaylist`/`state` values from that first render.
   const hasContentRef = useRef(false);
 
+  // A revoked credential — the screen row is gone (404), or it still exists but is no longer
+  // paired (401: unpaired/re-paired-elsewhere while this player was offline/backgrounded and
+  // missed the live `unpair`/`deleted` socket push below). Either way this is definitive, not a
+  // network hiccup: there's no pairingCode to resume into since that only ever arrives over the
+  // socket, so the only way back is a full re-pair — drop credentials and cached content and go
+  // request a new pairing code, instead of looping stale content (or a dead token) forever.
+  const handleRevoked = useCallback(async () => {
+    await cache.clear();
+    forget();
+    void navigate('/');
+  }, [forget, navigate]);
+
   const loadState = useCallback(async () => {
     try {
       const fresh = await api.getState();
@@ -101,14 +144,8 @@ export default function PlayerPage() {
       setState(fresh);
       return fresh;
     } catch (err) {
-      // A 404 here is definitive — the screen row is gone (deleted while this player was
-      // offline, or reconnecting after) — not a network hiccup, so don't fall back to cached
-      // content forever; drop credentials and go re-pair as a new screen, same as the
-      // `deleted` websocket command below handles for a player that was online at the time.
-      if (err instanceof ApiError && err.status === 404) {
-        await cache.clear();
-        forget();
-        void navigate('/');
+      if (err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+        await handleRevoked();
         return null;
       }
       const cached = await cache.getState();
@@ -118,7 +155,7 @@ export default function PlayerPage() {
       setLoaded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handleRevoked]);
 
   // Schedule resolution: pick the right playlist from schedule rules
   const resolvePlaylist = useCallback((s: PlayerState): Playlist | null => {
@@ -129,6 +166,7 @@ export default function PlayerPage() {
     if (s.streamingType === 'ASSET') return s.asset;
     if (s.theme) return null; // theme mode — elements handle their own media
     if (s.layout) return null; // layout mode — zones handle their own playlists
+    if (s.wayfinding) return null; // wayfinding mode — directory board renders itself
     const matchedId = resolveSchedule(s.scheduleRules, new Date());
     if (matchedId) {
       const rule = s.scheduleRules.find(r => r.playlistId === matchedId);
@@ -143,6 +181,7 @@ export default function PlayerPage() {
     setActivePlaylist(playlist);
     setPoweredOn(resolvePower(s.powerScheduleRules, new Date()));
     hasContentRef.current = computeHasContent(s, playlist);
+    prefetchWayfindingImages(s.wayfinding);
   }, [resolvePlaylist]);
 
   // Re-evaluate schedule + power window every minute
@@ -166,7 +205,14 @@ export default function PlayerPage() {
     });
 
     heartbeatRef.current = setInterval(async () => {
-      try { await api.heartbeat(currentAssetRef.current, hasContentRef.current); } catch { /* keep playing */ }
+      try {
+        await api.heartbeat(currentAssetRef.current, hasContentRef.current);
+      } catch (err) {
+        // Anything else (network hiccup, transient 5xx) should just keep playing on cached
+        // state — only a 401 (revoked credential) needs to react, and it's the same recovery
+        // as loadState()'s, since a missed unpair leaves no pairingCode to resume into either way.
+        if (err instanceof ApiError && err.status === 401) await handleRevoked();
+      }
     }, HEARTBEAT_INTERVAL);
 
     refreshRef.current = setInterval(async () => {
@@ -238,6 +284,18 @@ export default function PlayerPage() {
     );
   }
 
+  // Fire/evacuation mode (7.4) — same Screen.emergencyActive flag as above, but a wayfinding
+  // kiosk with no explicit emergency playlist chosen gets a purpose-built evacuation-route view
+  // instead of just sitting on its normal directory/map (BuildingsService.setEvacuation is what
+  // flips this flag for every kiosk in a building at once).
+  if (state.emergencyActive && state.wayfinding) {
+    return (
+      <FullscreenContainer>
+        <WayfindingEvacuationView directory={state.wayfinding} />
+      </FullscreenContainer>
+    );
+  }
+
   // Theme mode — styled template (text/images/colors), takes precedence over a plain layout
   if (state.theme) {
     return (
@@ -279,6 +337,21 @@ export default function PlayerPage() {
             />
           </div>
         ))}
+      </FullscreenContainer>
+    );
+  }
+
+  // Wayfinding mode — a real touchscreen gets the interactive pan/zoom/tap kiosk map (Phase
+  // 7.2); a cheap non-touch panel (still a real, supported deployment target per Phase 7.1)
+  // falls back to the passive auto-rotating directory board. No per-screen config needed: the
+  // browser's own touch-capability signal is the right source of truth here, same way the
+  // theme/layout renderers don't need a flag to know what to draw.
+  if (state.wayfinding) {
+    return (
+      <FullscreenContainer>
+        {isTouchCapable()
+          ? <WayfindingKioskMap state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
+          : <WayfindingDirectoryBoard directory={state.wayfinding} />}
       </FullscreenContainer>
     );
   }
