@@ -273,15 +273,24 @@ export class AssetsService {
       include: { _count: { select: { playlistItems: true, screens: true, zones: true } } },
     });
     return assets.map(a => {
-      const inUse = a._count.playlistItems + a._count.screens + a._count.zones > 0;
+      const usageCount = a._count.playlistItems + a._count.screens + a._count.zones;
       // TEXT assets have no real object behind storageKey (see createText) — a "url" built
       // from it would 404, so skip it and let the frontend render textContent instead.
-      if (a.type === 'TEXT') return this.toDto(a, null, undefined, undefined, inUse);
+      if (a.type === 'TEXT') return this.toDto(a, null, undefined, undefined, usageCount);
       const url = this.storage.publicUrl(a.storageKey);
       const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
       const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
-      return this.toDto(a, url, thumbUrl, downloadUrl, inUse);
+      return this.toDto(a, url, thumbUrl, downloadUrl, usageCount);
     });
+  }
+
+  /** Stamps lastUsedAt = now — called when an asset is picked in an editor's "existing asset" picker (Layouts/Themes Add Item), driving that picker's "recently used" sort. */
+  async touch(orgId: string, id: string) {
+    await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      'Asset not found',
+    );
+    await this.prisma.asset.update({ where: { id }, data: { lastUsedAt: new Date() } });
   }
 
   /** Stock assets (organizationId: null) uploaded by us via the seed-library script — every org can browse and copy them, none can edit or delete them. */
@@ -418,11 +427,11 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date; lastUsedAt?: Date | null },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
-    inUse?: boolean,
+    usageCount?: number,
   ) {
     return {
       id: asset.id,
@@ -453,7 +462,9 @@ export class AssetsService {
       downloadUrl: downloadUrl ?? null,
       organizationId: asset.organizationId,
       createdAt: asset.createdAt.toISOString(),
-      inUse,
+      lastUsedAt: asset.lastUsedAt ? asset.lastUsedAt.toISOString() : null,
+      usageCount,
+      inUse: usageCount !== undefined ? usageCount > 0 : undefined,
     };
   }
 }

@@ -141,6 +141,13 @@ export class AssetsController {
     return this.assets.rename(user.orgId, id, dto.name);
   }
 
+  // Called by the editor's "existing asset" picker (Layouts/Themes Add Item) whenever an asset
+  // is picked, so that picker can offer a "recently used" sort.
+  @Post(':id/touch')
+  touch(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.assets.touch(user.orgId, id);
+  }
+
   @Put(':id/audio')
   setAudioEnabled(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetAudioEnabledDto) {
     return this.assets.setAudioEnabled(user.orgId, id, dto.audioEnabled);

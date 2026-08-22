@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload, Clipboard, RefreshCw, Wand2 } from 'lucide-react';
 import { assetsApi } from '@/lib/api';
 import { removeAssetBackground } from '@/lib/backgroundRemoval';
+import { AssetSelect } from './AssetSelect';
 
 type Mode = 'existing' | 'upload' | 'paste';
 
@@ -139,19 +140,7 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
       </div>
 
       {mode === 'existing' && (
-        <select
-          value={value ?? ''}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value || null)}
-          className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-        >
-          <option value="">{placeholder}</option>
-          {options.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+        <AssetSelect assets={options} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} />
       )}
 
       {mode === 'upload' && (

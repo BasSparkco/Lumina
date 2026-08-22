@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search } from 'lucide-react';
 import { playlistsApi, assetsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type Asset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 import { useTranslations } from 'next-intl';
@@ -45,6 +46,10 @@ function PlaylistDetail({ id }: { id: string }) {
   const tAssets = useTranslations('assets');
   const tCrop = useTranslations('cropEditor');
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetSearch, setAssetSearch] = useState('');
+  const [assetSort, setAssetSort] = useState<AssetSortKey>('recentlyAdded');
+  // Empty = every type shown; combines (AND) with search/sort — e.g. "recently used" + IMAGE only.
+  const [assetTypeFilter, setAssetTypeFilter] = useState<Set<Asset['type']>>(new Set());
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const [croppingItemId, setCroppingItemId] = useState<string | null>(null);
 
@@ -82,6 +87,22 @@ function PlaylistDetail({ id }: { id: string }) {
   });
 
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list, enabled: showAssetPicker });
+  const readyAssets = useMemo(() => assets.filter((a: Asset) => a.status === 'READY'), [assets]);
+  const availableAssetTypes = useMemo(() => distinctAssetTypes(readyAssets), [readyAssets]);
+  const pickableAssets = useMemo(() => {
+    const q = assetSearch.trim().toLowerCase();
+    let matched = q ? readyAssets.filter((a) => a.name.toLowerCase().includes(q)) : readyAssets;
+    if (assetTypeFilter.size > 0) matched = matched.filter((a) => assetTypeFilter.has(a.type));
+    return sortAssets(matched, assetSort);
+  }, [readyAssets, assetSearch, assetSort, assetTypeFilter]);
+
+  function toggleAssetType(t: Asset['type']) {
+    setAssetTypeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t); else next.add(t);
+      return next.size === availableAssetTypes.length ? new Set() : next;
+    });
+  }
 
   const addMut = useMutation({
     mutationFn: ({ assetId, dur }: { assetId: string; dur: number }) =>
@@ -95,7 +116,11 @@ function PlaylistDetail({ id }: { id: string }) {
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: [...old.items, created] });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
       void qc.invalidateQueries({ queryKey: ['playlists'] });
+      // Fire-and-forget: drives the "recently used" sort in this and other asset pickers, but a
+      // failed touch shouldn't block or error out an otherwise-successful add.
+      void assetsApi.touch(assetId).then(() => qc.invalidateQueries({ queryKey: ['assets'] })).catch(() => {});
       setShowAssetPicker(false);
+      setAssetSearch('');
     },
   });
 
@@ -210,29 +235,77 @@ function PlaylistDetail({ id }: { id: string }) {
 
       {/* Asset picker modal */}
       {showAssetPicker && canEditContent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAssetPicker(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}>
           <div className="bg-white dark:bg-gray-900 rounded-xl p-5 w-full max-w-lg shadow-xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('pickAsset')}</h2>
+            <div className="flex gap-1.5 mb-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)}
+                  placeholder="Search assets…"
+                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+              </div>
+              <select value={assetSort} onChange={(e) => setAssetSort(e.target.value as AssetSortKey)} title="Sort by"
+                className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                {ASSET_SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+              </select>
+            </div>
+            {availableAssetTypes.length > 1 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                <button type="button" onClick={() => setAssetTypeFilter(new Set())}
+                  className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                    assetTypeFilter.size === 0
+                      ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}>
+                  All
+                </button>
+                {availableAssetTypes.map((ty) => {
+                  const active = assetTypeFilter.size === 0 || assetTypeFilter.has(ty);
+                  return (
+                    <button key={ty} type="button" onClick={() => toggleAssetType(ty)}
+                      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+                        active
+                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                          : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                      }`}>
+                      {TYPE_ICON[ty]} {ASSET_TYPE_LABELS[ty]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="overflow-y-auto flex-1 space-y-1">
-              {assets.filter((a: Asset) => a.status === 'READY').map((a: Asset) => (
+              {pickableAssets.map((a: Asset) => (
                 <button key={a.id} onClick={() => addMut.mutate({ assetId: a.id, dur: defaultDuration })}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
                   {a.thumbnailUrl
                     ? <Image src={a.thumbnailUrl} width={40} height={40} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
                     : <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[a.type]}</div>
                   }
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{a.name}</p>
                     <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[a.type]} {a.type}</p>
                   </div>
-                  {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin ms-auto" />}
+                  <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
+                    {assetSort === 'mostUsed'
+                      ? `${a.usageCount ?? 0}×`
+                      : assetSort === 'recentlyUsed'
+                        ? (a.lastUsedAt ? formatRelativeTime(a.lastUsedAt) : '—')
+                        : assetSort === 'recentlyAdded'
+                          ? formatRelativeTime(a.createdAt)
+                          : ''}
+                  </span>
+                  {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
                 </button>
               ))}
-              {assets.filter((a: Asset) => a.status === 'READY').length === 0 && (
-                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noReadyAssets')}</p>
+              {pickableAssets.length === 0 && (
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
+                  {readyAssets.length === 0 ? t('noReadyAssets') : 'No assets found'}
+                </p>
               )}
             </div>
-            <button onClick={() => setShowAssetPicker(false)}
+            <button onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}
               className="mt-3 w-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
           </div>
         </div>

@@ -227,6 +227,9 @@ export const assetsApi = {
     req<Asset>(`/assets/${id}/audio`, { method: 'PUT', body: JSON.stringify({ audioEnabled }) }),
   remove: (id: string) => req<void>(`/assets/${id}`, { method: 'DELETE' }),
   reprocess: (id: string) => req<Asset>(`/assets/${id}/reprocess`, { method: 'POST' }),
+  // Marks an asset as just-picked in an editor's "existing asset" picker — fire-and-forget,
+  // used to drive that picker's "recently used" sort.
+  touch: (id: string) => req<void>(`/assets/${id}/touch`, { method: 'POST' }),
   createText: (name: string, content: string, style: TextStyle) =>
     req<Asset>('/assets/text', { method: 'POST', body: JSON.stringify({ name, content, ...style }) }),
   updateText: (id: string, dto: { name?: string; content?: string } & Partial<TextStyle>) =>
@@ -448,8 +451,12 @@ export interface Asset {
   hasAudioTrack: boolean; audioEnabled: boolean;
   category: AssetCategory; tags: string[];
   width: number | null; height: number | null; durationSecs: number | null; pageCount: number | null; createdAt: string;
+  // Stamped by assetsApi.touch() whenever this asset is picked in an editor's "existing asset"
+  // picker — null until first picked.
+  lastUsedAt: string | null;
   // Only populated by the "my assets" list endpoint (playlist items + screens + zones
   // referencing it) — other endpoints (library, findOne, rename, etc.) don't compute it.
+  usageCount?: number;
   inUse?: boolean;
 }
 export interface PlaylistItem {

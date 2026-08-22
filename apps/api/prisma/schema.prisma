@@ -342,6 +342,10 @@ model Asset {
   tags         String[]      @default([])
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  // Stamped whenever this asset is picked in an editor's "existing asset" picker (Layouts/Themes
+  // Add Item) — drives the picker's "recently used" sort. Null until first picked; distinct from
+  // createdAt (upload time) and updatedAt (any field edit, e.g. a rename).
+  lastUsedAt   DateTime?
 
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)

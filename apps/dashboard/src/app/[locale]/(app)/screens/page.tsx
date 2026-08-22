@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, FileQuestion, Volume2, MapPin, Image as ImageIcon, ListVideo, LayoutGrid, Palette, Search, Navigation } from 'lucide-react';
-import { screensApi, playlistsApi, layoutsApi, themesApi, orgApi, assetsApi, wayfindingApi, type Screen, type StreamingType, type PlaylistSummary, type Layout, type Theme } from '@/lib/api';
+import { screensApi, playlistsApi, layoutsApi, themesApi, orgApi, assetsApi, wayfindingApi, type Screen, type StreamingType } from '@/lib/api';
 import { PoiMapEditor } from '@/components/PoiMapEditor';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
@@ -974,6 +974,8 @@ export default function ScreensPage() {
                   <AssetPicker
                     value={screen.assetId} disabled={!canEditContent} placeholder={t('none')}
                     onChange={assetId => assetMut.mutate({ id: screen.id, assetId })}
+                    pasteHint={t('pasteImageHint')} pasteError={t('pasteImageError')}
+                    uploadingLabel={t('uploadingImage')} uploadFailedLabel={t('uploadImageFailed')}
                   />
                 </div>
               )}
