@@ -467,7 +467,10 @@ export interface PlaylistItem {
 }
 export type TransitionStyle = 'NONE' | 'CROSSFADE';
 export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
-export interface PlaylistSummary { id: string; name: string; _count: { items: number }; updatedAt: string; }
+export interface PlaylistSummary {
+  id: string; name: string; _count: { items: number }; updatedAt: string;
+  totalDurationSecs: number; totalSizeBytes: number;
+}
 export interface Playlist extends PlaylistSummary {
   items: PlaylistItem[];
   transitionStyle: TransitionStyle; transitionDurationMs: number; playbackOrder: PlaybackOrder;

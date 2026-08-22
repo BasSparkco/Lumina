@@ -19,11 +19,21 @@ export class PlaylistsService {
   }
 
   async list(orgId: string) {
-    return this.prisma.playlist.findMany({
+    const playlists = await this.prisma.playlist.findMany({
       where: { organizationId: orgId },
       orderBy: { updatedAt: 'desc' },
-      include: { _count: { select: { items: true } } },
+      include: {
+        _count: { select: { items: true } },
+        items: { select: { durationSecs: true, asset: { select: { sizeBytes: true } } } },
+      },
     });
+    // The row list only needs the totals, not the items themselves — drop them here so the
+    // frontend's PlaylistSummary type (no `items`) stays honest about what this endpoint returns.
+    return playlists.map(({ items, ...playlist }) => ({
+      ...playlist,
+      totalDurationSecs: items.reduce((sum: number, i: (typeof items)[number]) => sum + i.durationSecs, 0),
+      totalSizeBytes: items.reduce((sum: number, i: (typeof items)[number]) => sum + Number(i.asset.sizeBytes), 0),
+    }));
   }
 
   async findOne(orgId: string, id: string) {

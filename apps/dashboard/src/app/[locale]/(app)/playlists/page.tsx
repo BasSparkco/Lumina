@@ -23,6 +23,15 @@ function formatBytes(b: number) {
   return `${(b / 1024 ** 2).toFixed(1)} MB`;
 }
 
+function formatDuration(totalSecs: number) {
+  if (totalSecs < 60) return `${totalSecs}s`;
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
 const TYPE_ICON: Record<string, React.ReactNode> = {
   IMAGE: <ImageIcon className="w-3.5 h-3.5 text-blue-500" />,
   VIDEO: <Film className="w-3.5 h-3.5 text-purple-500" />,
@@ -740,7 +749,10 @@ export default function PlaylistsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{t('itemCount', { count: pl._count.items })}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    {t('itemCount', { count: pl._count.items })}
+                    {pl._count.items > 0 && ` · ${formatDuration(pl.totalDurationSecs)} · ${formatBytes(pl.totalSizeBytes)}`}
+                  </p>
                 </div>
                 {canEditContent && (
                   <button onClick={e => { e.stopPropagation(); duplicateMut.mutate(pl); }} disabled={duplicateMut.isPending}
