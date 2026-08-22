@@ -290,6 +290,12 @@
     "uploading": "Uploading {progress}%",
     "upload": "Upload",
     "uploadFailed": "Upload failed",
+    "newMenu": {
+      "button": "New",
+      "layout": "Layout",
+      "theme": "Theme",
+      "wayfinding": "Wayfinding"
+    },
     "processingFailed": "Processing failed",
     "retry": "Retry",
     "loading": "Loading assets…",

@@ -1,12 +1,14 @@
 'use client';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
-import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
+import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines, Plus, LayoutTemplate, Palette, MapPin } from 'lucide-react';
 import { assetsApi, type Asset, type TextSize, type AssetCategory, type TickerDirection } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
+import { ContextMenu, type ContextMenuState, type ContextMenuAction } from '@/components/ContextMenu';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
@@ -257,10 +259,13 @@ export default function AssetsPage() {
   const t = useTranslations('assets');
   const tc = useTranslations('common');
   const ta = useTranslations('auditLog');
+  const router = useRouter();
+  const locale = useLocale();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
+  const [newMenu, setNewMenu] = useState<ContextMenuState | null>(null);
   const [videoUploadChoice, setVideoUploadChoice] = useState<{ videoFiles: File[]; otherFiles: File[] } | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -433,6 +438,14 @@ export default function AssetsPage() {
     ]);
   }
 
+  const newMenuActions: ContextMenuAction[] = [
+    { key: 'upload', label: t('upload'), icon: Upload, disabled: uploading, onClick: () => inputRef.current?.click() },
+    { key: 'newText', label: t('newText'), icon: Type, onClick: () => setTextModal('new') },
+    { key: 'layout', label: t('newMenu.layout'), icon: LayoutTemplate, separator: true, onClick: () => router.push(`/${locale}/designer`) },
+    { key: 'theme', label: t('newMenu.theme'), icon: Palette, onClick: () => router.push(`/${locale}/designer?tab=themes`) },
+    { key: 'wayfinding', label: t('newMenu.wayfinding'), icon: MapPin, onClick: () => router.push(`/${locale}/wayfinding`) },
+  ];
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -441,20 +454,26 @@ export default function AssetsPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
         </div>
         {tab === 'mine' && canEditContent && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setTextModal('new')}
-              className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
-              <Type className="w-4 h-4" /> {t('newText')}
-            </button>
-            <button onClick={() => inputRef.current?.click()} disabled={uploading}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
-              {uploading ? <><RefreshCw className="w-4 h-4 animate-spin" /> {t('uploading', { progress })}</> : <><Upload className="w-4 h-4" /> {t('upload')}</>}
+          <div className="flex items-center gap-3">
+            {uploading && (
+              <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {t('uploading', { progress })}
+              </span>
+            )}
+            <button onClick={e => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setNewMenu({ x: rect.left, y: rect.bottom + 4, actions: newMenuActions });
+            }}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+              <Plus className="w-4 h-4" /> {t('newMenu.button')}
             </button>
             <input ref={inputRef} type="file" multiple accept="image/*,video/*,audio/*,application/pdf,.ppt,.pptx,.doc,.docx" className="hidden"
               onChange={e => { void handleFiles(e.target.files); }} />
           </div>
         )}
       </div>
+
+      <ContextMenu state={newMenu} onClose={() => setNewMenu(null)} />
 
       {videoUploadChoice && (
         <VideoUploadChoiceModal

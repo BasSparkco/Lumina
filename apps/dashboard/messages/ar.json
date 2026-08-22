@@ -290,6 +290,12 @@
     "uploading": "جارٍ الرفع {progress}%",
     "upload": "رفع",
     "uploadFailed": "فشل الرفع",
+    "newMenu": {
+      "button": "جديد",
+      "layout": "تخطيط",
+      "theme": "سمة",
+      "wayfinding": "إرشاد"
+    },
     "processingFailed": "فشلت المعالجة",
     "retry": "إعادة المحاولة",
     "loading": "جارٍ تحميل الأصول…",
