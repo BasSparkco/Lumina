@@ -102,10 +102,12 @@ A failed asset rename, playlist reorder, schedule create, or POI edit just resol
 
 A user who only ever sees the default font still downloads all 43 families' CSS + woff2 on first load of any route, including the dashboard home and billing.
 
-### ⬜ H7. Editor components mix canvas state with everything else
+### ✅ H7. Editor components mix canvas state with everything else
 **Dashboard** — `ThemesSection.tsx` (4,101 lines, 47 `useState`), `LayoutsSection.tsx` (1,892 lines, 22 `useState`)
 
 Every mousemove tick during a drag re-renders the entire tree — sidebar, element list, color pickers, all panels — not just the dragged element.
+
+**Resolution:** Split the interactive preview canvas out of both editors into standalone `LayoutCanvasPanel.tsx` / `ThemeCanvasPanel.tsx` components (canvas render, drag/resize/rotate math, and — for themes — the raster paint/brush layer and inline text editing all moved with it), leaving `LayoutsSection.tsx`/`ThemesSection.tsx` owning only the palette/typography editors, element-card list, and API mutations. `ThemesSection.tsx` dropped from 4,067 to 2,563 lines; `ThemeCanvasPanel.tsx` is 1,558. A mousemove/pointermove tick during drag, resize, rotate, or a paint stroke now only re-renders the canvas panel. Verified in-browser: selection, drag/resize, right-click context menu actions, zoom, inline text edit, and the full paint toolbar (arm → draw → commit) all work with zero console errors post-split.
 
 ### ✅ H8. Hydration mismatch on the theme toggle
 **Dashboard** — `apps/dashboard/src/context/ThemeContext.tsx:32–34`
@@ -298,7 +300,7 @@ Sequenced by risk and dependency, not by effort — Phase 0 items are small indi
 - ✅ Migration: add `@@index` on `organizationId` across the schema; paginate kiosk-analytics *(→ M1, M2)*
 - ✅ Fix WS gateway CORS to match the HTTP allowlist; fail closed instead of falling back to `'*'` *(→ M3)*
 - ✅ Wrap `confirmPairing` in a transaction/lock; add magic-byte upload validation *(→ M4, M5)*
-- ⬜ Decompose `ThemesSection.tsx` / `LayoutsSection.tsx` by concern *(→ H7, cleanup)*
+- ✅ Decompose `ThemesSection.tsx` / `LayoutsSection.tsx` by concern *(→ H7, cleanup)*
 - ✅ Introduce `OrgScopedService` base; resolve `packages/ui`/`packages/prayer` (adopt or delete) *(→ H10, cleanup, architecture)*
 
 ### Phase 3 — Ongoing
