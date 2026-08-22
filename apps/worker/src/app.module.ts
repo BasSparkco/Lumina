@@ -1,5 +1,5 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import { config as loadDotenv } from 'dotenv';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
@@ -13,40 +13,24 @@ import { FleetMonitorModule } from './fleet-monitor/fleet-monitor.module';
 
 export const QUEUE_MEDIA = 'media';
 
-function loadEnvFile() {
-  const candidates = [
+// Tries a handful of plausible locations for the monorepo-root .env file, since this same
+// module runs both under ts-node (dev, __dirname === apps/worker/src) and from the compiled
+// dist/ (prod, __dirname === apps/worker/dist/src) — those resolve differently relative to the
+// repo root, and the process may also have been started from the repo root or from apps/worker/
+// itself. dotenv tries every path and merges whatever it actually finds; `override` defaults to
+// false, so real env vars (e.g. injected by docker-compose in production) always win over
+// anything found in a bundled .env file — this only fills in gaps, never overrides.
+loadDotenv({
+  path: [
     path.resolve(process.cwd(), '.env'),
     path.resolve(process.cwd(), '..', '.env'),
     path.resolve(process.cwd(), '..', '..', '.env'),
     path.resolve(process.cwd(), 'apps', 'api', '.env'),
     path.resolve(process.cwd(), 'apps', 'worker', '.env'),
     path.resolve(__dirname, '../../..', '.env'),
-  ];
-
-  for (const file of candidates) {
-    if (!fs.existsSync(file)) continue;
-    const content = fs.readFileSync(file, 'utf8');
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const separator = trimmed.indexOf('=');
-      if (separator < 0) continue;
-      const key = trimmed.slice(0, separator).trim();
-      let value = trimmed.slice(separator + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      // Real env vars (e.g. injected by docker-compose in production) must win over anything
-      // found in a bundled .env file — this only fills in gaps, never overrides.
-      if (process.env[key] === undefined) {
-        process.env[key] = value;
-      }
-    }
-    break;
-  }
-}
-
-loadEnvFile();
+  ],
+  quiet: true,
+});
 
 @Module({
   imports: [

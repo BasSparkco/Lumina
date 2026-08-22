@@ -14,8 +14,16 @@ export function useEditorHistory<T>(sessionKey: unknown, getSnapshot: () => T, a
   const [history, setHistory] = useState<HistoryState<T>>({ past: [], future: [] });
   const pendingCaptureRef = useRef<T | null>(null);
 
-  useEffect(() => {
+  // Resets history when the session changes, without the extra render an effect would cost —
+  // the "adjust state during render" pattern React recommends for this exact case. The ref
+  // can't join this (refs may not be touched during render), so it's reset in an effect below —
+  // same as before, just split from the state reset.
+  const [prevSessionKey, setPrevSessionKey] = useState(sessionKey);
+  if (sessionKey !== prevSessionKey) {
+    setPrevSessionKey(sessionKey);
     setHistory({ past: [], future: [] });
+  }
+  useEffect(() => {
     pendingCaptureRef.current = null;
   }, [sessionKey]);
 
@@ -50,8 +58,10 @@ export function useEditorHistory<T>(sessionKey: unknown, getSnapshot: () => T, a
   // calls the latest undo/redo — avoids either a stale closure or resubscribing on every change.
   const undoRef = useRef(undo);
   const redoRef = useRef(redo);
-  undoRef.current = undo;
-  redoRef.current = redo;
+  useEffect(() => {
+    undoRef.current = undo;
+    redoRef.current = redo;
+  }, [undo, redo]);
 
   useEffect(() => {
     if (!sessionKey) return;
