@@ -7,8 +7,10 @@
     "screens": "Screens",
     "assets": "Assets",
     "playlists": "Playlists",
+    "designer": "Designer",
     "layouts": "Layouts",
     "themes": "Themes",
+    "templates": "Templates",
     "wayfinding": "Wayfinding",
     "schedules": "Schedules",
     "powerSchedule": "Display power",
@@ -734,6 +736,9 @@
       "textMuted": "Muted text",
       "accent": "Accent"
     }
+  },
+  "templates": {
+    "title": "Templates"
   },
   "wayfinding": {
     "title": "Wayfinding",

@@ -7,8 +7,10 @@
     "screens": "الشاشات",
     "assets": "الأصول",
     "playlists": "قوائم التشغيل",
+    "designer": "المصمم",
     "layouts": "التخطيطات",
     "themes": "السمات",
+    "templates": "القوالب",
     "wayfinding": "الإرشاد",
     "schedules": "الجداول",
     "powerSchedule": "طاقة الشاشة",
@@ -734,6 +736,9 @@
       "textMuted": "نص خافت",
       "accent": "لون مميز"
     }
+  },
+  "templates": {
+    "title": "القوالب"
   },
   "wayfinding": {
     "title": "الإرشاد",
