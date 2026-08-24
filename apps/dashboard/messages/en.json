@@ -290,6 +290,7 @@
     "uploading": "Uploading {progress}%",
     "upload": "Upload",
     "uploadFailed": "Upload failed",
+        "pasteHint": "or paste an image (Ctrl+V)",
     "newMenu": {
       "button": "New",
       "layout": "Layout",

@@ -290,6 +290,7 @@
     "uploading": "جارٍ الرفع {progress}%",
     "upload": "رفع",
     "uploadFailed": "فشل الرفع",
+        "pasteHint": "أو الصق صورة (Ctrl+V)",
     "newMenu": {
       "button": "جديد",
       "layout": "تخطيط",

@@ -1,4 +1,5 @@
 'use client';
+import { useEffect } from 'react';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -438,6 +439,26 @@ export default function AssetsPage() {
     ]);
   }
 
+  // Paste an image from the clipboard anywhere on the page to upload it as a new asset —
+  // skipped while the target is a text input/textarea so pasting into search, rename, or the
+  // text-asset editor still behaves normally.
+  useEffect(() => {
+    if (tab !== 'mine' || !canEditContent) return;
+    function onPaste(e: ClipboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith('image/'));
+      if (!item) return;
+      const blob = item.getAsFile();
+      if (!blob) return;
+      e.preventDefault();
+      const ext = blob.type.split('/')[1] || 'png';
+      void runUpload([{ file: new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type }), extractAudioOnly: false }]);
+    }
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [tab, canEditContent]);
+
   const newMenuActions: ContextMenuAction[] = [
     { key: 'upload', label: t('upload'), icon: Upload, disabled: uploading, onClick: () => inputRef.current?.click() },
     { key: 'newText', label: t('newText'), icon: Type, onClick: () => setTextModal('new') },
@@ -460,6 +481,7 @@ export default function AssetsPage() {
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {t('uploading', { progress })}
               </span>
             )}
+            <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">{t('pasteHint')}</span>
             <button onClick={e => {
               const rect = e.currentTarget.getBoundingClientRect();
               setNewMenu({ x: rect.left, y: rect.bottom + 4, actions: newMenuActions });
