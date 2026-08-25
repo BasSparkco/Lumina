@@ -53,6 +53,9 @@ importers:
       '@lumina/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@lumina/design-schema':
+        specifier: workspace:*
+        version: link:../../packages/design-schema
       '@lumina/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -348,6 +351,9 @@ importers:
       '@imgly/background-removal':
         specifier: ^1.7.0
         version: 1.7.0(onnxruntime-web@1.21.0)
+      '@lumina/design-schema':
+        specifier: workspace:*
+        version: link:../../packages/design-schema
       '@lumina/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -393,6 +399,9 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+      zustand:
+        specifier: ^5.0.8
+        version: 5.0.14(@types/react@19.2.17)(react@19.2.8)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.3.3
@@ -731,6 +740,15 @@ importers:
       '@prisma/client':
         specifier: ^7.9.0
         version: 7.9.0(prisma@7.9.0(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3))(typescript@6.0.3)
+
+  packages/design-schema:
+    dependencies:
+      '@lumina/types':
+        specifier: workspace:*
+        version: link:../types
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/prayer:
     dependencies:

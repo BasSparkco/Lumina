@@ -40,6 +40,9 @@ const navSections: NavSection[] = [
     { href: '/billing', key: 'billing', icon: CreditCard, visible: () => false },
     { href: '/audit-log', key: 'auditLog', icon: History, visible: p => p.canViewAuditLog },
     { href: '/reports', key: 'reports', icon: BarChart3 },
+    // Cross-tenant platform feature (designer.md Phase 5) — gated on the isSuperAdmin flag, not
+    // this org's own role ladder, same distinction usePermissions.ts already draws.
+    { href: '/admin/templates', key: 'adminTemplates', icon: Layers, visible: p => p.isSuperAdmin },
   ] },
   { titleKey: 'settings', items: [
     { href: '/settings', key: 'settings', icon: Settings },

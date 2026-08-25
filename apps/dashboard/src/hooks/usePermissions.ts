@@ -19,5 +19,7 @@ export function usePermissions() {
     canViewAuditLog: RANK[role] >= RANK.ADMIN,
     // Orthogonal to the rank ladder above, not a step on it — explicit role check rather than RANK.
     canManageLibrary: role === 'LIBRARY_MANAGER',
+    // Cross-tenant platform flag, unrelated to this org's role ladder entirely.
+    isSuperAdmin: user?.isSuperAdmin ?? false,
   };
 }

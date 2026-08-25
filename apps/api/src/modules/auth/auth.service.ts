@@ -30,7 +30,7 @@ export class AuthService {
       },
     });
 
-    return this.buildTokenResponse(user.id, org.id, user.role, user.name, user.email);
+    return this.buildTokenResponse(user.id, org.id, user.role, user.name, user.email, false);
   }
 
   async login(dto: LoginDto) {
@@ -40,19 +40,41 @@ export class AuthService {
     const valid = await compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.buildTokenResponse(user.id, user.organizationId, user.role, user.name, user.email);
+    return this.buildTokenResponse(
+      user.id,
+      user.organizationId,
+      user.role,
+      user.name,
+      user.email,
+      user.isSuperAdmin,
+    );
   }
 
   async me(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true, organizationId: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        organizationId: true,
+        isSuperAdmin: true,
+        createdAt: true,
+      },
     });
     return user;
   }
 
-  private buildTokenResponse(userId: string, orgId: string, role: string, name: string, email: string) {
-    const token = this.jwt.sign({ sub: userId, orgId, role });
-    return { token, user: { id: userId, email, name, role, orgId } };
+  private buildTokenResponse(
+    userId: string,
+    orgId: string,
+    role: string,
+    name: string,
+    email: string,
+    isSuperAdmin: boolean,
+  ) {
+    const token = this.jwt.sign({ sub: userId, orgId, role, isSuperAdmin });
+    return { token, user: { id: userId, email, name, role, orgId, isSuperAdmin } };
   }
 }

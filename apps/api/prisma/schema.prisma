@@ -25,35 +25,41 @@ model Organization {
   // someone presses the screen's Publish button — see ScreensService's autoPublish gating.
   autoPublish Boolean @default(false)
 
-  users         User[]
-  screens       Screen[]
-  assets        Asset[]
-  playlists     Playlist[]
-  layouts       Layout[]
-  schedules     Schedule[]
-  powerSchedules PowerSchedule[]
-  invites       OrgInvite[]
-  auditLogs     AuditLog[]
-  screenGroups  ScreenGroup[]
-  proofOfPlays  ProofOfPlayLog[]
-  kioskEvents   KioskEvent[]
-  screenAlerts  ScreenAlert[]
-  crashReports  CrashReport[]
-  themes        Theme[]
-  buildings     Building[]
-  poiCategories PoiCategory[]
+  users                User[]
+  screens              Screen[]
+  assets               Asset[]
+  playlists            Playlist[]
+  layouts              Layout[]
+  schedules            Schedule[]
+  powerSchedules       PowerSchedule[]
+  invites              OrgInvite[]
+  auditLogs            AuditLog[]
+  screenGroups         ScreenGroup[]
+  proofOfPlays         ProofOfPlayLog[]
+  kioskEvents          KioskEvent[]
+  screenAlerts         ScreenAlert[]
+  crashReports         CrashReport[]
+  themes               Theme[]
+  buildings            Building[]
+  poiCategories        PoiCategory[]
+  designAssets         DesignAsset[]
+  designTemplateAccess DesignTemplateTenant[]
 }
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────
 
 model User {
-  id             String   @id @default(cuid())
-  email          String   @unique
-  passwordHash   String
-  name           String
-  role           UserRole @default(EDITOR)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(EDITOR)
+  // Cross-tenant platform flag, orthogonal to `role` — role is scoped to this user's own
+  // organization, isSuperAdmin grants access across every organization (e.g. Template
+  // management). Not a UserRole value because RolesGuard's per-org rank semantics don't apply.
+  isSuperAdmin Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -108,35 +114,35 @@ model AuditLog {
 // ─── Screens ─────────────────────────────────────────────────────────────────
 
 model Screen {
-  id                  String       @id @default(cuid())
+  id                  String        @id @default(cuid())
   name                String
-  pairingCode         String?      @unique
-  paired              Boolean      @default(false)
-  playerToken         String?      @unique
+  pairingCode         String?       @unique
+  paired              Boolean       @default(false)
+  playerToken         String?       @unique
   lastSeenAt          DateTime?
-  status              ScreenStatus @default(OFFLINE)
-  timezone            String       @default("UTC")
-  timezoneEnabled     Boolean      @default(false)
+  status              ScreenStatus  @default(OFFLINE)
+  timezone            String        @default("UTC")
+  timezoneEnabled     Boolean       @default(false)
   latitude            Float?
   longitude           Float?
-  prayerMethod        String       @default("UmmAlQura")
-  athanEnabled        Boolean      @default(false)
-  emergencyActive     Boolean      @default(false)
-  stopped             Boolean      @default(false)
-  showClock           Boolean      @default(false)
+  prayerMethod        String        @default("UmmAlQura")
+  athanEnabled        Boolean       @default(false)
+  emergencyActive     Boolean       @default(false)
+  stopped             Boolean       @default(false)
+  showClock           Boolean       @default(false)
   // Item 10 (volume control) — 0-100, null = inherit the screen's group's volume, or 100 if
   // there's no group or the group's own volume is unset.
   volume              Int?
   // Display rotation in degrees clockwise (0/90/180/270), dashboard-controlled and pushed to the
   // player like every other live setting below — screens mounted sideways/upside-down get this
   // set once from here rather than requiring someone at the physical device.
-  orientation         Int          @default(0)
+  orientation         Int           @default(0)
   // Item 5 (awaiting-content badge) — reported by the player on each heartbeat, since it's the
   // one that actually knows whether *right now* resolves to real content (schedule gaps,
   // locally-resolved layout zones, etc.), not just "is a playlist assigned." Defaults to false
   // (unconfirmed) rather than true, so a freshly paired screen reads as "awaiting content" until
   // its first heartbeat says otherwise, instead of silently looking fine.
-  hasContent          Boolean      @default(false)
+  hasContent          Boolean       @default(false)
   // Live-preview screenshot: stored at a deterministic storage key (see StorageService screenshot
   // helpers), overwritten in place on every upload — this is a single "latest" preview, not a
   // history, so no key/id needs to live in the DB, just whether/when one has ever landed.
@@ -146,14 +152,14 @@ model Screen {
   // instead of it getting silently cleared (see ScreensService.setStreamingType). WAYFINDING is a
   // third, unrelated mode (kiosk map/directory, driven by KioskLocation, not by either FK below).
   streamingType       StreamingType @default(PLAYLIST)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   assetId String?
-  asset   Asset? @relation("ScreenAsset", fields: [assetId], references: [id], onDelete: SetNull)
+  asset   Asset?  @relation("ScreenAsset", fields: [assetId], references: [id], onDelete: SetNull)
 
   playlistId String?
   playlist   Playlist? @relation("DefaultPlaylist", fields: [playlistId], references: [id])
@@ -164,13 +170,13 @@ model Screen {
   groupId String?
   group   ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
-  schedules       Schedule[]
-  powerSchedules  PowerSchedule[]
-  proofOfPlays    ProofOfPlayLog[]
-  kioskEvents     KioskEvent[]
-  alerts          ScreenAlert[]
-  crashReports    CrashReport[]
-  kioskLocation   KioskLocation?
+  schedules      Schedule[]
+  powerSchedules PowerSchedule[]
+  proofOfPlays   ProofOfPlayLog[]
+  kioskEvents    KioskEvent[]
+  alerts         ScreenAlert[]
+  crashReports   CrashReport[]
+  kioskLocation  KioskLocation?
 
   // Backs ScreensService.list — the org-scoped, createdAt-desc fleet listing every Screens page
   // load hits.
@@ -255,7 +261,7 @@ model KioskEvent {
 
 model ScreenAlert {
   id         String    @id @default(cuid())
-  type       String    // "OFFLINE" for now, extensible later
+  type       String // "OFFLINE" for now, extensible later
   message    String
   resolvedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -271,7 +277,7 @@ model ScreenAlert {
 
 model CrashReport {
   id         String   @id @default(cuid())
-  type       String   // "UNCAUGHT_EXCEPTION" | "WATCHDOG_RECOVERY" — free-form, same convention as ScreenAlert.type
+  type       String // "UNCAUGHT_EXCEPTION" | "WATCHDOG_RECOVERY" — free-form, same convention as ScreenAlert.type
   summary    String
   stackTrace String?
   occurredAt DateTime // when the crash actually happened on-device, not when it reached us
@@ -293,75 +299,77 @@ model CrashReport {
 // mirroring the Theme preset pattern above.
 
 model Asset {
-  id           String    @id @default(cuid())
-  name         String
-  type         AssetType
-  mimeType     String
-  storageKey   String    // S3/R2 object key — never the full URL. Unused (synthetic key,
-                         // nothing ever uploaded) for TEXT and APP assets, which store their
-                         // content in textContent / appConfig instead of an object.
-  thumbnailKey String?
-  sizeBytes    BigInt
-  durationSecs Float?    // for video/audio
-  width        Int?
-  height       Int?
+  id                    String          @id @default(cuid())
+  name                  String
+  type                  AssetType
+  mimeType              String
+  storageKey            String // S3/R2 object key — never the full URL. Unused (synthetic key,
+  // nothing ever uploaded) for TEXT and APP assets, which store their
+  // content in textContent / appConfig instead of an object.
+  thumbnailKey          String?
+  sizeBytes             BigInt
+  durationSecs          Float? // for video/audio
+  width                 Int?
+  height                Int?
   // Set by the worker once a DOCUMENT asset's pages have been rasterized — null while
   // PROCESSING/ERROR. Page N's derived image lives at storageKey with its extension swapped for
   // `_p${N}.webp` (1-indexed), the same convention thumbnailKey (= page 1's key) already follows.
-  pageCount    Int?
-  textContent  String?   // plain-text body for TEXT assets only
+  pageCount             Int?
+  textContent           String? // plain-text body for TEXT assets only
   // Styling for TEXT assets only — null means "use the player's default" for that field,
   // so non-TEXT assets never carry these and a TEXT asset created before this field existed
   // still renders sensibly instead of blank/broken.
   // Font id from the shared FONT_LIBRARY (packages/types/src/fonts.ts) — a plain string rather
   // than an enum so the curated font list can grow without a migration each time.
-  textFontFamily      String?
-  textColor           String?         // "#RRGGBB"
-  textSize            TextSize?
-  textBackgroundColor String?         // "#RRGGBB"; null = transparent (shows the player's black behind it)
+  textFontFamily        String?
+  textColor             String? // "#RRGGBB"
+  textSize              TextSize?
+  textBackgroundColor   String? // "#RRGGBB"; null = transparent (shows the player's black behind it)
   // News-ticker mode for TEXT assets only — scrolls textContent instead of showing it static.
-  textTickerEnabled   Boolean          @default(false)
-  textTickerDirection TickerDirection  @default(RIGHT_TO_LEFT)
-  textTickerSpeed     Int?             // px/sec; null = player default (80)
+  textTickerEnabled     Boolean         @default(false)
+  textTickerDirection   TickerDirection @default(RIGHT_TO_LEFT)
+  textTickerSpeed       Int? // px/sec; null = player default (80)
   // Position (0-100%) along the axis perpendicular to the scroll direction — e.g. vertical
   // placement for a left/right-scrolling ticker, horizontal placement for an up/down-scrolling
   // one. null = 50 (centered), matching the pre-this-field look.
   textTickerCrossOffset Int?
   // Set by the worker's video probe once processing completes — whether the source file has an
   // audio stream at all. Always false for non-VIDEO types and for videos not yet processed.
-  hasAudioTrack Boolean @default(false)
+  hasAudioTrack         Boolean         @default(false)
   // The org's choice of whether that audio should actually be included when this asset plays —
   // only meaningful when hasAudioTrack is true. Drives the initial PlaylistItem.muted value when
   // the asset is first added to a playlist, and directly mutes/unmutes it when played standalone
   // (Screen/Zone asset streaming mode, which has no PlaylistItem to carry a per-placement flag).
-  audioEnabled Boolean @default(true)
+  audioEnabled          Boolean         @default(true)
   // APP assets only — an embedded item from an external service (e.g. YouTube), added via the
   // Assets page "Apps" tab. appProviderId is a registry id (apps/api/src/modules/apps/providers.ts,
   // e.g. "youtube"); appConfig holds that provider's resolved embed metadata (title, thumbnail,
   // embed url, aspect ratio) as returned by AppsService.resolve. Not wired into playlists/playback —
   // see appsroadmap.md.
-  appProviderId String?
-  sourceUrl     String?
-  appConfig     Json?
-  status       AssetStatus   @default(PROCESSING)
-  category     AssetCategory @default(GENERIC)
-  tags         String[]      @default([])
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  appProviderId         String?
+  sourceUrl             String?
+  appConfig             Json?
+  status                AssetStatus     @default(PROCESSING)
+  category              AssetCategory   @default(GENERIC)
+  tags                  String[]        @default([])
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
   // Stamped whenever this asset is picked in an editor's "existing asset" picker (Layouts/Themes
   // Add Item) — drives the picker's "recently used" sort. Null until first picked; distinct from
   // createdAt (upload time) and updatedAt (any field edit, e.g. a rename).
-  lastUsedAt   DateTime?
+  lastUsedAt            DateTime?
 
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  playlistItems   PlaylistItem[]
-  proofOfPlays    ProofOfPlayLog[]
-  screens         Screen[] @relation("ScreenAsset")
-  zones           Zone[]
-  floorPlanFor    Floor[]          @relation("FloorPlanAsset")
-  poiIconFor      Poi[]            @relation("PoiIconAsset")
+  playlistItems              PlaylistItem[]
+  proofOfPlays               ProofOfPlayLog[]
+  screens                    Screen[]         @relation("ScreenAsset")
+  zones                      Zone[]
+  floorPlanFor               Floor[]          @relation("FloorPlanAsset")
+  poiIconFor                 Poi[]            @relation("PoiIconAsset")
+  designTemplateThumbnailFor DesignTemplate[]
+  designAssetThumbnailFor    DesignAsset[]
 
   @@index([organizationId, category])
 }
@@ -409,26 +417,26 @@ enum AssetCategory {
 // ─── Playlists ────────────────────────────────────────────────────────────────
 
 model Playlist {
-  id             String         @id @default(cuid())
-  name           String
-  approvalStatus ApprovalStatus @default(APPROVED)
+  id                   String          @id @default(cuid())
+  name                 String
+  approvalStatus       ApprovalStatus  @default(APPROVED)
   // Item 8 (transition effects) and item 9 (shuffle) — both configurable per playlist, not
   // per item, per the plain-English "configurable per playlist" framing in roadmap2.0.md.
-  transitionStyle       TransitionStyle @default(NONE)
-  transitionDurationMs  Int             @default(500)
-  playbackOrder         PlaybackOrder   @default(SEQUENTIAL)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  transitionStyle      TransitionStyle @default(NONE)
+  transitionDurationMs Int             @default(500)
+  playbackOrder        PlaybackOrder   @default(SEQUENTIAL)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  items             PlaylistItem[]
-  screens           Screen[]     @relation("DefaultPlaylist")
-  emergencyScreens  Screen[]     @relation("EmergencyPlaylist")
-  zones             Zone[]
-  schedules         Schedule[]
-  kioskAttractFor   KioskLocation[]
+  items            PlaylistItem[]
+  screens          Screen[]        @relation("DefaultPlaylist")
+  emergencyScreens Screen[]        @relation("EmergencyPlaylist")
+  zones            Zone[]
+  schedules        Schedule[]
+  kioskAttractFor  KioskLocation[]
 
   @@index([organizationId, updatedAt])
 }
@@ -457,19 +465,19 @@ enum PlaylistItemKind {
 }
 
 model PlaylistItem {
-  id            String           @id @default(cuid())
+  id            String   @id @default(cuid())
   position      Int
   // How long this item stays on screen before the playlist advances. For ASSET items this is
   // overridden by playFullVideo (video) or paged internally (document) — see below; THEME/LAYOUT
   // items always use this as a plain dwell timer.
-  durationSecs  Int              @default(10)
+  durationSecs  Int      @default(10)
   // ASSET-only fields below — meaningless (and left at their defaults, ignored by the API) for
   // THEME/LAYOUT items, which have no crop/mute/full-video concept of their own.
-  muted         Boolean          @default(true)
+  muted         Boolean  @default(true)
   // Video items: when true, the player ignores durationSecs and advances on the video's own
   // "ended" event (i.e. plays the full clip). When false, durationSecs clips it short. Has no
   // effect on non-video items.
-  playFullVideo Boolean          @default(true)
+  playFullVideo Boolean  @default(true)
   // Per-placement image/video framing (like cropping a profile picture into a frame) — null
   // means "show the whole asset" (today's default fill/contain behavior). Lives here rather
   // than on Asset since the same asset can be placed in multiple items with different framing.
@@ -477,8 +485,8 @@ model PlaylistItem {
   cropZoom      Float?
   cropOffsetX   Float?
   cropOffsetY   Float?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   playlistId String
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
@@ -491,10 +499,10 @@ model PlaylistItem {
   kind PlaylistItemKind @default(ASSET)
 
   assetId String?
-  asset   Asset? @relation(fields: [assetId], references: [id])
+  asset   Asset?  @relation(fields: [assetId], references: [id])
 
   themeId String?
-  theme   Theme? @relation(fields: [themeId], references: [id])
+  theme   Theme?  @relation(fields: [themeId], references: [id])
 
   layoutId String?
   layout   Layout? @relation(fields: [layoutId], references: [id])
@@ -545,29 +553,29 @@ enum ZoneShape {
 }
 
 model Zone {
-  id           String   @id @default(cuid())
-  name         String
-  x            Float    // percentage 0–100 from left
-  y            Float    // percentage 0–100 from top
-  width        Float    // percentage 0–100
-  height       Float    // percentage 0–100
-  zIndex       Int      @default(0)
+  id            String    @id @default(cuid())
+  name          String
+  x             Float // percentage 0–100 from left
+  y             Float // percentage 0–100 from top
+  width         Float // percentage 0–100
+  height        Float // percentage 0–100
+  zIndex        Int       @default(0)
   // Degrees, clockwise, about the zone's own center — for tilted tickers/sidebars in creative
   // layouts. Purely visual: x/y/width/height still describe the zone's unrotated bounding box.
-  rotation     Float    @default(0)
-  zoneType     ZoneType @default(MEDIA)
-  shape        ZoneShape @default(rectangle)
+  rotation      Float     @default(0)
+  zoneType      ZoneType  @default(MEDIA)
+  shape         ZoneShape @default(rectangle)
   // Locks the zone in the editor canvas — false disables drag/resize/rotate regardless of
   // selection state or the "click to select before editing" setting. Purely an editor-side
   // guard rail; has no effect on player rendering.
-  editable     Boolean  @default(true)
-  widgetConfig Json?    // type-specific config (prayer method override, RSS URL, etc.)
+  editable      Boolean   @default(true)
+  widgetConfig  Json? // type-specific config (prayer method override, RSS URL, etc.)
   // Audio balancing across zones in the same layout — both null/false by default, meaning every
   // zone's own audio (if any) just plays at the screen's global volume simultaneously.
   // audioPriority is exclusive across a layout's zones (enforced in the dashboard, not here):
   // when set, every *other* zone in the layout is force-muted while this one plays.
   // audioVolume overrides the screen's global volume for this zone specifically; null inherits it.
-  audioPriority Boolean @default(false)
+  audioPriority Boolean   @default(false)
   audioVolume   Int?
   // Per-placement image/video framing for a zone's direct `asset` (no PlaylistItem exists for
   // this case to carry it) — same semantics as PlaylistItem.cropZoom/cropOffsetX/cropOffsetY.
@@ -623,6 +631,124 @@ model Theme {
 
   kioskAttractFor KioskLocation[]
   playlistItems   PlaylistItem[]
+
+  @@index([organizationId, createdAt])
+}
+
+// ─── Designer (designer.md) ────────────────────────────────────────────────────
+// DesignTemplate is designer2's own Template concept (designer.md §9-§11) — distinct from the
+// legacy Theme above (different design contract: designJson is a @lumina/design-schema
+// DesignDocument, not palette/typography/elements). Only Super Admin (User.isSuperAdmin) may
+// write to DesignTemplate/DesignTemplateVersion/DesignTemplateTenant; a customer "opening" one
+// creates a DesignAsset (designer.md §11's "Critical Backend Rule" — never an update to the
+// Template itself). designJson/schemaVersion are validated against DesignDocumentSchema
+// (@lumina/design-schema) in the service layer, the same way ThemeInputSchema validates Theme
+// above — Prisma's Json type carries no schema of its own.
+//
+// designer.md §10.2 names a fourth visibility value, TENANT_GROUP — omitted here since no
+// tenant-grouping concept exists anywhere else in this schema (Organization is the only tenant
+// unit); add it if/when such a grouping feature actually exists rather than modeling a group of
+// one before anything can populate it.
+enum DesignTemplateVisibility {
+  GLOBAL
+  SELECTED_TENANTS
+  HIDDEN
+}
+
+// designer.md §25's permissions table treats "Delete/archive Template" as one Super-Admin-only
+// action; DELETE on the admin endpoint sets ARCHIVED rather than removing the row, since a
+// DesignAsset's sourceTemplateId (below) must keep resolving even after its source Template is
+// retired.
+enum DesignTemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model DesignTemplate {
+  id            String                   @id @default(cuid())
+  name          String
+  description   String?
+  category      ThemeCategory            @default(GENERIC)
+  designJson    Json
+  schemaVersion Int                      @default(1)
+  visibility    DesignTemplateVisibility @default(HIDDEN)
+  status        DesignTemplateStatus     @default(DRAFT)
+  // Bumped on every publish (designer.md §10.1's "Create Template versions"); the current row's
+  // own designJson is always the latest draft, snapshotted into DesignTemplateVersion on publish.
+  versionNumber Int                      @default(1)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  publishedAt   DateTime?
+
+  thumbnailAssetId String?
+  thumbnailAsset   Asset?  @relation(fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+
+  tenantAccess DesignTemplateTenant[]
+  versions     DesignTemplateVersion[]
+  designAssets DesignAsset[]
+
+  @@index([status, visibility])
+}
+
+// Immutable snapshot created on each publish — designer.md §10.1/§19.5. Never mutated after
+// creation; DesignTemplate.designJson keeps evolving as the current draft.
+model DesignTemplateVersion {
+  id            String   @id @default(cuid())
+  versionNumber Int
+  designJson    Json
+  schemaVersion Int
+  createdAt     DateTime @default(now())
+
+  templateId String
+  template   DesignTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, versionNumber])
+}
+
+// designer.md §10.2/§19.4 — only meaningful when the owning Template's visibility is
+// SELECTED_TENANTS; populated/ignored otherwise rather than enforced at the DB level (Prisma has
+// no cross-table CHECK), matching how the service layer already re-validates JSON shape at the
+// application boundary elsewhere in this schema (e.g. Theme/ThemeInputSchema above).
+model DesignTemplateTenant {
+  createdAt DateTime @default(now())
+
+  templateId String
+  template   DesignTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, tenantId])
+  @@index([tenantId])
+}
+
+// designer.md §19.1 — a customer-owned editable Design JSON document, created from scratch or
+// (designer.md §11) cloned from a Template. Deliberately minimal for now: only what designer.md
+// Phase 5's own "Save as Asset" workflow needs (create + read). Autosave drafts, manual-save
+// version history, publish/restore, and the full PATCH/DELETE/duplicate surface (designer.md
+// §19.2/§19.6/§21/§26) are designer.md Phase 10's job, not built here.
+model DesignAsset {
+  id            String    @id @default(cuid())
+  name          String
+  designJson    Json
+  schemaVersion Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  thumbnailAssetId String?
+  thumbnailAsset   Asset?  @relation(fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+
+  // designer.md §11's Critical Backend Rule: set when this row was created via
+  // POST /templates/:id/create-design, never mutated by an update to the source Template
+  // afterward — this is metadata for analytics/future "template updated" notices, not a live link.
+  sourceTemplateId      String?
+  sourceTemplate        DesignTemplate? @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  sourceTemplateVersion Int?
 
   @@index([organizationId, createdAt])
 }
@@ -699,18 +825,18 @@ enum PoiStatus {
 }
 
 model Poi {
-  id String @id @default(cuid())
+  id            String    @id @default(cuid())
   // Arabic is optional so a POI created without it still falls back to `name` (matches how
   // TEXT-asset styling fields default to "use the player's default" rather than requiring both).
-  name   String
-  nameAr String?
-  x      Float // percentage 0–100 from left, same convention as Zone.x
-  y      Float // percentage 0–100 from top, same convention as Zone.y
+  name          String
+  nameAr        String?
+  x             Float // percentage 0–100 from left, same convention as Zone.x
+  y             Float // percentage 0–100 from top, same convention as Zone.y
   description   String?
   descriptionAr String?
-  status PoiStatus @default(OPEN)
+  status        PoiStatus @default(OPEN)
   // Opaque id from an external mall/CMMS tenant system, for future two-way sync — unused today.
-  externalRef String?
+  externalRef   String?
 
   floorId String
   floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
@@ -814,9 +940,9 @@ model Schedule {
   priority Int    @default(0)
 
   // Temporal constraints (all optional — omit means "always")
-  startTime  String?   // "HH:MM" 24h local time; null = midnight
-  endTime    String?   // "HH:MM" 24h local time; null = midnight
-  daysOfWeek Int[]     // empty = every day; 0=Sun 1=Mon … 6=Sat
+  startTime  String? // "HH:MM" 24h local time; null = midnight
+  endTime    String? // "HH:MM" 24h local time; null = midnight
+  daysOfWeek Int[] // empty = every day; 0=Sun 1=Mon … 6=Sat
   startDate  DateTime?
   endDate    DateTime?
 
@@ -846,7 +972,7 @@ model Schedule {
 // arbitrate between multiple rules.
 model PowerSchedule {
   id         String @id @default(cuid())
-  daysOfWeek Int[]  // empty = every day; 0=Sun 1=Mon … 6=Sat
+  daysOfWeek Int[] // empty = every day; 0=Sun 1=Mon … 6=Sat
   startTime  String // "HH:MM" 24h local time — display turns on
   endTime    String // "HH:MM" 24h local time — display turns off
 

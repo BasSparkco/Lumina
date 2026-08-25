@@ -29,6 +29,8 @@ import { ScreenGroupsModule } from './modules/screen-groups/screen-groups.module
 import { ProofOfPlayModule } from './modules/proof-of-play/proof-of-play.module';
 import { WayfindingModule } from './modules/wayfinding/wayfinding.module';
 import { KioskAnalyticsModule } from './modules/kiosk-analytics/kiosk-analytics.module';
+import { DesignsModule } from './modules/designs/designs.module';
+import { TemplatesModule } from './modules/templates/templates.module';
 
 // Tries a handful of plausible locations for the monorepo-root .env file, since this same
 // module runs both under ts-node (dev, __dirname === apps/api/src) and from the compiled
@@ -108,6 +110,8 @@ loadDotenv({
     ProofOfPlayModule,
     WayfindingModule,
     KioskAnalyticsModule,
+    DesignsModule,
+    TemplatesModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

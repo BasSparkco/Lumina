@@ -15,6 +15,17 @@ export class OrgService {
     private readonly orgScoped: OrgScopedService,
   ) {}
 
+  // Super Admin only (see OrgController) — every tenant, not just the caller's own. Backs the
+  // Template tenant-assignment picker (designer.md §10.2/Phase 5); the only cross-tenant
+  // Organization listing in the app, so it deliberately lives beside listMembers rather than in
+  // the templates module.
+  async listAllOrganizations() {
+    return this.prisma.organization.findMany({
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async listMembers(orgId: string) {
     return this.prisma.user.findMany({
       where: { organizationId: orgId },

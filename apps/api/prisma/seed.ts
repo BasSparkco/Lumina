@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { PrismaClient, type Prisma } from '@lumina/db';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
@@ -36,6 +37,33 @@ async function main() {
       organizationId: org.id,
     },
   });
+
+  // Dedicated org for platform-staff accounts — a Super Admin still needs a real organizationId
+  // (the FK is required), but their cross-tenant power comes entirely from isSuperAdmin, not from
+  // anything about this org or their role within it.
+  const platformOrg = await prisma.organization.upsert({
+    where: { slug: 'lumina-platform' },
+    update: {},
+    create: { name: 'Lumina Platform', slug: 'lumina-platform' },
+  });
+
+  const superAdminExists = await prisma.user.findUnique({ where: { email: 'superadmin@lumina.internal' } });
+  let generatedSuperAdminPassword: string | null = null;
+  if (!superAdminExists) {
+    const superAdminPassword = process.env.SUPER_ADMIN_SEED_PASSWORD ?? randomBytes(18).toString('base64url');
+    if (!process.env.SUPER_ADMIN_SEED_PASSWORD) generatedSuperAdminPassword = superAdminPassword;
+
+    await prisma.user.create({
+      data: {
+        email: 'superadmin@lumina.internal',
+        passwordHash: await bcrypt.hash(superAdminPassword, 12),
+        name: 'Platform Super Admin',
+        role: 'OWNER',
+        organizationId: platformOrg.id,
+        isSuperAdmin: true,
+      },
+    });
+  }
 
   // Fake test screens — not real paired devices, just enough rows to test
   // multi-screen UI (schedules, layouts, etc.) without pairing real hardware.
@@ -88,6 +116,18 @@ async function main() {
   }
 
   console.log('Seed complete. Logins: admin@demo.com / changeme (OWNER), viewer@demo.com / changeme (VIEWER)');
+  if (generatedSuperAdminPassword) {
+    console.log(
+      `Super Admin created: superadmin@lumina.internal / ${generatedSuperAdminPassword}\n` +
+        '  ⚠ Generated password — copy it now, it is not stored anywhere and will not be printed again.\n' +
+        '  ⚠ This account has no real cross-tenant capability yet (Phase 5 wires that up), but rotate/disable it before any production exposure.\n' +
+        '  Set SUPER_ADMIN_SEED_PASSWORD to control this password instead of generating one.',
+    );
+  } else if (process.env.SUPER_ADMIN_SEED_PASSWORD) {
+    console.log('Super Admin ready: superadmin@lumina.internal (password from SUPER_ADMIN_SEED_PASSWORD)');
+  } else {
+    console.log('Super Admin already exists: superadmin@lumina.internal');
+  }
 }
 
 main()

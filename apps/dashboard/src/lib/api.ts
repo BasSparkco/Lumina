@@ -1,4 +1,5 @@
 import Cookies from 'js-cookie';
+import type { DesignDocument } from '@lumina/design-schema';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/v1';
 const TOKEN_KEY = 'lumina_token';
@@ -66,6 +67,8 @@ export const orgApi = {
   getSettings: () => req<{ autoPublish: boolean }>('/org/settings'),
   updateSettings: (autoPublish: boolean) =>
     req<{ autoPublish: boolean }>('/org/settings', { method: 'PUT', body: JSON.stringify({ autoPublish }) }),
+  // Super Admin only — every tenant, not just the caller's own (see OrgController.listAll).
+  listAllOrganizations: () => req<{ id: string; name: string; slug: string }[]>('/org/all'),
 };
 
 // ── Screens ─────────────────────────────────────────────────────────────────
@@ -383,6 +386,92 @@ export const themesApi = {
   remove: (id: string) => req<void>(`/themes/${id}`, { method: 'DELETE' }),
 };
 
+// ── Design Templates & Design Assets (designer2, designer.md Phase 5) ────────
+// Distinct from the legacy Theme above — DesignTemplate/DesignAsset carry a @lumina/design-schema
+// DesignDocument, designer2's own canvas contract, not palette/typography/elements.
+export type TemplateVisibility = 'GLOBAL' | 'SELECTED_TENANTS' | 'HIDDEN';
+export type TemplateStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+
+export interface DesignTemplateInput {
+  name: string;
+  description?: string;
+  category?: ThemeCategory;
+  visibility?: TemplateVisibility;
+  designJson?: DesignDocument;
+}
+export interface DesignTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  category: ThemeCategory;
+  designJson: DesignDocument;
+  schemaVersion: number;
+  visibility: TemplateVisibility;
+  status: TemplateStatus;
+  versionNumber: number;
+  thumbnailAssetId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  _count?: { tenantAccess: number; designAssets: number };
+}
+// Customer-facing gallery listing — a narrower projection (customerList's Prisma `select`),
+// never the full designJson.
+export interface TemplateSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  category: ThemeCategory;
+  thumbnailAssetId: string | null;
+  versionNumber: number;
+  publishedAt: string | null;
+}
+export interface DesignTemplateTenantAccess {
+  templateId: string;
+  tenantId: string;
+  createdAt: string;
+  tenant: { id: string; name: string; slug: string };
+}
+export interface DesignAsset {
+  id: string;
+  name: string;
+  designJson: DesignDocument;
+  schemaVersion: number;
+  thumbnailAssetId: string | null;
+  sourceTemplateId: string | null;
+  sourceTemplateVersion: number | null;
+  organizationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const adminTemplatesApi = {
+  list: () => req<DesignTemplate[]>('/admin/templates'),
+  get: (id: string) => req<DesignTemplate>(`/admin/templates/${id}`),
+  create: (input: DesignTemplateInput) => req<DesignTemplate>('/admin/templates', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id: string, input: Partial<DesignTemplateInput>) =>
+    req<DesignTemplate>(`/admin/templates/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  publish: (id: string) => req<DesignTemplate>(`/admin/templates/${id}/publish`, { method: 'POST' }),
+  unpublish: (id: string) => req<DesignTemplate>(`/admin/templates/${id}/unpublish`, { method: 'POST' }),
+  archive: (id: string) => req<DesignTemplate>(`/admin/templates/${id}`, { method: 'DELETE' }),
+  getTenantAccess: (id: string) => req<DesignTemplateTenantAccess[]>(`/admin/templates/${id}/tenant-access`),
+  setTenantAccess: (id: string, tenantIds: string[]) =>
+    req<DesignTemplateTenantAccess[]>(`/admin/templates/${id}/tenant-access`, { method: 'PUT', body: JSON.stringify({ tenantIds }) }),
+};
+
+export const templatesApi = {
+  list: () => req<TemplateSummary[]>('/templates'),
+  get: (id: string) => req<DesignTemplate>(`/templates/${id}`),
+  createDesign: (id: string) => req<DesignAsset>(`/templates/${id}/create-design`, { method: 'POST' }),
+};
+
+// designer.md §21 — only the read side exists (designer.md Phase 5's own scope); PATCH/DELETE/
+// duplicate/versions/autosave are designer.md Phase 10.
+export const designsApi = {
+  list: () => req<DesignAsset[]>('/designs'),
+  get: (id: string) => req<DesignAsset>(`/designs/${id}`),
+};
+
 // ── Schedules ────────────────────────────────────────────────────────────────
 export const schedulesApi = {
   list: (screenId?: string) =>
@@ -428,7 +517,7 @@ export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | 'LIBRARY_MANAGER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING';
-export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
+export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; isSuperAdmin: boolean; }
 export interface ZoneInput {
   name: string; x: number; y: number; width: number; height: number; zIndex?: number;
   // Degrees, clockwise, about the zone's own center.

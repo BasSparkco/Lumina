@@ -7,7 +7,9 @@ import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { UpdateOrgSettingsDto } from './dto/update-org-settings.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequireSuperAdmin } from '../../common/decorators/require-super-admin.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
@@ -15,6 +17,14 @@ import type { JwtUser } from '../../common/types/jwt-user';
 @Controller('org')
 export class OrgController {
   constructor(private readonly org: OrgService) {}
+
+  @Get('all')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, SuperAdminGuard)
+  @RequireSuperAdmin()
+  listAll() {
+    return this.org.listAllOrganizations();
+  }
 
   @Get('members')
   @ApiBearerAuth()

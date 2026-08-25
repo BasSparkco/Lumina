@@ -4,6 +4,7 @@ export interface JwtUser {
   sub: string;
   orgId: string;
   role: UserRole;
+  isSuperAdmin: boolean;
 }
 
 export interface ScreenJwtUser {
