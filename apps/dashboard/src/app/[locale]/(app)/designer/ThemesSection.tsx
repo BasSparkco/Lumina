@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import {
   Palette,
   LayoutTemplate,
@@ -34,6 +36,9 @@ import {
   Crop,
   Search,
   Filter,
+  ImageDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -53,6 +58,7 @@ import {
 } from '@/lib/api';
 import { EditorAddSidebar } from '@/components/EditorAddSidebar';
 import { ThemeCanvasPanel } from './ThemeCanvasPanel';
+import { captureCanvasAsAsset } from '@/lib/exportDesignAsAsset';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuth } from '@/context/AuthContext';
@@ -397,6 +403,7 @@ function ImageQuickAddPanel({ onAdd }: { onAdd: (assetId: string) => void }) {
         existing: t('imageSourceExisting'),
         upload: t('imageSourceUpload'),
         paste: t('imageSourcePaste'),
+        stock: t('imageSourceStock'),
         uploading: t('uploadingImage'),
         uploadFailed: t('uploadImageFailed'),
         pasteHint: t('pasteImageHint'),
@@ -404,6 +411,11 @@ function ImageQuickAddPanel({ onAdd }: { onAdd: (assetId: string) => void }) {
         removeBackground: t('removeBackground'),
         removingBackground: t('removingBackground'),
         removeBackgroundFailed: t('removeBackgroundFailed'),
+        stockSearchPlaceholder: t('stockSearchPlaceholder'),
+        stockEmpty: t('stockEmpty'),
+        stockNotConfigured: t('stockNotConfigured'),
+        stockCredit: t('stockCredit'),
+        importStockFailed: t('importStockFailed'),
       }}
     />
   );
@@ -613,6 +625,9 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   const [typography, setTypography] = useState<ThemeTypography>(defaultTypography());
   const [elements, setElements] = useState<ThemeElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  // Populated by ThemeCanvasPanel's exportRef with the actual canvas DOM node "save as asset"
+  // rasterizes — a plain ref (not state) since it never needs to trigger a re-render.
+  const canvasElRef = useRef<HTMLDivElement | null>(null);
   const [croppingElementId, setCroppingElementId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -632,6 +647,8 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   );
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  // Purely a view toggle to reduce clutter — hides the element card grid without touching selection/data.
+  const [elementCardsCollapsed, setElementCardsCollapsed] = useState(false);
   useEffect(() => {
     if (!filterMenuOpen) return;
     const onMouseDown = (e: MouseEvent) => {
@@ -763,6 +780,25 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
       setEditing(null);
     },
   });
+
+  // Rasterizes the canvas to a PNG and uploads it as a plain image Asset, alongside (not
+  // instead of) the theme itself — the theme keeps saving as its own structured template via
+  // saveTheme above; this just gives an easier way to reuse the design as a flat picture.
+  const saveAsAssetMut = useMutation({
+    mutationFn: async () => {
+      // Deselect first so the selection outline doesn't show up in the exported image;
+      // flushSync forces that state change to actually paint before html2canvas reads the DOM.
+      flushSync(() => setSelectedElementId(null));
+      const el = canvasElRef.current;
+      if (!el) throw new Error('Canvas not ready');
+      return captureCanvasAsAsset(el, name);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      toast.success(t('saveAsAssetSuccess'));
+    },
+  });
+
   const removeMut = useMutation({
     mutationFn: (theme: Theme) => themesApi.remove(theme.id),
     onSuccess: (_data, theme) => {
@@ -1016,11 +1052,36 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                   : el.content.text}
               </span>
             )}
-            {el.kind !== 'TEXT' && el.kind !== 'SHAPE' && el.kind !== 'BRUSH' && (
-              <span style={{ fontSize: 8, color: border, fontWeight: 600, textAlign: 'center' }}>
-                {el.label ?? el.kind}
-              </span>
-            )}
+            {el.kind !== 'TEXT' && el.kind !== 'SHAPE' && el.kind !== 'BRUSH' && (() => {
+              // IMAGE/VIDEO/DOCUMENT elements reuse an existing Asset as-is — when that asset
+              // has a real thumbnail, show it instead of a flat placeholder box so the grid
+              // preview matches what actually renders.
+              const linkedAsset =
+                (el.kind === 'IMAGE' || el.kind === 'VIDEO' || el.kind === 'DOCUMENT') && el.content.assetId
+                  ? assets.find((a) => a.id === el.content.assetId)
+                  : undefined;
+              const thumbUrl =
+                linkedAsset && linkedAsset.status === 'READY'
+                  ? (linkedAsset.thumbnailUrl ?? (el.kind === 'IMAGE' ? linkedAsset.url : null))
+                  : null;
+              if (thumbUrl) {
+                return (
+                  // eslint-disable-next-line @next/next/no-img-element -- small grid thumbnail, not a static/local image
+                  <img
+                    src={thumbUrl}
+                    alt=""
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                );
+              }
+              const Icon = el.kind === 'WIDGET' ? WIDGET_TYPE_ICONS[el.content.widgetType] : ELEMENT_KIND_ICONS[el.kind];
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: border }}>
+                  <Icon size={14} />
+                  <span style={{ fontSize: 8, fontWeight: 600, textAlign: 'center' }}>{el.label ?? el.kind}</span>
+                </div>
+              );
+            })()}
           </div>
         );
       });
@@ -1098,6 +1159,49 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
             </div>
           </div>
 
+          {/* Save/cancel sit above the canvas (not just below the element cards) so they're
+              reachable without scrolling past the whole editor on tall themes. */}
+          <div className="mb-5 flex items-center justify-end gap-2 border-b border-gray-100 pb-4 dark:border-gray-800">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title={`${t('undo')} (Ctrl+Z)`}
+              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title={`${t('redo')} (Ctrl+Shift+Z)`}
+              className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => saveAsAssetMut.mutate()}
+              disabled={elements.length === 0 || saveAsAssetMut.isPending}
+              title={t('saveAsAssetHint')}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <ImageDown className="h-4 w-4" />{' '}
+              {saveAsAssetMut.isPending ? t('savingAsset') : t('saveAsAsset')}
+            </button>
+            <button
+              onClick={() => setEditing(null)}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              {tc('cancel')}
+            </button>
+            <button
+              onClick={() => (editing === 'new' ? createMut.mutate() : updateMut.mutate())}
+              disabled={!name.trim() || elements.length === 0 || saving}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" /> {saving ? t('saving') : t('saveTheme')}
+            </button>
+          </div>
+
           {/* Visual preview, full-width, with element settings stacked below — mirrors the
               layout editor's shell so both editors share the same overall structure. The floating
               EditorAddSidebar (rendered after this panel, outside its layout flow entirely) is
@@ -1133,6 +1237,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
               brushSize={brushSize}
               setBrushSize={setBrushSize}
               setBgRemoveError={setBgRemoveError}
+              exportRef={(el) => { canvasElRef.current = el; }}
             />
 
             {/* Palette + typography — theme-only settings that sit between the preview and the
@@ -1246,6 +1351,18 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs text-gray-400 dark:text-gray-500">{t('elements')}</div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setElementCardsCollapsed((v) => !v)}
+                    title={elementCardsCollapsed ? t('expandAll') : t('collapseAll')}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    {elementCardsCollapsed ? (
+                      <ChevronsUpDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronsDownUp className="h-3 w-3" />
+                    )}
+                    {elementCardsCollapsed ? t('expandAll') : t('collapseAll')}
+                  </button>
                   <div className="relative" ref={filterMenuRef}>
                     <button
                       onClick={() => setFilterMenuOpen((v) => !v)}
@@ -1311,7 +1428,9 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                   </button>
                 </div>
               </div>
-              <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div
+                className={`grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 ${elementCardsCollapsed ? 'hidden' : ''}`}
+              >
                 {elements.filter((el) => elementKindFilter.has(el.kind)).map((el) => {
                   const isSelected = el.id === selectedElementId;
                   return (
@@ -1576,6 +1695,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                                     existing: t('imageSourceExisting'),
                                     upload: t('imageSourceUpload'),
                                     paste: t('imageSourcePaste'),
+                                    stock: t('imageSourceStock'),
                                     uploading: t('uploadingImage'),
                                     uploadFailed: t('uploadImageFailed'),
                                     pasteHint: t('pasteImageHint'),
@@ -1583,6 +1703,11 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                                     removeBackground: t('removeBackground'),
                                     removingBackground: t('removingBackground'),
                                     removeBackgroundFailed: t('removeBackgroundFailed'),
+                                    stockSearchPlaceholder: t('stockSearchPlaceholder'),
+                                    stockEmpty: t('stockEmpty'),
+                                    stockNotConfigured: t('stockNotConfigured'),
+                                    stockCredit: t('stockCredit'),
+                                    importStockFailed: t('importStockFailed'),
                                   }}
                                 />
                               </div>
@@ -2310,37 +2435,6 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
             ]}
           />
 
-          <div className="mt-5 flex items-center justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              title={`${t('undo')} (Ctrl+Z)`}
-              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
-            >
-              <Undo2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              title={`${t('redo')} (Ctrl+Shift+Z)`}
-              className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
-            >
-              <Redo2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setEditing(null)}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              {tc('cancel')}
-            </button>
-            <button
-              onClick={() => (editing === 'new' ? createMut.mutate() : updateMut.mutate())}
-              disabled={!name.trim() || elements.length === 0 || saving}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              <Check className="h-4 w-4" /> {saving ? t('saving') : t('saveTheme')}
-            </button>
-          </div>
         </div>
       )}
 
@@ -2438,7 +2532,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                 </div>
                 <div
                   style={{
-                    aspectRatio: '16/9',
+                    aspectRatio: parseAspectRatio(theme.aspectRatio),
                     background: theme.palette.background,
                     borderRadius: 4,
                     overflow: 'hidden',
@@ -2526,7 +2620,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                   title={canEditContent ? t('clickToEdit') : undefined}
                   className="group relative block w-full disabled:cursor-default"
                   style={{
-                    aspectRatio: '16/9',
+                    aspectRatio: parseAspectRatio(theme.aspectRatio),
                     background: theme.palette.background,
                     borderRadius: 4,
                     overflow: 'hidden',
@@ -2547,9 +2641,9 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                   <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
                     {t(`categories.${theme.category}`)}
                   </span>
-                  {theme._count && theme._count.screens > 0 && (
+                  {theme._count && theme._count.playlistItems > 0 && (
                     <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {t('screenCount', { count: theme._count.screens })}
+                      {t('playlistItemCount', { count: theme._count.playlistItems })}
                     </span>
                   )}
                 </div>

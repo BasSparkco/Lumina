@@ -38,7 +38,7 @@ function formatBytes(b: number): string {
 export default function DashboardPage() {
   const t = useTranslations('fleet');
   const ts = useTranslations('screens');
-  const liveStatuses = useScreenSocket();
+  const { statuses: liveStatuses } = useScreenSocket();
   const { format: dateFormat } = useDateFormat();
 
   const [now, setNow] = useState(() => Date.now());

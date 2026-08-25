@@ -80,14 +80,19 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/assign`, { method: 'POST', body: JSON.stringify({ playlistId }) }),
   publish: (id: string) => req<{ ok: boolean }>(`/screens/${id}/publish`, { method: 'POST' }),
   reload: (id: string) => req<{ ok: boolean }>(`/screens/${id}/reload`, { method: 'POST' }),
-  setLayout: (id: string, layoutId: string | null) =>
-    req<Screen>(`/screens/${id}/layout`, { method: 'PUT', body: JSON.stringify({ layoutId }) }),
+  clearCache: (id: string) => req<{ ok: boolean }>(`/screens/${id}/clear-cache`, { method: 'POST' }),
   setStreamingType: (id: string, streamingType: StreamingType) =>
     req<Screen>(`/screens/${id}/streaming-type`, { method: 'PUT', body: JSON.stringify({ streamingType }) }),
   setAsset: (id: string, assetId: string | null) =>
     req<Screen>(`/screens/${id}/asset`, { method: 'PUT', body: JSON.stringify({ assetId }) }),
-  setTheme: (id: string, themeId: string | null) =>
-    req<Screen>(`/screens/${id}/theme`, { method: 'PUT', body: JSON.stringify({ themeId }) }),
+  // Custom Player (appsroadmap.md Phase 9/11) — remote control of whatever video is currently
+  // playing on the screen. Fire-and-forget over the socket, same shape as publish/reload above.
+  pause: (id: string) => req<{ ok: boolean }>(`/screens/${id}/pause`, { method: 'POST' }),
+  resume: (id: string) => req<{ ok: boolean }>(`/screens/${id}/resume`, { method: 'POST' }),
+  seek: (id: string, toSeconds: number) =>
+    req<{ ok: boolean }>(`/screens/${id}/seek`, { method: 'POST', body: JSON.stringify({ toSeconds }) }),
+  setSpeed: (id: string, rate: number) =>
+    req<{ ok: boolean }>(`/screens/${id}/speed`, { method: 'POST', body: JSON.stringify({ rate }) }),
   setEmergency: (id: string, active: boolean, playlistId?: string) =>
     req<Screen>(`/screens/${id}/emergency`, { method: 'PUT', body: JSON.stringify({ active, playlistId }) }),
   setStopped: (id: string, stopped: boolean) =>
@@ -96,6 +101,8 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
   setShowClock: (id: string, showClock: boolean) =>
     req<Screen>(`/screens/${id}/show-clock`, { method: 'PUT', body: JSON.stringify({ showClock }) }),
+  setOrientation: (id: string, orientation: 0 | 90 | 180 | 270) =>
+    req<Screen>(`/screens/${id}/orientation`, { method: 'PUT', body: JSON.stringify({ orientation }) }),
   updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean }) =>
     req<Screen>(`/screens/${id}/prayer`, { method: 'PUT', body: JSON.stringify(data) }),
   captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
@@ -242,6 +249,74 @@ export const assetsApi = {
     return req<Asset[]>(`/assets/library${suffix}`);
   },
   useFromLibrary: (id: string) => req<Asset>(`/assets/library/${id}/use`, { method: 'POST' }),
+  uploadToLibrary: async (file: File, category?: AssetCategory, tags?: string[], onProgress?: (pct: number) => void): Promise<Asset> => {
+    const token = getToken();
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (category) form.append('category', category);
+      if (tags?.length) form.append('tags', tags.join(','));
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/assets/library`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e: ProgressEvent) => { if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100)); };
+      xhr.onload = () => { if (xhr.status < 300) resolve(JSON.parse(xhr.responseText) as Asset); else reject(new Error(xhr.responseText)); };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(form);
+    });
+  },
+  updateLibraryAsset: (id: string, dto: { name?: string; category?: AssetCategory; tags?: string[] }) =>
+    req<Asset>(`/assets/library/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  removeFromLibrary: (id: string) => req<void>(`/assets/library/${id}`, { method: 'DELETE' }),
+  searchStockPhotos: (params?: { query?: string; page?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.query) qs.set('query', params.query);
+    if (params?.page) qs.set('page', String(params.page));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<{ configured: boolean; photos: StockPhoto[] }>(`/assets/stock/search${suffix}`);
+  },
+  importStockPhoto: (photoId: number) =>
+    req<Asset>('/assets/stock/import', { method: 'POST', body: JSON.stringify({ photoId }) }),
+  createApp: (providerId: string, sourceUrl: string, name?: string) =>
+    req<Asset>('/assets/apps', { method: 'POST', body: JSON.stringify({ providerId, sourceUrl, name }) }),
+  createAppPlaylist: (providerId: string, name: string, playbackOrder: AppPlaybackOrder, sourceUrls: string[]) =>
+    req<Asset>('/assets/apps/playlist', {
+      method: 'POST',
+      body: JSON.stringify({ providerId, name, playbackOrder, items: sourceUrls.map(sourceUrl => ({ sourceUrl })) }),
+    }),
+};
+
+// ── Apps (Assets page "Apps" tab) ──────────────────────────────────────────
+export interface AppProvider {
+  id: string;
+  name: string;
+  renderKind: 'iframe' | 'script';
+}
+export interface ResolvedApp {
+  providerId: string;
+  sourceUrl: string;
+  title: string;
+  thumbnailUrl: string | null;
+  embedUrl: string;
+  width: number | null;
+  height: number | null;
+}
+export type AppPlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
+export interface AppPlaylistItem {
+  sourceUrl: string;
+  title: string;
+  thumbnailUrl: string | null;
+  embedUrl: string;
+}
+// Discriminated by `kind` — a single video (Assets page "Add a video") vs a custom playlist
+// ("Create a playlist"), both stored as one APP asset's appConfig (see appsroadmap.md Phase 6).
+export type AppConfig =
+  | { kind: 'video'; title: string; thumbnailUrl: string | null; embedUrl: string; width: number | null; height: number | null }
+  | { kind: 'playlist'; playbackOrder: AppPlaybackOrder; items: AppPlaylistItem[] };
+export const appsApi = {
+  providers: () => req<AppProvider[]>('/apps/providers'),
+  resolve: (providerId: string, sourceUrl: string) =>
+    req<ResolvedApp>('/apps/resolve', { method: 'POST', body: JSON.stringify({ providerId, sourceUrl }) }),
 };
 
 // ── Playlists ────────────────────────────────────────────────────────────────
@@ -251,8 +326,12 @@ export const playlistsApi = {
   get: (id: string) => req<Playlist>(`/playlists/${id}`),
   rename: (id: string, name: string) => req<PlaylistSummary>(`/playlists/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   remove: (id: string) => req<void>(`/playlists/${id}`, { method: 'DELETE' }),
-  addItem: (id: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean) =>
-    req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ assetId, durationSecs, muted, playFullVideo }) }),
+  addItem: (
+    id: string,
+    item: { kind?: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string },
+    durationSecs: number, muted?: boolean, playFullVideo?: boolean,
+  ) =>
+    req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ ...item, durationSecs, muted, playFullVideo }) }),
   updateItem: (
     id: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
     crop?: { cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null },
@@ -334,8 +413,8 @@ export const realScreenGroupsApi = {
 // ── Types ───────────────────────────────────────────────────────────────────
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
-export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME' | 'WAYFINDING';
+export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | 'LIBRARY_MANAGER';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; }
 export interface ZoneInput {
   name: string; x: number; y: number; width: number; height: number; zIndex?: number;
@@ -358,7 +437,7 @@ export interface ZoneInput {
   _localId?: string;
 }
 export interface ZoneRecord extends ZoneInput { id: string; playlist: { id: string; name: string } | null; asset: { id: string; name: string } | null; }
-export interface Layout { id: string; name: string; zones: ZoneRecord[]; _count?: { screens: number }; }
+export interface Layout { id: string; name: string; zones: ZoneRecord[]; _count?: { playlistItems: number }; }
 export interface CreateScheduleInput {
   name: string; screenId: string; playlistId: string; priority?: number;
   startTime?: string; endTime?: string; daysOfWeek?: number[];
@@ -378,11 +457,11 @@ export interface Screen {
   id: string; name: string; status: 'ONLINE' | 'OFFLINE'; lastSeenAt: string | null;
   paired: boolean; streamingType: StreamingType;
   assetId: string | null; playlistId: string | null; playlist?: { id: string; name: string } | null;
-  layoutId: string | null; themeId: string | null; emergencyActive: boolean; stopped: boolean; showClock: boolean;
+  emergencyActive: boolean; stopped: boolean; showClock: boolean;
   latitude: number | null; longitude: number | null;
   prayerMethod: string; athanEnabled: boolean; timezone: string; timezoneEnabled: boolean;
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
-  hasContent: boolean; volume: number | null;
+  hasContent: boolean; volume: number | null; orientation: 0 | 90 | 180 | 270;
   kioskLocation: {
     id: string; floorId: string; x: number; y: number;
     floor?: { id: string; label: string; building: { id: string; name: string } };
@@ -441,14 +520,29 @@ export interface TextStyle {
   textTickerEnabled?: boolean; textTickerDirection?: TickerDirection; textTickerSpeed?: number; textTickerCrossOffset?: number;
 }
 export type AssetCategory = 'BACKGROUND' | 'ICON' | 'ILLUSTRATION' | 'STOCK_PHOTO' | 'LOGO' | 'VIDEO_LOOP' | 'AUDIO_JINGLE' | 'GENERIC';
+// A Pexels search result — not yet an Asset. Only turns into one (via importStockPhoto) once
+// the user actually picks it, so browsing search results never creates orphaned asset rows.
+export interface StockPhoto {
+  id: number;
+  thumbnailUrl: string;
+  previewUrl: string;
+  width: number;
+  height: number;
+  photographer: string;
+  photographerUrl: string;
+  alt: string | null;
+}
 export interface Asset {
-  id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT'; mimeType: string;
+  id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT' | 'APP'; mimeType: string;
   sizeBytes: number; status: string; url: string | null; thumbnailUrl: string | null;
   downloadUrl: string | null; textContent: string | null;
   textFontFamily: TextFontFamily | null; textColor: string | null; textSize: TextSize | null;
   textBackgroundColor: string | null;
   textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null;
   hasAudioTrack: boolean; audioEnabled: boolean;
+  // APP assets only — see appsroadmap.md. appProviderId is a registry id (e.g. "youtube");
+  // sourceUrl is the link the user pasted (null for a playlist — see appConfig.items instead).
+  appProviderId: string | null; sourceUrl: string | null; appConfig: AppConfig | null;
   category: AssetCategory; tags: string[];
   width: number | null; height: number | null; durationSecs: number | null; pageCount: number | null; createdAt: string;
   // Stamped by assetsApi.touch() whenever this asset is picked in an editor's "existing asset"
@@ -459,11 +553,18 @@ export interface Asset {
   usageCount?: number;
   inUse?: boolean;
 }
+export type PlaylistItemKind = 'ASSET' | 'THEME' | 'LAYOUT';
 export interface PlaylistItem {
   id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
-  // Per-placement image/video framing (crop editor) — null means "show the whole asset".
+  // Per-placement image/video framing (crop editor) — null means "show the whole asset", and
+  // only ever meaningful for an ASSET-kind item.
   cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null;
-  asset: Asset;
+  kind: PlaylistItemKind;
+  // Exactly one of these is set, matching `kind` — a playlist item can be a plain asset
+  // (including an APP-type one), a whole Theme, or a whole Layout.
+  asset: Asset | null;
+  theme: { id: string; name: string; category: ThemeCategory } | null;
+  layout: { id: string; name: string } | null;
 }
 export type TransitionStyle = 'NONE' | 'CROSSFADE';
 export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
@@ -525,5 +626,5 @@ export interface ThemeInput {
 }
 export interface Theme extends Omit<ThemeInput, 'aspectRatio'> {
   id: string; organizationId: string | null; aspectRatio: string; createdAt: string; updatedAt: string;
-  _count?: { screens: number };
+  _count?: { playlistItems: number };
 }

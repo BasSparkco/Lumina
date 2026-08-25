@@ -13,6 +13,7 @@ import { validateEnv } from './config/env.validation';
 import { StorageModule } from './modules/storage/storage.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { AppsModule } from './modules/apps/apps.module';
 import { ScreensModule } from './modules/screens/screens.module';
 import { PlaylistsModule } from './modules/playlists/playlists.module';
 import { PlayerModule } from './modules/player/player.module';
@@ -91,6 +92,7 @@ loadDotenv({
     StorageModule,
     AuthModule,
     AssetsModule,
+    AppsModule,
     ScreensModule,
     PlaylistsModule,
     PlayerModule,

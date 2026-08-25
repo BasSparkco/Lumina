@@ -18,7 +18,25 @@ export type PlayerCommand =
   | { type: 'clear-cache' }
   | { type: 'capture-screenshot' }
   | { type: 'unpair'; pairingCode: string }
-  | { type: 'deleted' };
+  | { type: 'deleted' }
+  // Custom Player (appsroadmap.md Phase 9) — remote control of whatever video is currently
+  // playing. The player decides whether the active content is controllable (see Phase 10); a
+  // command arriving with nothing controllable on screen is just a no-op.
+  | { type: 'pause' }
+  | { type: 'resume' }
+  | { type: 'seek'; toSeconds: number }
+  | { type: 'setSpeed'; rate: number };
+
+// Emitted by the player (not the dashboard) roughly once a second while a controllable video is
+// playing, so the dashboard's Custom Player panel can show a live, scrubbable position without
+// polling.
+export interface PlaybackProgress {
+  screenId: string;
+  currentTime: number;
+  duration: number;
+  paused: boolean;
+  rate: number;
+}
 
 interface ScreenSocketData {
   screenId?: string;
@@ -58,12 +76,18 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwt.verify<{ sub: string; type: string; orgId?: string }>(token);
 
       if (payload.type === 'screen') {
-        // Player connected — join its own room
+        // Player connected — join its own room. orgId is stored too (not just screenId) so
+        // handlePlaybackProgress below can forward to the right dashboard org room without an
+        // extra DB lookup on every ~1s tick.
         void client.join(`screen:${payload.sub}`);
-        client.data = { screenId: payload.sub, role: 'player' };
+        client.data = { screenId: payload.sub, orgId: payload.orgId, role: 'player' };
         this.logger.log(`Player connected: ${payload.sub}`);
-      } else if (payload.type === 'user' && payload.orgId) {
-        // Dashboard connected — join org room for status updates
+      } else if (payload.type !== 'screen' && payload.orgId) {
+        // Dashboard connected — join org room for status updates. The real dashboard access
+        // token (AuthService.sign) never actually carries a `type` field — only screen tokens
+        // do (see JwtStrategy, which rejects `type === 'screen'` on REST routes the same way) —
+        // so "not a screen token" is the correct user check, not an equality match on 'user'
+        // (which no token ever sets; that check silently dropped every dashboard connection).
         void client.join(`org:${payload.orgId}`);
         client.data = { orgId: payload.orgId, role: 'dashboard' };
         this.logger.log(`Dashboard connected: org ${payload.orgId}`);
@@ -95,5 +119,16 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('ack')
   handleAck(@ConnectedSocket() client: AppSocket, @MessageBody() data: { type: string }) {
     this.logger.log(`Player ${client.data.screenId ?? 'unknown'} acked: ${data.type}`);
+  }
+
+  // Player reports its current playback position — forwarded as-is to every dashboard client
+  // watching this org (the same room screen-status already uses), so a Custom Player panel can
+  // track it live. Only ever sent by a 'player'-role socket; a dashboard client has no orgId-less
+  // screenId to report progress for, so client.data.screenId being unset here is impossible in
+  // practice, but the guard keeps a malformed/rogue emit from broadcasting under someone else's org.
+  @SubscribeMessage('playback-progress')
+  handlePlaybackProgress(@ConnectedSocket() client: AppSocket, @MessageBody() data: Omit<PlaybackProgress, 'screenId'>) {
+    if (!client.data.screenId || !client.data.orgId) return;
+    this.server.to(`org:${client.data.orgId}`).emit('playback-progress', { screenId: client.data.screenId, ...data });
   }
 }

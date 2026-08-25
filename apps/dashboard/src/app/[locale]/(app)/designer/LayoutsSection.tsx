@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import {
   LayoutTemplate,
   Palette,
@@ -28,6 +29,9 @@ import {
   QrCode,
   Crop,
   Search,
+  ImageDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   type LucideIcon,
 } from 'lucide-react';
 import { shapeClipStyle, type ThemeElementShape } from '@lumina/types';
@@ -42,6 +46,7 @@ import {
 import { EditorAddSidebar } from '@/components/EditorAddSidebar';
 import { LayoutCanvasPanel } from './LayoutCanvasPanel';
 import { removeAssetBackground } from '@/lib/backgroundRemoval';
+import { captureFabricCanvasAsAsset } from '@/lib/exportDesignAsAsset';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
@@ -207,8 +212,13 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
   // A zone must be selected (single click) before it can be dragged/resized/rotated — unless
   // requireSelectToEdit is off, or the zone is locked (editable: false), which always wins.
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  // Populated by LayoutCanvasPanel's exportRef with a function that rasterizes the live fabric
+  // canvas to a PNG data URL — a plain ref (not state) since it never needs to trigger a re-render.
+  const getCanvasPngRef = useRef<(() => string) | null>(null);
   const [addPanelOpen, setAddPanelOpen] = useState(false);
   const [bgRemovingZoneKey, setBgRemovingZoneKey] = useState<string | null>(null);
+  // Purely a view toggle to reduce clutter — hides the zone card grid without touching selection/data.
+  const [zoneCardsCollapsed, setZoneCardsCollapsed] = useState(false);
   const [bgRemoveError, setBgRemoveError] = useState('');
   const [croppingZoneKey, setCroppingZoneKey] = useState<string | null>(null);
   // UI-only: which zones have the media-source toggle set to "Asset". Needed because a brand
@@ -283,6 +293,23 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
       });
       void qc.invalidateQueries({ queryKey: ['layouts'] });
       setEditing(null);
+    },
+  });
+
+  // Rasterizes the canvas to a PNG and uploads it as a plain image Asset, alongside (not
+  // instead of) the layout itself — the layout keeps saving as its own structured template via
+  // saveLayout above; this just gives an easier way to reuse the design as a flat picture.
+  const saveAsAssetMut = useMutation({
+    mutationFn: async () => {
+      // getPng() clears the canvas's own selection/hover chrome internally before rasterizing,
+      // so no React-side deselect is needed here.
+      const getPng = getCanvasPngRef.current;
+      if (!getPng) throw new Error('Canvas not ready');
+      return captureFabricCanvasAsAsset(getPng(), name);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['assets'] });
+      toast.success(t('saveAsAssetSuccess'));
     },
   });
 
@@ -498,6 +525,49 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
             </div>
           </div>
 
+          {/* Save/cancel sit above the canvas (not just below the zone cards) so they're
+              reachable without scrolling past the whole editor on tall layouts. */}
+          <div className="mb-5 flex items-center justify-end gap-2 border-b border-gray-100 pb-4 dark:border-gray-800">
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title={`${t('undo')} (Ctrl+Z)`}
+              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title={`${t('redo')} (Ctrl+Shift+Z)`}
+              className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => saveAsAssetMut.mutate()}
+              disabled={zones.length === 0 || saveAsAssetMut.isPending}
+              title={t('saveAsAssetHint')}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              <ImageDown className="h-4 w-4" />{' '}
+              {saveAsAssetMut.isPending ? t('savingAsset') : t('saveAsAsset')}
+            </button>
+            <button
+              onClick={() => setEditing(null)}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              {tc('cancel')}
+            </button>
+            <button
+              onClick={() => (editing === 'new' ? createMut.mutate() : updateMut.mutate())}
+              disabled={!name.trim() || zones.length === 0 || saving}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" /> {saving ? t('saving') : t('saveLayout')}
+            </button>
+          </div>
+
           {/* Visual preview, full-width, with zone settings stacked below. The floating
               EditorAddSidebar (rendered after this panel, outside its layout flow entirely) is
               the primary way to add new zones, so the zone cards can focus on editing what
@@ -519,6 +589,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
               hideZoneBackground={(i, key) => void hideZoneBackground(i, key)}
               bgRemovingZoneKey={bgRemovingZoneKey}
               onOpenAddPanel={() => setAddPanelOpen(true)}
+              exportRef={(getPng) => { getCanvasPngRef.current = getPng; }}
             />
 
             {/* Zone cards — one per zone, mirroring the screens page's per-screen card layout
@@ -526,14 +597,30 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs text-gray-400 dark:text-gray-500">{t('zones')}</div>
-                <button
-                  onClick={() => addZoneOfType('MEDIA')}
-                  className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
-                >
-                  <Plus className="h-3 w-3" /> {t('addZone')}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setZoneCardsCollapsed((v) => !v)}
+                    title={zoneCardsCollapsed ? t('expandAll') : t('collapseAll')}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    {zoneCardsCollapsed ? (
+                      <ChevronsUpDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronsDownUp className="h-3 w-3" />
+                    )}
+                    {zoneCardsCollapsed ? t('expandAll') : t('collapseAll')}
+                  </button>
+                  <button
+                    onClick={() => addZoneOfType('MEDIA')}
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                  >
+                    <Plus className="h-3 w-3" /> {t('addZone')}
+                  </button>
+                </div>
               </div>
-              <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div
+                className={`grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-3 ${zoneCardsCollapsed ? 'hidden' : ''}`}
+              >
                 {zones.map((z, i) => {
                   const key = z._localId ?? String(i);
                   const isSelected = selectedZoneId === key;
@@ -980,37 +1067,6 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
             ]}
           />
 
-          <div className="mt-5 flex items-center justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              title={`${t('undo')} (Ctrl+Z)`}
-              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
-            >
-              <Undo2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              title={`${t('redo')} (Ctrl+Shift+Z)`}
-              className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
-            >
-              <Redo2 className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setEditing(null)}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            >
-              {tc('cancel')}
-            </button>
-            <button
-              onClick={() => (editing === 'new' ? createMut.mutate() : updateMut.mutate())}
-              disabled={!name.trim() || zones.length === 0 || saving}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              <Check className="h-4 w-4" /> {saving ? t('saving') : t('saveLayout')}
-            </button>
-          </div>
         </div>
       )}
 
@@ -1127,21 +1183,49 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
                   marginBottom: 8,
                 }}
               >
-                {layout.zones.map((z, i) => (
-                  <div
-                    key={z.id}
-                    style={{
-                      position: 'absolute',
-                      left: `${z.x}%`,
-                      top: `${z.y}%`,
-                      width: `${z.width}%`,
-                      height: `${z.height}%`,
-                      background: ZONE_COLORS[i % ZONE_COLORS.length] + '66',
-                      border: `1px solid ${ZONE_COLORS[i % ZONE_COLORS.length]}`,
-                      ...shapeClipStyle(z.shape),
-                    }}
-                  />
-                ))}
+                {layout.zones.map((z, i) => {
+                  const zt = z.zoneType ?? 'MEDIA';
+                  const color = ZONE_COLORS[i % ZONE_COLORS.length];
+                  // MEDIA zones bound directly to an Asset (not a playlist) can show its real
+                  // thumbnail — z.asset only carries {id, name} from the API, so cross-reference
+                  // the already-fetched full asset list for thumbnailUrl/type.
+                  const zoneAsset = zt === 'MEDIA' && z.asset ? assets.find((a) => a.id === z.asset!.id) : undefined;
+                  const thumbUrl =
+                    zoneAsset && zoneAsset.status === 'READY'
+                      ? (zoneAsset.thumbnailUrl ?? (zoneAsset.type === 'IMAGE' ? zoneAsset.url : null))
+                      : null;
+                  const Icon = ZONE_TYPE_ICONS[zt];
+                  return (
+                    <div
+                      key={z.id}
+                      style={{
+                        position: 'absolute',
+                        left: `${z.x}%`,
+                        top: `${z.y}%`,
+                        width: `${z.width}%`,
+                        height: `${z.height}%`,
+                        background: thumbUrl ? '#000' : color + '66',
+                        border: `1px solid ${color}`,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        ...shapeClipStyle(z.shape),
+                      }}
+                    >
+                      {thumbUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- small grid thumbnail, not a static/local image
+                        <img
+                          src={thumbUrl}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <Icon className="h-3.5 w-3.5 opacity-70" style={{ color }} />
+                      )}
+                    </div>
+                  );
+                })}
                 {canEditContent && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
                     <span className="flex items-center gap-1.5 text-xs font-medium text-white">
@@ -1187,7 +1271,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
               </div>
               {layout._count && (
                 <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                  {t('screenCount', { count: layout._count.screens })}
+                  {t('playlistItemCount', { count: layout._count.playlistItems })}
                 </p>
               )}
             </div>

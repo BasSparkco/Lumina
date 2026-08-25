@@ -6,6 +6,7 @@ export const ASSET_TYPE_LABELS: Record<Asset['type'], string> = {
   AUDIO: 'Audio',
   TEXT: 'Text',
   DOCUMENT: 'Document',
+  APP: 'App',
 };
 
 /** Distinct asset types present, in the fixed order above rather than first-seen order — so the

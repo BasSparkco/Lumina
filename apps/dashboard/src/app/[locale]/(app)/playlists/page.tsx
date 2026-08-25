@@ -2,8 +2,8 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search } from 'lucide-react';
-import { playlistsApi, assetsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type Asset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, Smartphone, Volume2, VolumeX } from 'lucide-react';
+import { playlistsApi, assetsApi, themesApi, layoutsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
@@ -38,6 +38,7 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   AUDIO: <Music className="w-3.5 h-3.5 text-green-500" />,
   TEXT: <Type className="w-3.5 h-3.5 text-amber-500" />,
   DOCUMENT: <FileText className="w-3.5 h-3.5 text-red-500" />,
+  APP: <Smartphone className="w-3.5 h-3.5 text-teal-500" />,
 };
 
 /** The items/settings for one expanded playlist — everything that used to live on its own
@@ -55,6 +56,7 @@ function PlaylistDetail({ id }: { id: string }) {
   const tAssets = useTranslations('assets');
   const tCrop = useTranslations('cropEditor');
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [itemKindTab, setItemKindTab] = useState<PlaylistItemKind>('ASSET');
   const [assetSearch, setAssetSearch] = useState('');
   const [assetSort, setAssetSort] = useState<AssetSortKey>('recentlyAdded');
   // Empty = every type shown; combines (AND) with search/sort — e.g. "recently used" + IMAGE only.
@@ -96,6 +98,8 @@ function PlaylistDetail({ id }: { id: string }) {
   });
 
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list, enabled: showAssetPicker });
+  const { data: themesList = [] } = useQuery({ queryKey: ['themes'], queryFn: themesApi.list, enabled: showAssetPicker });
+  const { data: layoutsList = [] } = useQuery({ queryKey: ['layouts'], queryFn: layoutsApi.list, enabled: showAssetPicker });
   const readyAssets = useMemo(() => assets.filter((a: Asset) => a.status === 'READY'), [assets]);
   const availableAssetTypes = useMemo(() => distinctAssetTypes(readyAssets), [readyAssets]);
   const pickableAssets = useMemo(() => {
@@ -114,20 +118,24 @@ function PlaylistDetail({ id }: { id: string }) {
   }
 
   const addMut = useMutation({
-    mutationFn: ({ assetId, dur }: { assetId: string; dur: number }) =>
-      playlistsApi.addItem(id, assetId, dur),
-    onSuccess: (created, { assetId }) => {
-      const assetName = assets.find((a: Asset) => a.id === assetId)?.name ?? '';
+    mutationFn: ({ kind, assetId, themeId, layoutId, dur }: { kind: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string; dur: number }) =>
+      playlistsApi.addItem(id, { kind, assetId, themeId, layoutId }, dur),
+    onSuccess: (created, { kind, assetId, themeId, layoutId }) => {
+      const name = kind === 'ASSET' ? assets.find((a: Asset) => a.id === assetId)?.name
+        : kind === 'THEME' ? themesList.find((th: Theme) => th.id === themeId)?.name
+        : layoutsList.find((l: Layout) => l.id === layoutId)?.name;
       logAction({
         resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: 'ADD_ITEM',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: assetName,
+        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: name ?? '',
       });
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: [...old.items, created] });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
       void qc.invalidateQueries({ queryKey: ['playlists'] });
       // Fire-and-forget: drives the "recently used" sort in this and other asset pickers, but a
       // failed touch shouldn't block or error out an otherwise-successful add.
-      void assetsApi.touch(assetId).then(() => qc.invalidateQueries({ queryKey: ['assets'] })).catch(() => {});
+      if (kind === 'ASSET' && assetId) {
+        void assetsApi.touch(assetId).then(() => qc.invalidateQueries({ queryKey: ['assets'] })).catch(() => {});
+      }
       setShowAssetPicker(false);
       setAssetSearch('');
     },
@@ -138,7 +146,8 @@ function PlaylistDetail({ id }: { id: string }) {
     onSuccess: (_data, item) => {
       logAction({
         resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: 'REMOVE_ITEM',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: item.asset.name,
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: item.asset?.name ?? item.theme?.name ?? item.layout?.name ?? '',
       });
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: old.items.filter(i => i.id !== item.id) });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
@@ -148,6 +157,16 @@ function PlaylistDetail({ id }: { id: string }) {
 
   const durMut = useMutation({
     mutationFn: ({ itemId, dur }: { itemId: string; dur: number }) => playlistsApi.updateItem(id, itemId, dur),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
+  const mutedMut = useMutation({
+    mutationFn: (item: PlaylistItem) => playlistsApi.updateItem(id, item.id, item.durationSecs, !item.muted, item.playFullVideo),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
+  const playFullVideoMut = useMutation({
+    mutationFn: (item: PlaylistItem) => playlistsApi.updateItem(id, item.id, item.durationSecs, item.muted, !item.playFullVideo),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
@@ -247,73 +266,135 @@ function PlaylistDetail({ id }: { id: string }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}>
           <div className="bg-white dark:bg-gray-900 rounded-xl p-5 w-full max-w-lg shadow-xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('pickAsset')}</h2>
-            <div className="flex gap-1.5 mb-2">
-              <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)}
-                  placeholder="Search assets…"
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-              </div>
-              <select value={assetSort} onChange={(e) => setAssetSort(e.target.value as AssetSortKey)} title="Sort by"
-                className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                {ASSET_SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-              </select>
-            </div>
-            {availableAssetTypes.length > 1 && (
-              <div className="flex flex-wrap gap-1 mb-2">
-                <button type="button" onClick={() => setAssetTypeFilter(new Set())}
-                  className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                    assetTypeFilter.size === 0
-                      ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+            <div className="grid grid-cols-3 gap-1 mb-3">
+              {([
+                { kind: 'ASSET' as const, label: t('itemKind.asset'), Icon: ImageIcon },
+                { kind: 'THEME' as const, label: t('itemKind.theme'), Icon: Palette },
+                { kind: 'LAYOUT' as const, label: t('itemKind.layout'), Icon: LayoutGrid },
+              ]).map(({ kind, label, Icon }) => (
+                <button key={kind} type="button" onClick={() => setItemKindTab(kind)}
+                  className={`flex items-center justify-center gap-1 text-xs py-1.5 rounded-lg border font-medium ${
+                    itemKindTab === kind
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}>
-                  All
+                  <Icon className="w-3.5 h-3.5" /> {label}
                 </button>
-                {availableAssetTypes.map((ty) => {
-                  const active = assetTypeFilter.size === 0 || assetTypeFilter.has(ty);
-                  return (
-                    <button key={ty} type="button" onClick={() => toggleAssetType(ty)}
-                      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
-                        active
+              ))}
+            </div>
+
+            {itemKindTab === 'ASSET' && (
+              <>
+                <div className="flex gap-1.5 mb-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)}
+                      placeholder="Search assets…"
+                      className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                  </div>
+                  <select value={assetSort} onChange={(e) => setAssetSort(e.target.value as AssetSortKey)} title="Sort by"
+                    className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    {ASSET_SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </select>
+                </div>
+                {availableAssetTypes.length > 1 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    <button type="button" onClick={() => setAssetTypeFilter(new Set())}
+                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                        assetTypeFilter.size === 0
                           ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
                           : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
                       }`}>
-                      {TYPE_ICON[ty]} {ASSET_TYPE_LABELS[ty]}
+                      All
                     </button>
-                  );
-                })}
+                    {availableAssetTypes.map((ty) => {
+                      const active = assetTypeFilter.size === 0 || assetTypeFilter.has(ty);
+                      return (
+                        <button key={ty} type="button" onClick={() => toggleAssetType(ty)}
+                          className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
+                            active
+                              ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
+                              : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                          }`}>
+                          {TYPE_ICON[ty]} {ASSET_TYPE_LABELS[ty]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="overflow-y-auto flex-1 space-y-1">
+                  {pickableAssets.map((a: Asset) => (
+                    <button key={a.id} onClick={() => addMut.mutate({ kind: 'ASSET', assetId: a.id, dur: defaultDuration })}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
+                      {a.thumbnailUrl
+                        ? <Image src={a.thumbnailUrl} width={40} height={40} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
+                        : <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[a.type]}</div>
+                      }
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{a.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[a.type]} {a.type}</p>
+                      </div>
+                      <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
+                        {assetSort === 'mostUsed'
+                          ? `${a.usageCount ?? 0}×`
+                          : assetSort === 'recentlyUsed'
+                            ? (a.lastUsedAt ? formatRelativeTime(a.lastUsedAt) : '—')
+                            : assetSort === 'recentlyAdded'
+                              ? formatRelativeTime(a.createdAt)
+                              : ''}
+                      </span>
+                      {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                    </button>
+                  ))}
+                  {pickableAssets.length === 0 && (
+                    <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
+                      {readyAssets.length === 0 ? t('noReadyAssets') : 'No assets found'}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {itemKindTab === 'THEME' && (
+              <div className="overflow-y-auto flex-1 space-y-1">
+                {themesList.map((th: Theme) => (
+                  <button key={th.id} onClick={() => addMut.mutate({ kind: 'THEME', themeId: th.id, dur: defaultDuration })}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
+                    <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                      <Palette className="w-3.5 h-3.5 text-indigo-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{th.name}</p>
+                    </div>
+                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                  </button>
+                ))}
+                {themesList.length === 0 && (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noThemes')}</p>
+                )}
               </div>
             )}
-            <div className="overflow-y-auto flex-1 space-y-1">
-              {pickableAssets.map((a: Asset) => (
-                <button key={a.id} onClick={() => addMut.mutate({ assetId: a.id, dur: defaultDuration })}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
-                  {a.thumbnailUrl
-                    ? <Image src={a.thumbnailUrl} width={40} height={40} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
-                    : <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[a.type]}</div>
-                  }
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{a.name}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[a.type]} {a.type}</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
-                    {assetSort === 'mostUsed'
-                      ? `${a.usageCount ?? 0}×`
-                      : assetSort === 'recentlyUsed'
-                        ? (a.lastUsedAt ? formatRelativeTime(a.lastUsedAt) : '—')
-                        : assetSort === 'recentlyAdded'
-                          ? formatRelativeTime(a.createdAt)
-                          : ''}
-                  </span>
-                  {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
-                </button>
-              ))}
-              {pickableAssets.length === 0 && (
-                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
-                  {readyAssets.length === 0 ? t('noReadyAssets') : 'No assets found'}
-                </p>
-              )}
-            </div>
+
+            {itemKindTab === 'LAYOUT' && (
+              <div className="overflow-y-auto flex-1 space-y-1">
+                {layoutsList.map((l: Layout) => (
+                  <button key={l.id} onClick={() => addMut.mutate({ kind: 'LAYOUT', layoutId: l.id, dur: defaultDuration })}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
+                    <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                      <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{l.name}</p>
+                    </div>
+                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                  </button>
+                ))}
+                {layoutsList.length === 0 && (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noLayouts')}</p>
+                )}
+              </div>
+            )}
+
             <button onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}
               className="mt-3 w-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
           </div>
@@ -344,28 +425,65 @@ function PlaylistDetail({ id }: { id: string }) {
 
             <span className="text-xs text-gray-300 dark:text-gray-500 w-4 text-center">{i + 1}</span>
 
-            {item.asset.thumbnailUrl ? (
-              <button onClick={() => setViewingItemId(item.id)} title={t('clickToView')}
-                className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-indigo-400 transition-all">
-                <Image src={item.asset.thumbnailUrl} width={40} height={40} className="w-full h-full object-cover" alt="" />
-              </button>
+            {item.kind === 'ASSET' && item.asset ? (
+              item.asset.thumbnailUrl ? (
+                <button onClick={() => setViewingItemId(item.id)} title={t('clickToView')}
+                  className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-indigo-400 transition-all">
+                  <Image src={item.asset.thumbnailUrl} width={40} height={40} className="w-full h-full object-cover" alt="" />
+                </button>
+              ) : (
+                <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
+              )
             ) : (
-              <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
+              <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-indigo-500" /> : <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />}
+              </div>
             )}
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.asset.name}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[item.asset.type]} {item.asset.type}</p>
+              {item.kind === 'ASSET' && item.asset ? (
+                <>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.asset.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[item.asset.type]} {item.asset.type}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {item.kind === 'THEME' ? item.theme?.name : item.layout?.name}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                    {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
+                    {item.kind === 'THEME' ? t('itemKind.theme') : t('itemKind.layout')}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              <input type="number" min={1} max={3600} value={item.durationSecs} disabled={!canEditContent}
+              {item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && (
+                <input type="checkbox" checked={item.playFullVideo} disabled={!canEditContent}
+                  onChange={() => playFullVideoMut.mutate(item)} title={t('playFullVideo')}
+                  className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
+              )}
+              <input type="number" min={1} max={3600}
+                disabled={!canEditContent || (item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo)}
+                value={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo
+                  ? (item.asset.durationSecs ?? item.durationSecs)
+                  : item.durationSecs}
+                title={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo ? t('videoDuration') : undefined}
                 onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value) })}
                 className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
               <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
             </div>
 
-            {canEditContent && (item.asset.type === 'IMAGE' || item.asset.type === 'VIDEO') && (
+            {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'VIDEO' || item.asset.type === 'APP') && (
+              <button onClick={() => mutedMut.mutate(item)} title={item.muted ? t('unmute') : t('mute')}
+                className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+                {item.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
+
+            {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'IMAGE' || item.asset.type === 'VIDEO') && (
               <button onClick={() => setCroppingItemId(item.id)} title={tCrop('editCrop')}
                 className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
                 <Crop className="w-3.5 h-3.5" />
@@ -384,17 +502,18 @@ function PlaylistDetail({ id }: { id: string }) {
 
       {viewingItemId && (() => {
         const item = playlist.items.find(i => i.id === viewingItemId);
-        const imageUrl = item?.asset.url ?? item?.asset.thumbnailUrl;
-        if (!item || !imageUrl) return null;
+        const asset = item?.asset;
+        const imageUrl = asset?.url ?? asset?.thumbnailUrl;
+        if (!item || !asset || !imageUrl) return null;
         return (
           <ImageLightbox
-            name={item.asset.name}
+            name={asset.name}
             imageUrl={imageUrl}
-            sizeLabel={formatBytes(item.asset.sizeBytes)}
-            typeLabel={item.asset.type}
+            sizeLabel={formatBytes(asset.sizeBytes)}
+            typeLabel={asset.type}
             canEdit={canEditContent}
             onClose={() => setViewingItemId(null)}
-            downloadUrl={item.asset.downloadUrl}
+            downloadUrl={asset.downloadUrl}
             downloadLabel={tAssets('download')}
             deleteLabel={t('removeFromPlaylist')}
             onDelete={() => {
@@ -407,13 +526,14 @@ function PlaylistDetail({ id }: { id: string }) {
 
       {croppingItemId && (() => {
         const item = playlist.items.find(i => i.id === croppingItemId);
-        const mediaUrl = item?.asset.url;
-        if (!item || !mediaUrl || (item.asset.type !== 'IMAGE' && item.asset.type !== 'VIDEO')) return null;
+        const asset = item?.asset;
+        const mediaUrl = asset?.url;
+        if (!item || !asset || !mediaUrl || (asset.type !== 'IMAGE' && asset.type !== 'VIDEO')) return null;
         return (
           <CropEditor
             mediaUrl={mediaUrl}
-            mediaType={item.asset.type}
-            name={item.asset.name}
+            mediaType={asset.type}
+            name={asset.name}
             aspectRatio={16 / 9}
             initialCrop={{ cropZoom: item.cropZoom, cropOffsetX: item.cropOffsetX, cropOffsetY: item.cropOffsetY }}
             onClose={() => setCroppingItemId(null)}
@@ -535,7 +655,11 @@ export default function PlaylistsPage() {
       const full = await playlistsApi.get(playlist.id);
       const created = await playlistsApi.create(`${playlist.name} (copy)`);
       for (const item of full.items) {
-        await playlistsApi.addItem(created.id, item.asset.id, item.durationSecs);
+        await playlistsApi.addItem(
+          created.id,
+          { kind: item.kind, assetId: item.asset?.id, themeId: item.theme?.id, layoutId: item.layout?.id },
+          item.durationSecs,
+        );
       }
       return created;
     },

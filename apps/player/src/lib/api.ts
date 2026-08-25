@@ -35,6 +35,8 @@ export type CheckResponse = { paired: false } | { paired: true; token: string };
 
 export type TickerDirection = 'LEFT_TO_RIGHT' | 'RIGHT_TO_LEFT' | 'TOP_TO_BOTTOM' | 'BOTTOM_TO_TOP';
 
+export type PlaylistItemKind = 'ASSET' | 'THEME' | 'LAYOUT';
+
 export interface PlaylistItem {
   id: string;
   position: number;
@@ -42,14 +44,18 @@ export interface PlaylistItem {
   muted: boolean;
   playFullVideo: boolean;
   // Per-placement image/video framing (crop editor) — null means "show the whole asset" per
-  // the render-side default (fill for images, contain for video/document).
+  // the render-side default (fill for images, contain for video/document). Only meaningful for
+  // an ASSET-kind item.
   cropZoom: number | null;
   cropOffsetX: number | null;
   cropOffsetY: number | null;
+  kind: PlaylistItemKind;
+  // Exactly one of asset/theme/layout is set, matching `kind` — a playlist item can be a plain
+  // asset (an APP-type asset included — see AppAsset below), a whole Theme, or a whole Layout.
   asset: {
     id: string;
     name: string;
-    type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT';
+    type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT' | 'APP';
     mimeType: string;
     url: string | null;
     thumbnailUrl: string | null;
@@ -65,7 +71,12 @@ export interface PlaylistItem {
     textTickerDirection: TickerDirection;
     textTickerSpeed: number | null;
     textTickerCrossOffset: number | null;
-  };
+    // APP-type assets only.
+    appProviderId?: string | null;
+    appConfig?: AppConfig | null;
+  } | null;
+  theme: HydratedTheme | null;
+  layout: { id: string; name: string; zones: Zone[] } | null;
 }
 
 export interface Playlist {
@@ -116,7 +127,23 @@ export interface Zone {
   audioVolume: number | null;
 }
 
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'LAYOUT' | 'THEME' | 'WAYFINDING';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING';
+
+// A YouTube video/playlist from an APP-type asset (Assets page "Apps" tab), playable either as a
+// screen's ASSET-mode content or as a playlist item. Mirrors the two appConfig shapes
+// AssetsService.createApp/createAppPlaylist store — this is the same JSON, just typed here for
+// the player's own use.
+export type AppConfig =
+  | { kind: 'video'; title: string; thumbnailUrl: string | null; embedUrl: string; width: number | null; height: number | null }
+  | { kind: 'playlist'; playbackOrder: 'SEQUENTIAL' | 'SHUFFLE'; items: { sourceUrl: string; title: string; thumbnailUrl: string | null; embedUrl: string }[] };
+// The shape AppPlayer actually needs — satisfied by both a PlaylistItem's `asset` (when
+// `type === 'APP'`) and (historically) a screen-level appAsset.
+export interface AppAsset {
+  id: string;
+  name: string;
+  appProviderId?: string | null;
+  appConfig?: AppConfig | null;
+}
 
 export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'PLAYLIST' | 'SHAPE' | 'BRUSH' | 'WIDGET';
 export interface ThemeBrushPoint { x: number; y: number; }
@@ -256,13 +283,12 @@ export interface PlayerState {
   athanEnabled: boolean;
   stopped: boolean;
   showClock: boolean;
+  orientation: 0 | 90 | 180 | 270;
   emergencyActive: boolean;
   emergencyPlaylist: Playlist | null;
   // Screen-level ASSET streaming mode's single asset, already wrapped as a one-item Playlist —
   // only non-null when streamingType is 'ASSET'.
   asset: Playlist | null;
-  layout: { id: string; name: string; zones: Zone[] } | null;
-  theme: HydratedTheme | null;
   wayfinding: WayfindingDirectory | null;
   scheduleRules: ScheduleRule[];
   resolvedPlaylistId: string | null;

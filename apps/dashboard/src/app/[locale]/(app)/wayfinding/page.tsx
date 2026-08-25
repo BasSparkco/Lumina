@@ -1130,6 +1130,7 @@ function FloorFormModal({
             existing: t('imageSourceExisting'),
             upload: t('imageSourceUpload'),
             paste: t('imageSourcePaste'),
+            stock: t('imageSourceStock'),
             uploading: t('uploadingImage'),
             uploadFailed: t('uploadImageFailed'),
             pasteHint: t('pasteImageHint'),
@@ -1137,6 +1138,11 @@ function FloorFormModal({
             removeBackground: t('removeBackground'),
             removingBackground: t('removingBackground'),
             removeBackgroundFailed: t('removeBackgroundFailed'),
+            stockSearchPlaceholder: t('stockSearchPlaceholder'),
+            stockEmpty: t('stockEmpty'),
+            stockNotConfigured: t('stockNotConfigured'),
+            stockCredit: t('stockCredit'),
+            importStockFailed: t('importStockFailed'),
           }}
         />
       </div>

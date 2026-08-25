@@ -32,7 +32,7 @@ export class PlaylistsService {
     return playlists.map(({ items, ...playlist }) => ({
       ...playlist,
       totalDurationSecs: items.reduce((sum: number, i: (typeof items)[number]) => sum + i.durationSecs, 0),
-      totalSizeBytes: items.reduce((sum: number, i: (typeof items)[number]) => sum + Number(i.asset.sizeBytes), 0),
+      totalSizeBytes: items.reduce((sum: number, i: (typeof items)[number]) => sum + Number(i.asset?.sizeBytes ?? 0), 0),
     }));
   }
 
@@ -43,7 +43,7 @@ export class PlaylistsService {
         include: {
           items: {
             orderBy: { position: 'asc' },
-            include: { asset: true },
+            include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
           },
         },
       }),
@@ -55,28 +55,33 @@ export class PlaylistsService {
     return { ...playlist, items: itemsWithUrls };
   }
 
-  // Callers (addItem, findOne) need the same asset shape — sizeBytes coerced from bigint,
-  // and storage keys resolved to fetchable URLs — so the frontend's PlaylistItem type is
-  // satisfied everywhere an item comes back, not just on a full playlist fetch.
-  private shapeItem<T extends { asset: { type: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; sizeBytes: bigint } }>(
-    item: T,
-  ) {
+  // Callers (addItem, updateItem, findOne) need the same shape — an ASSET item's sizeBytes
+  // coerced from bigint and storage keys resolved to fetchable URLs; a THEME/LAYOUT item just
+  // passes its (already light: id/name/category or id/name) theme/layout through untouched —
+  // the dashboard editor only needs enough to render a row, not the player's full hydration.
+  private shapeItem<T extends {
+    kind: string;
+    asset: { type: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; sizeBytes: bigint } | null;
+  }>(item: T) {
+    const asset = item.asset;
+    if (item.kind !== 'ASSET' || !asset) return { ...item, asset: null };
+
     // TEXT assets have no real object behind storageKey (see AssetsService.createText) — a
     // "url" built from it would 404, so leave it null and let the frontend/player render
     // asset.textContent instead.
-    const isText = item.asset.type === 'TEXT';
+    const isText = asset.type === 'TEXT';
     return {
       ...item,
       asset: {
-        ...item.asset,
-        sizeBytes: Number(item.asset.sizeBytes),
-        url: isText ? null : this.storage.publicUrl(item.asset.storageKey),
-        thumbnailUrl: !isText && item.asset.thumbnailKey
-          ? this.storage.publicUrl(item.asset.thumbnailKey)
+        ...asset,
+        sizeBytes: Number(asset.sizeBytes),
+        url: isText ? null : this.storage.publicUrl(asset.storageKey),
+        thumbnailUrl: !isText && asset.thumbnailKey
+          ? this.storage.publicUrl(asset.thumbnailKey)
           : null,
-        pageUrls: item.asset.type === 'DOCUMENT'
-          ? Array.from({ length: item.asset.pageCount ?? 0 }, (_, i) =>
-              this.storage.publicUrl(item.asset.storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
+        pageUrls: asset.type === 'DOCUMENT'
+          ? Array.from({ length: asset.pageCount ?? 0 }, (_, i) =>
+              this.storage.publicUrl(asset.storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
             )
           : [],
       },
@@ -119,14 +124,12 @@ export class PlaylistsService {
   }
 
   async addItem(
-    orgId: string, playlistId: string, assetId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
+    orgId: string, playlistId: string, kind: 'ASSET' | 'THEME' | 'LAYOUT', durationSecs: number,
+    refs: { assetId?: string; themeId?: string; layoutId?: string },
+    muted?: boolean, playFullVideo?: boolean,
     cropZoom?: number, cropOffsetX?: number, cropOffsetY?: number,
   ) {
     await this.assertOwns(orgId, playlistId);
-    const asset = await this.orgScoped.assertOwns(
-      () => this.prisma.asset.findFirst({ where: { id: assetId, organizationId: orgId } }),
-      'Asset not found',
-    );
 
     const last = await this.prisma.playlistItem.findFirst({
       where: { playlistId },
@@ -134,19 +137,58 @@ export class PlaylistsService {
     });
     const position = (last?.position ?? -1) + 1;
 
+    if (kind === 'THEME') {
+      if (!refs.themeId) throw new BadRequestException('themeId is required for a THEME item');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.theme.findFirst({
+          where: { id: refs.themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
+        }),
+        'Theme not found',
+      );
+      const created = await this.prisma.playlistItem.create({
+        data: { playlistId, position, durationSecs, kind: 'THEME', themeId: refs.themeId },
+        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+      });
+      return this.shapeItem(created);
+    }
+
+    if (kind === 'LAYOUT') {
+      if (!refs.layoutId) throw new BadRequestException('layoutId is required for a LAYOUT item');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.layout.findFirst({ where: { id: refs.layoutId, organizationId: orgId } }),
+        'Layout not found',
+      );
+      const created = await this.prisma.playlistItem.create({
+        data: { playlistId, position, durationSecs, kind: 'LAYOUT', layoutId: refs.layoutId },
+        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+      });
+      return this.shapeItem(created);
+    }
+
+    if (!refs.assetId) throw new BadRequestException('assetId is required for an ASSET item');
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id: refs.assetId, organizationId: orgId } }),
+      'Asset not found',
+    );
+
     // When the caller doesn't specify, default to the asset's own audio choice (from upload/the
     // assets page) rather than the DB column's blanket `true` — otherwise a video whose audio
     // was explicitly enabled still lands muted the first time it's placed anywhere, since
-    // nothing in the dashboard ever offers to unmute a placement today.
-    const initialMuted = muted !== undefined ? muted : asset.hasAudioTrack ? !asset.audioEnabled : true;
+    // nothing in the dashboard ever offers to unmute a placement today. VIDEO only gets sound
+    // once a track's actually been detected on it; every other audio-capable type (currently
+    // just APP/YouTube, which has no hasAudioTrack probe of its own) just follows the asset's
+    // own audio toggle, defaulting to unmuted.
+    const initialMuted = muted !== undefined ? muted
+      : asset.type === 'VIDEO' ? (asset.hasAudioTrack ? !asset.audioEnabled : true)
+      : !asset.audioEnabled;
     const created = await this.prisma.playlistItem.create({
       data: {
-        playlistId, assetId, position, durationSecs,
+        playlistId, position, durationSecs, kind: 'ASSET', assetId: refs.assetId,
         muted: initialMuted,
         ...(playFullVideo !== undefined && { playFullVideo }),
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
       },
-      include: { asset: true },
+      include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
     });
     return this.shapeItem(created);
   }
@@ -168,7 +210,7 @@ export class PlaylistsService {
         // truthiness — same reasoning as muted/playFullVideo above, but null-inclusive.
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
       },
-      include: { asset: true },
+      include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
     });
     return this.shapeItem(updated);
   }

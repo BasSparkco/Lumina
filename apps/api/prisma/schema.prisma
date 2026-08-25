@@ -68,6 +68,7 @@ enum UserRole {
   ADMIN
   EDITOR
   VIEWER
+  LIBRARY_MANAGER
 }
 
 model OrgInvite {
@@ -126,6 +127,10 @@ model Screen {
   // Item 10 (volume control) — 0-100, null = inherit the screen's group's volume, or 100 if
   // there's no group or the group's own volume is unset.
   volume              Int?
+  // Display rotation in degrees clockwise (0/90/180/270), dashboard-controlled and pushed to the
+  // player like every other live setting below — screens mounted sideways/upside-down get this
+  // set once from here rather than requiring someone at the physical device.
+  orientation         Int          @default(0)
   // Item 5 (awaiting-content badge) — reported by the player on each heartbeat, since it's the
   // one that actually knows whether *right now* resolves to real content (schedule gaps,
   // locally-resolved layout zones, etc.), not just "is a playlist assigned." Defaults to false
@@ -136,9 +141,10 @@ model Screen {
   // helpers), overwritten in place on every upload — this is a single "latest" preview, not a
   // history, so no key/id needs to live in the DB, just whether/when one has ever landed.
   screenshotUpdatedAt DateTime?
-  // Which of assetId/playlistId/layoutId is actually live — explicit rather than inferred from
-  // "whichever field is non-null," so switching types and back restores your last choice in the
-  // other two instead of them getting silently cleared (see ScreensService.setStreamingType).
+  // Which of assetId/playlistId is actually live — explicit rather than inferred from "whichever
+  // field is non-null," so switching types and back restores your last choice in the other one
+  // instead of it getting silently cleared (see ScreensService.setStreamingType). WAYFINDING is a
+  // third, unrelated mode (kiosk map/directory, driven by KioskLocation, not by either FK below).
   streamingType       StreamingType @default(PLAYLIST)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
@@ -147,19 +153,13 @@ model Screen {
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   assetId String?
-  asset   Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  asset   Asset? @relation("ScreenAsset", fields: [assetId], references: [id], onDelete: SetNull)
 
   playlistId String?
   playlist   Playlist? @relation("DefaultPlaylist", fields: [playlistId], references: [id])
 
   emergencyPlaylistId String?
   emergencyPlaylist   Playlist? @relation("EmergencyPlaylist", fields: [emergencyPlaylistId], references: [id])
-
-  layoutId String?
-  layout   Layout? @relation(fields: [layoutId], references: [id])
-
-  themeId String?
-  theme   Theme? @relation(fields: [themeId], references: [id])
 
   groupId String?
   group   ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -185,8 +185,6 @@ enum ScreenStatus {
 enum StreamingType {
   ASSET
   PLAYLIST
-  LAYOUT
-  THEME
   WAYFINDING
 }
 
@@ -300,8 +298,8 @@ model Asset {
   type         AssetType
   mimeType     String
   storageKey   String    // S3/R2 object key — never the full URL. Unused (synthetic key,
-                         // nothing ever uploaded) for TEXT assets, which store their content
-                         // in textContent instead of an object.
+                         // nothing ever uploaded) for TEXT and APP assets, which store their
+                         // content in textContent / appConfig instead of an object.
   thumbnailKey String?
   sizeBytes    BigInt
   durationSecs Float?    // for video/audio
@@ -337,6 +335,14 @@ model Asset {
   // the asset is first added to a playlist, and directly mutes/unmutes it when played standalone
   // (Screen/Zone asset streaming mode, which has no PlaylistItem to carry a per-placement flag).
   audioEnabled Boolean @default(true)
+  // APP assets only — an embedded item from an external service (e.g. YouTube), added via the
+  // Assets page "Apps" tab. appProviderId is a registry id (apps/api/src/modules/apps/providers.ts,
+  // e.g. "youtube"); appConfig holds that provider's resolved embed metadata (title, thumbnail,
+  // embed url, aspect ratio) as returned by AppsService.resolve. Not wired into playlists/playback —
+  // see appsroadmap.md.
+  appProviderId String?
+  sourceUrl     String?
+  appConfig     Json?
   status       AssetStatus   @default(PROCESSING)
   category     AssetCategory @default(GENERIC)
   tags         String[]      @default([])
@@ -352,7 +358,7 @@ model Asset {
 
   playlistItems   PlaylistItem[]
   proofOfPlays    ProofOfPlayLog[]
-  screens         Screen[]
+  screens         Screen[] @relation("ScreenAsset")
   zones           Zone[]
   floorPlanFor    Floor[]          @relation("FloorPlanAsset")
   poiIconFor      Poi[]            @relation("PoiIconAsset")
@@ -366,6 +372,7 @@ enum AssetType {
   AUDIO
   TEXT
   DOCUMENT
+  APP
 }
 
 enum TextSize {
@@ -443,15 +450,26 @@ enum PlaybackOrder {
   SHUFFLE
 }
 
+enum PlaylistItemKind {
+  ASSET
+  THEME
+  LAYOUT
+}
+
 model PlaylistItem {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   position      Int
-  durationSecs  Int      @default(10)
-  muted         Boolean  @default(true)
+  // How long this item stays on screen before the playlist advances. For ASSET items this is
+  // overridden by playFullVideo (video) or paged internally (document) — see below; THEME/LAYOUT
+  // items always use this as a plain dwell timer.
+  durationSecs  Int              @default(10)
+  // ASSET-only fields below — meaningless (and left at their defaults, ignored by the API) for
+  // THEME/LAYOUT items, which have no crop/mute/full-video concept of their own.
+  muted         Boolean          @default(true)
   // Video items: when true, the player ignores durationSecs and advances on the video's own
   // "ended" event (i.e. plays the full clip). When false, durationSecs clips it short. Has no
   // effect on non-video items.
-  playFullVideo Boolean  @default(true)
+  playFullVideo Boolean          @default(true)
   // Per-placement image/video framing (like cropping a profile picture into a frame) — null
   // means "show the whole asset" (today's default fill/contain behavior). Lives here rather
   // than on Asset since the same asset can be placed in multiple items with different framing.
@@ -459,14 +477,27 @@ model PlaylistItem {
   cropZoom      Float?
   cropOffsetX   Float?
   cropOffsetY   Float?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   playlistId String
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
 
-  assetId String
-  asset   Asset @relation(fields: [assetId], references: [id])
+  // Which of assetId/themeId/layoutId is populated — exactly one, matching kind (enforced by a
+  // migration-only CHECK constraint, since Prisma's schema can't express cross-column
+  // constraints). A mixed playlist item can be a plain asset (including an APP-type one — see
+  // AssetType.APP), a whole Theme, or a whole Layout, letting a screen rotate through any
+  // combination of premade designs and media in one playlist.
+  kind PlaylistItemKind @default(ASSET)
+
+  assetId String?
+  asset   Asset? @relation(fields: [assetId], references: [id])
+
+  themeId String?
+  theme   Theme? @relation(fields: [themeId], references: [id])
+
+  layoutId String?
+  layout   Layout? @relation(fields: [layoutId], references: [id])
 
   @@unique([playlistId, position])
 }
@@ -482,8 +513,8 @@ model Layout {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  zones   Zone[]
-  screens Screen[]
+  zones         Zone[]
+  playlistItems PlaylistItem[]
 
   @@index([organizationId, createdAt])
 }
@@ -590,8 +621,8 @@ model Theme {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  screens         Screen[]
   kioskAttractFor KioskLocation[]
+  playlistItems   PlaylistItem[]
 
   @@index([organizationId, createdAt])
 }

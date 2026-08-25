@@ -29,10 +29,12 @@ export function planLimit(planId: PlanId): number | null {
 
 const STORAGE_KEY = 'lumina_mock_billing_plan';
 
+// Testing-phase default: STARTER (10 screens) instead of FREE, so accounts aren't capped
+// at 3 screens while the billing page is hidden. Revert to 'FREE' when billing comes back.
 function loadPlan(): PlanId {
-  if (typeof window === 'undefined') return 'FREE';
+  if (typeof window === 'undefined') return 'STARTER';
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  return (raw as PlanId | null) ?? 'FREE';
+  return (raw as PlanId | null) ?? 'STARTER';
 }
 
 function savePlan(planId: PlanId) {

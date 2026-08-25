@@ -1,12 +1,12 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations, useLocale } from 'next-intl';
-import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines, Plus, LayoutTemplate, Palette, MapPin } from 'lucide-react';
-import { assetsApi, type Asset, type TextSize, type AssetCategory, type TickerDirection } from '@/lib/api';
+import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines, Plus, LayoutTemplate, Palette, MapPin, LayoutGrid, SquarePlay, ExternalLink, ListVideo, ArrowLeft, Shuffle, ListOrdered } from 'lucide-react';
+import { assetsApi, appsApi, type Asset, type TextSize, type AssetCategory, type TickerDirection, type AppProvider, type ResolvedApp, type AppPlaybackOrder } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { ContextMenu, type ContextMenuState, type ContextMenuAction } from '@/components/ContextMenu';
@@ -24,7 +24,18 @@ const typeIcon: Record<string, React.ReactNode> = {
   AUDIO: <Music className="w-4 h-4 text-green-500" />,
   TEXT: <Type className="w-4 h-4 text-amber-500" />,
   DOCUMENT: <FileText className="w-4 h-4 text-red-500" />,
+  APP: <SquarePlay className="w-4 h-4 text-red-600" />,
 };
+
+// Per-provider icon for APP assets/tiles — every new provider added to the backend registry
+// (apps/api/src/modules/apps/providers.ts) gets one entry here; falls back to a generic icon
+// for any provider not yet given one.
+const PROVIDER_ICON: Record<string, React.ReactNode> = {
+  youtube: <SquarePlay className="w-4 h-4 text-red-600" />,
+};
+function assetIcon(asset: Asset) {
+  return asset.type === 'APP' ? (PROVIDER_ICON[asset.appProviderId ?? ''] ?? typeIcon.APP) : typeIcon[asset.type];
+}
 
 const FONT_SIZE_PREVIEW: Record<TextSize, string> = {
   SMALL: '0.9rem',
@@ -251,10 +262,296 @@ function VideoUploadChoiceModal({ count, onCancel, onChoose }: VideoUploadChoice
   );
 }
 
+interface PasteConfirmModalProps {
+  file: File;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+// Shown when an image is pasted from the clipboard anywhere on the Assets page — a mid-air
+// paste can easily be accidental (e.g. a stray Ctrl+V while switching windows), so this shows
+// what's about to be uploaded and requires an explicit confirm before it becomes a new asset.
+function PasteConfirmModal({ file, onCancel, onConfirm }: PasteConfirmModalProps) {
+  const t = useTranslations('assets');
+  const tc = useTranslations('common');
+  const previewUrl = useMemo(() => URL.createObjectURL(file), [file]);
+
+  useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('pasteConfirm.title')}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('pasteConfirm.body')}</p>
+        <div className="mb-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+          {/* eslint-disable-next-line @next/next/no-img-element -- transient blob: URL, not a next/image-eligible remote asset */}
+          <img src={previewUrl} alt={file.name} className="w-full max-h-64 object-contain" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <button onClick={onConfirm}
+            className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            {t('pasteConfirm.confirm')}
+          </button>
+          <button onClick={onCancel}
+            className="w-full text-gray-500 dark:text-gray-400 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+            {tc('cancel')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface AppAssetModalProps {
+  provider: AppProvider;
+  onClose: () => void;
+  onCreated: (asset: Asset) => void;
+}
+
+// Paste-a-URL → preview → confirm flow for adding an "app" asset (currently just YouTube).
+// Resolving is a separate step from creating so the user sees the title/thumbnail before
+// committing; the create call re-resolves server-side rather than trusting this preview.
+function AppAssetModal({ provider, onClose, onCreated }: AppAssetModalProps) {
+  const t = useTranslations('assets');
+  const tc = useTranslations('common');
+  const [url, setUrl] = useState('');
+  const [preview, setPreview] = useState<ResolvedApp | null>(null);
+
+  const resolveMut = useMutation({
+    mutationFn: (u: string) => appsApi.resolve(provider.id, u),
+    onSuccess: setPreview,
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => assetsApi.createApp(provider.id, url.trim()),
+    onSuccess: onCreated,
+  });
+
+  function handleBlur() {
+    const trimmed = url.trim();
+    if (trimmed && trimmed !== preview?.sourceUrl) resolveMut.mutate(trimmed);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          {PROVIDER_ICON[provider.id] ?? <LayoutGrid className="w-4 h-4" />} {t('apps.addModalTitle', { provider: provider.name })}
+        </h2>
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('apps.urlLabel')}</label>
+        <input autoFocus value={url}
+          onChange={e => { setUrl(e.target.value); setPreview(null); resolveMut.reset(); }}
+          onBlur={handleBlur}
+          placeholder={t('apps.urlPlaceholder')}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
+
+        {resolveMut.isPending && <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">{t('apps.checking')}</p>}
+        {resolveMut.isError && <p className="text-xs text-red-500 mb-3">{(resolveMut.error as Error).message}</p>}
+        {preview && (
+          <div className="flex items-center gap-3 mb-4 border border-gray-200 dark:border-gray-800 rounded-lg p-2">
+            {preview.thumbnailUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- external oEmbed thumbnail, not in next/image's remotePatterns allowlist
+              <img src={preview.thumbnailUrl} alt="" className="w-24 aspect-video object-cover rounded shrink-0" />
+            )}
+            <p className="text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{preview.title}</p>
+          </div>
+        )}
+        {createMut.isError && <p className="text-xs text-red-500 mb-3">{(createMut.error as Error).message}</p>}
+
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+          <button onClick={() => createMut.mutate()} disabled={!preview || createMut.isPending}
+            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            {createMut.isPending ? t('apps.adding') : t('apps.add')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface AppPlaylistModalProps {
+  provider: AppProvider;
+  onClose: () => void;
+  onCreated: (asset: Asset) => void;
+}
+
+// Builds a curated, ordered list of videos from one provider — paste a URL, it resolves and
+// appends to the list, repeat; choose Sequential or Shuffle; save. Re-resolves every item
+// server-side on save, same principle as AppAssetModal above.
+function AppPlaylistModal({ provider, onClose, onCreated }: AppPlaylistModalProps) {
+  const t = useTranslations('assets');
+  const tc = useTranslations('common');
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [items, setItems] = useState<ResolvedApp[]>([]);
+  const [playbackOrder, setPlaybackOrder] = useState<AppPlaybackOrder>('SEQUENTIAL');
+
+  const resolveMut = useMutation({
+    mutationFn: (u: string) => appsApi.resolve(provider.id, u),
+    onSuccess: (resolved) => {
+      setItems(prev => [...prev, resolved]);
+      setUrl('');
+    },
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => assetsApi.createAppPlaylist(provider.id, name.trim(), playbackOrder, items.map(i => i.sourceUrl)),
+    onSuccess: onCreated,
+  });
+
+  function handleAddItem() {
+    const trimmed = url.trim();
+    if (trimmed) resolveMut.mutate(trimmed);
+  }
+
+  function removeItem(index: number) {
+    setItems(prev => prev.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[85vh] overflow-y-auto">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <ListVideo className="w-4 h-4 text-red-600" /> {t('apps.createPlaylistTitle', { provider: provider.name })}
+        </h2>
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{tc('name')}</label>
+        <input autoFocus value={name} onChange={e => setName(e.target.value)}
+          placeholder={t('apps.playlistNamePlaceholder')}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('apps.playbackOrderLabel')}</label>
+        <div className="flex gap-2 mb-3">
+          <button type="button" onClick={() => setPlaybackOrder('SEQUENTIAL')}
+            className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border font-medium ${
+              playbackOrder === 'SEQUENTIAL' ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}>
+            <ListOrdered className="w-3.5 h-3.5" /> {t('apps.sequential')}
+          </button>
+          <button type="button" onClick={() => setPlaybackOrder('SHUFFLE')}
+            className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border font-medium ${
+              playbackOrder === 'SHUFFLE' ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}>
+            <Shuffle className="w-3.5 h-3.5" /> {t('apps.shuffle')}
+          </button>
+        </div>
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('apps.urlLabel')}</label>
+        <div className="flex gap-2 mb-1">
+          <input value={url}
+            onChange={e => { setUrl(e.target.value); resolveMut.reset(); }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); } }}
+            placeholder={t('apps.urlPlaceholder')}
+            className="flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button type="button" onClick={handleAddItem} disabled={!url.trim() || resolveMut.isPending}
+            className="shrink-0 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
+            {resolveMut.isPending ? t('apps.checking') : t('apps.addItem')}
+          </button>
+        </div>
+        {resolveMut.isError && <p className="text-xs text-red-500 mb-3">{(resolveMut.error as Error).message}</p>}
+
+        {items.length > 0 && (
+          <ul className="mt-3 mb-4 border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-56 overflow-y-auto">
+            {items.map((item, i) => (
+              <li key={`${item.sourceUrl}-${i}`} className="flex items-center gap-2 p-2">
+                {item.thumbnailUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element -- external oEmbed thumbnail
+                  <img src={item.thumbnailUrl} alt="" className="w-14 aspect-video object-cover rounded shrink-0" />
+                )}
+                <span className="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 truncate">{item.title}</span>
+                <button type="button" onClick={() => removeItem(i)}
+                  className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {createMut.isError && <p className="text-xs text-red-500 mb-3">{(createMut.error as Error).message}</p>}
+
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+          <button onClick={() => createMut.mutate()} disabled={!name.trim() || items.length === 0 || createMut.isPending}
+            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            {createMut.isPending ? t('apps.adding') : t('apps.createPlaylistSave')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface LibraryUploadModalProps {
+  onClose: () => void;
+  onUploaded: (asset: Asset) => void;
+}
+
+// LIBRARY_MANAGER-only: adds a new stock asset to the shared library (organizationId: null).
+// Collects category/tags up front — unlike the "mine" tab's plain upload, there's no per-org
+// context to default them from, so the producer chooses them here instead.
+function LibraryUploadModal({ onClose, onUploaded }: LibraryUploadModalProps) {
+  const t = useTranslations('assets');
+  const tc = useTranslations('common');
+  const [file, setFile] = useState<File | null>(null);
+  const [category, setCategory] = useState<AssetCategory>('GENERIC');
+  const [tagsText, setTagsText] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState('');
+
+  const uploadMut = useMutation({
+    mutationFn: () => {
+      const tags = tagsText.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return assetsApi.uploadToLibrary(file!, category, tags, setProgress);
+    },
+    onSuccess: onUploaded,
+    onError: (e: Error) => setError(e.message),
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
+        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('libraryUpload')}</h2>
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('libraryUploadFile')}</label>
+        <input type="file" accept="image/*,video/*,audio/*,application/pdf,.ppt,.pptx,.doc,.docx"
+          onChange={e => setFile(e.target.files?.[0] ?? null)}
+          className="w-full text-sm text-gray-700 dark:text-gray-300 mb-3" />
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('categoryLabel')}</label>
+        <select value={category} onChange={e => setCategory(e.target.value as AssetCategory)}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3">
+          {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
+        </select>
+
+        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('libraryTags')}</label>
+        <input value={tagsText} onChange={e => setTagsText(e.target.value)}
+          placeholder={t('libraryTagsPlaceholder')}
+          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2" />
+
+        {uploadMut.isPending && <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('uploading', { progress })}</p>}
+        {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+
+        <div className="flex gap-2 mt-3">
+          <button onClick={onClose}
+            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+          <button onClick={() => uploadMut.mutate()} disabled={!file || uploadMut.isPending}
+            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            {uploadMut.isPending ? t('uploading', { progress }) : t('libraryUpload')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AssetsPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const { canEditContent } = usePermissions();
+  const { canEditContent, canManageLibrary } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
   const logAction = useAuditLog();
   const t = useTranslations('assets');
@@ -268,22 +565,38 @@ export default function AssetsPage() {
   const [uploadError, setUploadError] = useState('');
   const [newMenu, setNewMenu] = useState<ContextMenuState | null>(null);
   const [videoUploadChoice, setVideoUploadChoice] = useState<{ videoFiles: File[]; otherFiles: File[] } | null>(null);
+  const [pasteConfirm, setPasteConfirm] = useState<File | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [textModal, setTextModal] = useState<Asset | 'new' | null>(null);
-  const [tab, setTab] = useState<'mine' | 'library'>('mine');
+  const [appModalProvider, setAppModalProvider] = useState<AppProvider | null>(null);
+  const [appPlaylistModalProvider, setAppPlaylistModalProvider] = useState<AppProvider | null>(null);
+  const [providerMenu, setProviderMenu] = useState<ContextMenuState | null>(null);
+  const [tab, setTab] = useState<'mine' | 'apps' | 'library'>('mine');
+  // Apps tab: 'gallery' (default) shows what you've already created; 'create' shows the
+  // provider grid to start a new one, behind the top-right Create button.
+  const [appsView, setAppsView] = useState<'gallery' | 'create'>('gallery');
   const [libraryCategory, setLibraryCategory] = useState<AssetCategory | ''>('');
   const [librarySearch, setLibrarySearch] = useState('');
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const [showLibraryUpload, setShowLibraryUpload] = useState(false);
+  const [libraryRenamingId, setLibraryRenamingId] = useState<string | null>(null);
+  const [libraryRenameValue, setLibraryRenameValue] = useState('');
+  const [libraryDeleteError, setLibraryDeleteError] = useState('');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<Asset['type'] | ''>('');
   const [usageFilter, setUsageFilter] = useState<'' | 'IN_USE' | 'UNUSED'>('');
 
   const { data: assets = [], isLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
 
-  const filteredAssets = assets.filter((a: Asset) => {
+  // APP assets live on the Apps tab, not here (see appsroadmap.md Phase 7) — My Assets only
+  // ever shows the rest.
+  const nonAppAssets = assets.filter((a: Asset) => a.type !== 'APP');
+  const appAssets = assets.filter((a: Asset) => a.type === 'APP');
+
+  const filteredAssets = nonAppAssets.filter((a: Asset) => {
     if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (typeFilter && a.type !== typeFilter) return false;
     if (usageFilter === 'IN_USE' && !a.inUse) return false;
@@ -296,6 +609,23 @@ export default function AssetsPage() {
     queryFn: () => assetsApi.library({ category: libraryCategory || undefined, search: librarySearch || undefined }),
     enabled: tab === 'library',
   });
+
+  const { data: appProviders = [] } = useQuery({
+    queryKey: ['apps', 'providers'],
+    queryFn: appsApi.providers,
+    enabled: tab === 'apps',
+  });
+
+  function handleAppCreated(asset: Asset) {
+    logAction({
+      resourceType: 'ASSET', resourceName: asset.name, action: 'CREATE',
+      userName: user?.name ?? '', userEmail: user?.email ?? '',
+    });
+    void qc.invalidateQueries({ queryKey: ['assets'] });
+    setAppModalProvider(null);
+    setAppPlaylistModalProvider(null);
+    setAppsView('gallery');
+  }
 
   const useFromLibraryMut = useMutation({
     mutationFn: (asset: Asset) => assetsApi.useFromLibrary(asset.id),
@@ -310,6 +640,56 @@ export default function AssetsPage() {
       setTimeout(() => setJustAddedId(id => (id === source.id ? null : id)), 2000);
     },
   });
+
+  function handleLibraryUploaded(asset: Asset) {
+    logAction({
+      resourceType: 'ASSET', resourceName: asset.name, action: 'CREATE',
+      userName: user?.name ?? '', userEmail: user?.email ?? '',
+      detail: t('libraryUpload'),
+    });
+    void qc.invalidateQueries({ queryKey: ['assets', 'library'] });
+    setShowLibraryUpload(false);
+  }
+
+  const updateLibraryMut = useMutation({
+    mutationFn: ({ id, ...dto }: { id: string; name?: string; category?: AssetCategory; tags?: string[] }) =>
+      assetsApi.updateLibraryAsset(id, dto),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['assets', 'library'] });
+      setLibraryRenamingId(null);
+    },
+  });
+
+  const removeLibraryMut = useMutation({
+    mutationFn: (asset: Asset) => assetsApi.removeFromLibrary(asset.id),
+    onSuccess: (_data, asset) => {
+      setLibraryDeleteError('');
+      logAction({
+        resourceType: 'ASSET', resourceName: asset.name, action: 'DELETE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+      });
+      void qc.invalidateQueries({ queryKey: ['assets', 'library'] });
+    },
+    onError: (e: Error) => setLibraryDeleteError(e.message),
+  });
+
+  function startLibraryRename(asset: Asset) {
+    if (!canManageLibrary) return;
+    setLibraryRenamingId(asset.id);
+    setLibraryRenameValue(asset.name);
+  }
+
+  function commitLibraryRename(asset: Asset) {
+    const trimmed = libraryRenameValue.trim();
+    if (!trimmed || trimmed === asset.name) { setLibraryRenamingId(null); return; }
+    updateLibraryMut.mutate({ id: asset.id, name: trimmed });
+  }
+
+  function commitLibraryTags(asset: Asset, raw: string) {
+    const tags = raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (tags.join(',') === asset.tags.join(',')) return;
+    updateLibraryMut.mutate({ id: asset.id, tags });
+  }
 
   function handleTextSaved(saved: Asset, previousName?: string) {
     logAction({
@@ -439,9 +819,10 @@ export default function AssetsPage() {
     ]);
   }
 
-  // Paste an image from the clipboard anywhere on the page to upload it as a new asset —
-  // skipped while the target is a text input/textarea so pasting into search, rename, or the
-  // text-asset editor still behaves normally.
+  // Paste an image from the clipboard anywhere on the page to stage it for upload — skipped
+  // while the target is a text input/textarea so pasting into search, rename, or the text-asset
+  // editor still behaves normally. Staging (rather than uploading immediately) gives the user a
+  // chance to see the image and back out of an accidental paste before it becomes a new asset.
   useEffect(() => {
     if (tab !== 'mine' || !canEditContent) return;
     function onPaste(e: ClipboardEvent) {
@@ -453,7 +834,7 @@ export default function AssetsPage() {
       if (!blob) return;
       e.preventDefault();
       const ext = blob.type.split('/')[1] || 'png';
-      void runUpload([{ file: new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type }), extractAudioOnly: false }]);
+      setPasteConfirm(new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type }));
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
@@ -493,9 +874,26 @@ export default function AssetsPage() {
               onChange={e => { void handleFiles(e.target.files); }} />
           </div>
         )}
+        {tab === 'apps' && appsView === 'gallery' && canEditContent && (
+          <button onClick={() => setAppsView('create')}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            <Plus className="w-4 h-4" /> {t('apps.createButton')}
+          </button>
+        )}
+        {tab === 'library' && canManageLibrary && (
+          <button onClick={() => setShowLibraryUpload(true)}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            <Upload className="w-4 h-4" /> {t('libraryUpload')}
+          </button>
+        )}
       </div>
 
+      {showLibraryUpload && canManageLibrary && (
+        <LibraryUploadModal onClose={() => setShowLibraryUpload(false)} onUploaded={handleLibraryUploaded} />
+      )}
+
       <ContextMenu state={newMenu} onClose={() => setNewMenu(null)} />
+      <ContextMenu state={providerMenu} onClose={() => setProviderMenu(null)} />
 
       {videoUploadChoice && (
         <VideoUploadChoiceModal
@@ -505,10 +903,22 @@ export default function AssetsPage() {
         />
       )}
 
+      {pasteConfirm && (
+        <PasteConfirmModal
+          file={pasteConfirm}
+          onCancel={() => setPasteConfirm(null)}
+          onConfirm={() => { const file = pasteConfirm; setPasteConfirm(null); void runUpload([{ file, extractAudioOnly: false }]); }}
+        />
+      )}
+
       <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
         <button onClick={() => setTab('mine')}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'mine' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
           <ImageIcon className="w-4 h-4" /> {t('myAssetsTab')}
+        </button>
+        <button onClick={() => setTab('apps')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'apps' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          <LayoutGrid className="w-4 h-4" /> {t('appsTab')}
         </button>
         <button onClick={() => setTab('library')}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'library' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
@@ -529,7 +939,7 @@ export default function AssetsPage() {
         />
       )}
 
-      {assets.length > 0 && (
+      {nonAppAssets.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-5">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -557,14 +967,14 @@ export default function AssetsPage() {
 
       {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
-      {!isLoading && assets.length === 0 && (
+      {!isLoading && nonAppAssets.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <ImageIcon className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
-      {!isLoading && assets.length > 0 && filteredAssets.length === 0 && (
+      {!isLoading && nonAppAssets.length > 0 && filteredAssets.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{tc('noMatches')}</p>
@@ -599,7 +1009,7 @@ export default function AssetsPage() {
                     {asset.textContent}
                   </p>
                 ) : (
-                  <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
+                  <div className="text-gray-300 dark:text-gray-500">{assetIcon(asset)}</div>
                 )}
                 {(asset.thumbnailUrl || (asset.type === 'TEXT' && canEditContent)) && (
                   <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
@@ -654,7 +1064,7 @@ export default function AssetsPage() {
                     </p>
                   )}
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
-                    {typeIcon[asset.type]} {formatBytes(asset.sizeBytes)}
+                    {assetIcon(asset)} {formatBytes(asset.sizeBytes)}
                     {asset.inUse && (
                       <span className="ms-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-medium">
                         {t('inUse')}
@@ -730,6 +1140,144 @@ export default function AssetsPage() {
       </>
       )}
 
+      {tab === 'apps' && appsView === 'gallery' && (
+        <div>
+          {appAssets.length === 0 && (
+            <div className="text-center py-16 text-gray-400">
+              <LayoutGrid className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">{t('apps.galleryEmpty')}</p>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {appAssets.map((asset: Asset) => {
+              const playlistConfig = asset.appConfig?.kind === 'playlist' ? asset.appConfig : null;
+              const thumbnailUrl = playlistConfig ? (playlistConfig.items[0]?.thumbnailUrl ?? null) : asset.thumbnailUrl;
+              return (
+                <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden group">
+                  <div className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                    <button
+                      onClick={() => { if (!playlistConfig && asset.sourceUrl) window.open(asset.sourceUrl, '_blank', 'noopener,noreferrer'); }}
+                      disabled={!!playlistConfig || !asset.sourceUrl}
+                      className="absolute inset-0 w-full h-full flex items-center justify-center disabled:cursor-default">
+                      {thumbnailUrl ? (
+                        // External oEmbed thumbnail — not in next/image's remotePatterns allowlist
+                        // (see next.config.mjs); adding every future provider's thumbnail host
+                        // there would undercut "new apps need no core changes."
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-gray-300 dark:text-gray-500">{assetIcon(asset)}</div>
+                      )}
+                      {!playlistConfig && asset.sourceUrl && (
+                        <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
+                          <span className="flex items-center gap-1.5 text-white text-xs font-medium">
+                            <ExternalLink className="w-3.5 h-3.5" /> {t('apps.openSource')}
+                          </span>
+                        </div>
+                      )}
+                      {playlistConfig && (
+                        <span className="absolute bottom-1.5 end-1.5 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-black/60 text-white">
+                          {playlistConfig.playbackOrder === 'SHUFFLE' ? <Shuffle className="w-3 h-3" /> : <ListOrdered className="w-3 h-3" />}
+                          {t('apps.itemCount', { count: playlistConfig.items.length })}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0 flex-1">
+                        {renamingId === asset.id ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onBlur={() => commitRename(asset)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commitRename(asset);
+                              if (e.key === 'Escape') setRenamingId(null);
+                            }}
+                            disabled={renameMut.isPending}
+                            className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        ) : (
+                          <p
+                            onClick={() => startRename(asset)}
+                            title={canEditContent ? tc('clickToRename') : undefined}
+                            className={`text-sm font-medium text-gray-900 dark:text-gray-100 truncate ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                            {asset.name}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
+                          {assetIcon(asset)} {appProviders.find(p => p.id === asset.appProviderId)?.name ?? asset.appProviderId}
+                        </p>
+                      </div>
+                      {canEditContent && (
+                        <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(asset); }}
+                          className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors shrink-0">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {tab === 'apps' && appsView === 'create' && (
+        <div>
+          <button onClick={() => setAppsView('gallery')}
+            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4">
+            <ArrowLeft className="w-3.5 h-3.5" /> {t('apps.backToGallery')}
+          </button>
+          {appProviders.length === 0 && (
+            <div className="text-center py-16 text-gray-400">
+              <LayoutGrid className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">{t('apps.empty')}</p>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {appProviders.map((provider: AppProvider) => (
+              <button key={provider.id}
+                onClick={e => {
+                  if (!canEditContent) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setProviderMenu({
+                    x: rect.left, y: rect.bottom + 4,
+                    actions: [
+                      { key: 'video', label: t('apps.addVideo'), icon: SquarePlay, onClick: () => setAppModalProvider(provider) },
+                      { key: 'playlist', label: t('apps.createPlaylist'), icon: ListVideo, onClick: () => setAppPlaylistModalProvider(provider) },
+                    ],
+                  });
+                }}
+                disabled={!canEditContent}
+                className="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-default">
+                <div className="scale-[2]">{PROVIDER_ICON[provider.id] ?? <LayoutGrid className="w-4 h-4" />}</div>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-2">{provider.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {appModalProvider && canEditContent && (
+        <AppAssetModal
+          provider={appModalProvider}
+          onClose={() => setAppModalProvider(null)}
+          onCreated={handleAppCreated}
+        />
+      )}
+
+      {appPlaylistModalProvider && canEditContent && (
+        <AppPlaylistModal
+          provider={appPlaylistModalProvider}
+          onClose={() => setAppPlaylistModalProvider(null)}
+          onCreated={handleAppCreated}
+        />
+      )}
+
       {tab === 'library' && (
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-5">
@@ -772,10 +1320,50 @@ export default function AssetsPage() {
                   )}
                 </div>
                 <div className="p-3">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{asset.name}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 mb-2 flex items-center gap-1">
-                    {typeIcon[asset.type]} {t(`categories.${asset.category}`)}
-                  </p>
+                  {libraryRenamingId === asset.id ? (
+                    <input
+                      autoFocus
+                      value={libraryRenameValue}
+                      onChange={e => setLibraryRenameValue(e.target.value)}
+                      onBlur={() => commitLibraryRename(asset)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') commitLibraryRename(asset);
+                        if (e.key === 'Escape') setLibraryRenamingId(null);
+                      }}
+                      disabled={updateLibraryMut.isPending}
+                      className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  ) : (
+                    <p
+                      onClick={() => startLibraryRename(asset)}
+                      title={canManageLibrary ? tc('clickToRename') : undefined}
+                      className={`text-sm font-medium text-gray-900 dark:text-gray-100 truncate ${canManageLibrary ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                      {asset.name}
+                    </p>
+                  )}
+
+                  {canManageLibrary ? (
+                    <select value={asset.category}
+                      onChange={e => updateLibraryMut.mutate({ id: asset.id, category: e.target.value as AssetCategory })}
+                      className="w-full text-xs text-gray-500 dark:text-gray-400 mt-1 mb-1.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 mb-2 flex items-center gap-1">
+                      {typeIcon[asset.type]} {t(`categories.${asset.category}`)}
+                    </p>
+                  )}
+
+                  {canManageLibrary && (
+                    <input
+                      defaultValue={asset.tags.join(', ')}
+                      placeholder={t('libraryTagsPlaceholder')}
+                      onBlur={e => commitLibraryTags(asset, e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                      className="w-full text-xs text-gray-500 dark:text-gray-400 mb-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  )}
+
                   {canEditContent && (
                     <button onClick={() => useFromLibraryMut.mutate(asset)}
                       disabled={useFromLibraryMut.isPending}
@@ -785,10 +1373,18 @@ export default function AssetsPage() {
                         : <><CopyPlus className="w-3.5 h-3.5" /> {t('addToMyAssets')}</>}
                     </button>
                   )}
+                  {canManageLibrary && (
+                    <button onClick={() => { if (confirmDelete(t('libraryDeleteConfirm'))) removeLibraryMut.mutate(asset); }}
+                      disabled={removeLibraryMut.isPending && removeLibraryMut.variables?.id === asset.id}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-red-600 dark:text-red-400 rounded-lg py-1.5 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50">
+                      <Trash2 className="w-3.5 h-3.5" /> {tc('delete')}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
+          {libraryDeleteError && <p className="text-xs text-red-600 mt-3">{libraryDeleteError}</p>}
         </div>
       )}
     </div>

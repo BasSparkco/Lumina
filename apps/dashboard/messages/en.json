@@ -72,7 +72,8 @@
       "OWNER": "Owner",
       "ADMIN": "Admin",
       "EDITOR": "Editor",
-      "VIEWER": "Viewer"
+      "VIEWER": "Viewer",
+      "LIBRARY_MANAGER": "Library Manager"
     },
     "approvalStatus": {
       "DRAFT": "Draft",
@@ -144,18 +145,31 @@
     "online": "ONLINE",
     "offline": "OFFLINE",
     "defaultPlaylist": "Default playlist",
+    "customPlayer": {
+      "label": "Custom player",
+      "waiting": "Waiting for the screen to report playback…",
+      "pause": "Pause",
+      "resume": "Resume",
+      "back5": "Back 5 seconds",
+      "forward5": "Forward 5 seconds"
+    },
     "none": "— None —",
     "uploadingImage": "Uploading…",
     "uploadImageFailed": "Upload failed",
     "pasteImageHint": "Click here, then press Ctrl+V (⌘V on Mac) to paste an image",
     "pasteImageError": "Clipboard didn't contain an image",
-    "layoutZones": "Layout (zones)",
-    "fullscreenNoLayout": "— Fullscreen (no layout) —",
     "timezone": "Timezone (used to resolve schedules for this screen)",
     "hideTimezone": "Hide timezone",
     "configureTimezone": "Configure timezone",
     "showClock": "Show clock on screen",
     "volume": "Volume",
+    "tabs": {
+      "content": "Content",
+      "settings": "Settings"
+    },
+    "orientation": {
+      "label": "Orientation"
+    },
     "timezoneEnable": "Custom timezone",
     "hideFaith": "Hide faith settings",
     "configureFaith": "Configure faith settings",
@@ -165,11 +179,8 @@
       "label": "Streaming type",
       "ASSET": "Asset",
       "PLAYLIST": "Playlist",
-      "LAYOUT": "Layout",
-      "THEME": "Theme",
       "WAYFINDING": "Wayfinding",
-      "assetLabel": "Asset to play",
-      "themeLabel": "Theme to show"
+      "assetLabel": "Asset to play"
     },
     "kiosk": {
       "floor": "Kiosk floor",
@@ -198,6 +209,8 @@
     "deactivateEmergency": "Deactivate emergency override",
     "activateEmergency": "Activate emergency override",
     "reloadTitle": "Reload screen player",
+    "clearCache": "Clear cache",
+    "clearCacheTitle": "Clear the player's cached data and reload — use this if a plain Reload doesn't fix a stuck or outdated screen",
     "lastSeen": "Last seen {when}",
     "neverSeen": "Never seen",
     "deleteTitle": "Delete screen",
@@ -280,9 +293,7 @@
         "UNCAUGHT_EXCEPTION": "Crash",
         "WATCHDOG_RECOVERY": "Force-recovered (stalled)"
       }
-    },
-    "awaitingContent": "Awaiting content",
-    "awaitingContentTitle": "This screen isn't currently resolving to any playable content"
+    }
   },
   "assets": {
     "title": "Assets",
@@ -290,9 +301,9 @@
     "uploading": "Uploading {progress}%",
     "upload": "Upload",
     "uploadFailed": "Upload failed",
-        "pasteHint": "or paste an image (Ctrl+V)",
+    "pasteHint": "or paste an image (Ctrl+V)",
     "newMenu": {
-      "button": "New",
+      "button": "Add Asset",
       "layout": "Layout",
       "theme": "Theme",
       "wayfinding": "Wayfinding"
@@ -315,6 +326,11 @@
       "bodyPlural": "Upload the full videos, or extract just their audio as separate assets? ({count} videos)",
       "uploadVideo": "Upload video",
       "extractAudioOnly": "Extract audio only"
+    },
+    "pasteConfirm": {
+      "title": "Add pasted image?",
+      "body": "This image was just pasted from your clipboard. Add it as a new asset?",
+      "confirm": "Upload"
     },
     "newText": "New text",
     "newTextModalTitle": "New text asset",
@@ -352,10 +368,17 @@
       "preview": "Preview"
     },
     "myAssetsTab": "My Assets",
+    "appsTab": "Apps",
     "libraryTab": "Library",
     "librarySearchPlaceholder": "Search the library…",
     "allCategories": "All categories",
     "libraryEmpty": "No library assets match your search.",
+    "libraryUpload": "Upload to library",
+    "libraryUploadFile": "File",
+    "categoryLabel": "Category",
+    "libraryTags": "Tags",
+    "libraryTagsPlaceholder": "comma, separated, tags",
+    "libraryDeleteConfirm": "Remove this asset from the shared library? Tenants who already added it to their own assets keep their copy.",
     "addToMyAssets": "Add to my assets",
     "addedToMyAssets": "Added",
     "allTypes": "All types",
@@ -368,6 +391,29 @@
       "AUDIO": "Audio",
       "DOCUMENT": "Documents",
       "TEXT": "Text"
+    },
+    "apps": {
+      "empty": "No apps available yet.",
+      "galleryEmpty": "You haven't added anything yet — press Create to get started.",
+      "createButton": "Create",
+      "backToGallery": "Back",
+      "addVideo": "Add a video",
+      "createPlaylist": "Create a playlist",
+      "addModalTitle": "Add from {provider}",
+      "createPlaylistTitle": "Create a {provider} playlist",
+      "playlistNamePlaceholder": "Playlist name",
+      "playbackOrderLabel": "Play order",
+      "sequential": "Sequential",
+      "shuffle": "Shuffle",
+      "addItem": "Add",
+      "itemCount": "{count, plural, one {# video} other {# videos}}",
+      "urlLabel": "URL",
+      "urlPlaceholder": "Paste a YouTube link…",
+      "checking": "Checking…",
+      "add": "Add",
+      "adding": "Adding…",
+      "createPlaylistSave": "Create playlist",
+      "openSource": "Open"
     },
     "categories": {
       "BACKGROUND": "Background",
@@ -396,9 +442,16 @@
   "playlistDetail": {
     "backToPlaylists": "Back to playlists",
     "addItem": "Add item",
-    "pickAsset": "Pick an asset",
+    "pickAsset": "Add to playlist",
+    "itemKind": {
+      "asset": "Asset",
+      "theme": "Theme",
+      "layout": "Layout"
+    },
     "noReadyAssets": "No ready assets. Upload some first.",
-    "empty": "No items in this playlist. Add some assets above.",
+    "noThemes": "No themes yet.",
+    "noLayouts": "No layouts yet.",
+    "empty": "No items in this playlist. Add some assets, themes, layouts, or apps above.",
     "clickToView": "Click to view full size",
     "seconds": "s",
     "loading": "Loading…",
@@ -452,6 +505,8 @@
     "pasteImageError": "Clipboard didn't contain an image",
     "zones": "Zones",
     "addZone": "Add zone",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
     "addGroups": {
       "media": "Media",
       "dataFeeds": "Data feeds",
@@ -461,6 +516,10 @@
     },
     "saveLayout": "Save layout",
     "saving": "Saving…",
+    "saveAsAsset": "Save as asset",
+    "savingAsset": "Saving…",
+    "saveAsAssetHint": "Export this design as a plain image in Assets — doesn't replace saving it as a layout",
+    "saveAsAssetSuccess": "Saved to Assets",
     "loading": "Loading layouts…",
     "empty": "No layouts yet. Create one to split your screens into zones.",
     "deleteConfirm": "Delete layout?",
@@ -468,7 +527,7 @@
     "editLayout": "Edit layout",
     "currentlyEditing": "Currently editing",
     "noPlaylistBadge": "no playlist",
-    "screenCount": "{count, plural, one {# screen} other {# screens}}",
+    "playlistItemCount": "{count, plural, one {used in # playlist item} other {used in # playlist items}}",
     "duplicate": "Duplicate layout",
     "duplicating": "Duplicating…",
     "undo": "Undo",
@@ -563,7 +622,7 @@
     "loading": "Loading themes…",
     "empty": "No themes yet. Start from a template or create a blank one.",
     "deleteConfirm": "Delete theme?",
-    "screenCount": "{count, plural, one {# screen} other {# screens}}",
+    "playlistItemCount": "{count, plural, one {used in # playlist item} other {used in # playlist items}}",
     "themeName": "Theme name",
     "clickToEdit": "Click to edit theme",
     "editTheme": "Edit theme",
@@ -576,6 +635,8 @@
     "scale": "Type scale",
     "elements": "Elements",
     "addElement": "Add element",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
     "filter": "Filter",
     "filterAll": "All",
     "addGroups": {
@@ -648,6 +709,7 @@
     "imageSourceExisting": "Existing",
     "imageSourceUpload": "Upload",
     "imageSourcePaste": "Paste",
+    "imageSourceStock": "Stock",
     "uploadImage": "Upload image",
     "uploadingImage": "Uploading…",
     "uploadImageFailed": "Upload failed",
@@ -656,6 +718,11 @@
     "removeBackground": "Remove background",
     "removingBackground": "Removing background…",
     "removeBackgroundFailed": "Background removal failed",
+    "stockSearchPlaceholder": "Search free stock photos…",
+    "stockEmpty": "No photos found",
+    "stockNotConfigured": "Stock photos aren't set up on this server yet.",
+    "stockCredit": "Photos provided by Pexels",
+    "importStockFailed": "Couldn't add that photo",
     "noPlaylist": "— No playlist —",
     "widgetType": "Widget",
     "color": "Text color",
@@ -684,6 +751,10 @@
     "customColor": "Custom color",
     "saveTheme": "Save theme",
     "saving": "Saving…",
+    "saveAsAsset": "Save as asset",
+    "savingAsset": "Saving…",
+    "saveAsAssetHint": "Export this design as a plain image in Assets — doesn't replace saving it as a theme",
+    "saveAsAssetSuccess": "Saved to Assets",
     "field": {
       "x": "X",
       "y": "Y",
@@ -768,6 +839,7 @@
     "imageSourceExisting": "Existing",
     "imageSourceUpload": "Upload",
     "imageSourcePaste": "Paste",
+    "imageSourceStock": "Stock",
     "uploadingImage": "Uploading",
     "uploadImageFailed": "Upload failed",
     "pasteImageHint": "Click, then paste an image",
@@ -775,6 +847,11 @@
     "removeBackground": "Remove background",
     "removingBackground": "Removing background…",
     "removeBackgroundFailed": "Background removal failed",
+    "stockSearchPlaceholder": "Search free stock photos…",
+    "stockEmpty": "No photos found",
+    "stockNotConfigured": "Stock photos aren't set up on this server yet.",
+    "stockCredit": "Photos provided by Pexels",
+    "importStockFailed": "Couldn't add that photo",
     "noFloors": "No floors yet. Add one and upload its floor plan.",
     "deleteFloorConfirm": "Delete this floor and all its points of interest?",
     "poiCount": "{count, plural, one {# point of interest} other {# points of interest}}",

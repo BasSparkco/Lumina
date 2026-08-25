@@ -29,6 +29,10 @@ const EnvSchema = z.object({
   // here would just move that same decision to a less specific error message.
   DASHBOARD_URL: z.string().optional(),
   PLAYER_URL: z.string().optional(),
+
+  // Optional — the stock-photo picker (assets/stock/*) just reports itself unconfigured and
+  // the dashboard shows a setup hint when this is unset, same "degrade, don't fail boot" pattern.
+  PEXELS_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

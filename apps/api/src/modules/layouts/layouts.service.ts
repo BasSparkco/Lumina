@@ -84,7 +84,7 @@ export class LayoutsService {
     return this.prisma.layout.findMany({
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' },
-      include: { ...this.zonesInclude, _count: { select: { screens: true } } },
+      include: { ...this.zonesInclude, _count: { select: { playlistItems: true } } },
     });
   }
 
@@ -122,12 +122,12 @@ export class LayoutsService {
   async remove(orgId: string, id: string) {
     await this.findOne(orgId, id);
 
-    // Screen.layoutId has no onDelete: Cascade — check first so an in-use layout gets a
+    // PlaylistItem.layoutId has no onDelete: Cascade — check first so an in-use layout gets a
     // clear error instead of a raw foreign-key failure (see the identical fix on assets).
-    const screenCount = await this.prisma.screen.count({ where: { layoutId: id } });
-    if (screenCount > 0) {
+    const itemCount = await this.prisma.playlistItem.count({ where: { layoutId: id } });
+    if (itemCount > 0) {
       throw new BadRequestException(
-        `This layout is assigned to ${screenCount} screen${screenCount === 1 ? '' : 's'}. Unassign it from those screens before deleting.`,
+        `This layout is used in ${itemCount} playlist item${itemCount === 1 ? '' : 's'}. Remove it from those playlists before deleting.`,
       );
     }
 

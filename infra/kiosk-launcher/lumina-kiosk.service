@@ -1,0 +1,19 @@
+[Unit]
+# Signage boxes are expected to run headless/unattended, so the kiosk should come back on its own
+# after a power cycle rather than needing someone to log in and run the script by hand.
+Description=Lumina signage player (Chromium kiosk)
+After=graphical.target network-online.target
+Wants=network-online.target
+
+[Service]
+# Adjust User/Environment/WorkingDirectory for the actual account and X session this box runs —
+# this assumes a plain X11 autologin setup, the common case for mini-PC/Raspberry Pi signage.
+User=kiosk
+Environment=DISPLAY=:0
+Environment=PLAYER_URL=http://localhost:5000
+ExecStart=/opt/sites/lumina/infra/kiosk-launcher/launch-kiosk.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical.target

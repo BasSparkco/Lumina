@@ -25,7 +25,8 @@ const nav: { href: string; key: string; icon: typeof Monitor; visible?: (p: Perm
   { href: '/schedules', key: 'schedules', icon: CalendarClock },
   { href: '/power-schedule', key: 'powerSchedule', icon: PowerCircle },
   { href: '/members', key: 'members', icon: Users, visible: p => p.canManageMembers },
-  { href: '/billing', key: 'billing', icon: CreditCard, visible: p => p.canManageBilling },
+  // Temporarily hidden for the testing phase — restore `visible: p => p.canManageBilling` to bring it back.
+  { href: '/billing', key: 'billing', icon: CreditCard, visible: () => false },
   { href: '/audit-log', key: 'auditLog', icon: History, visible: p => p.canViewAuditLog },
   { href: '/reports', key: 'reports', icon: BarChart3 },
   { href: '/settings', key: 'settings', icon: Settings },
@@ -56,13 +57,17 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // inheriting whatever icon-only state was left over from a desktop session.
   const effectiveCollapsed = collapsed && !mobileOpen;
 
-  // Close the mobile drawer whenever the route changes so picking a page doesn't leave it open.
+  // Close the mobile drawer whenever the route changes so picking a page doesn't leave it open,
+  // and auto-collapse the sidebar on entering the canvas-heavy Designer so it has more room.
   // Adjusting state during render (rather than in an effect) avoids an extra post-navigation
-  // render pass just to dismiss the drawer.
-  const [drawerPath, setDrawerPath] = useState(path);
-  if (path !== drawerPath) {
-    setDrawerPath(path);
+  // render pass. Collapsing only fires on the transition into /designer, not on every render
+  // while there, so it doesn't fight a user who manually re-expands mid-session.
+  const [prevPath, setPrevPath] = useState(path);
+  if (path !== prevPath) {
+    const enteringDesigner = path.includes('/designer') && !prevPath.includes('/designer');
+    setPrevPath(path);
     setMobileOpen(false);
+    if (enteringDesigner) setCollapsed(true);
   }
 
   // Shares its query keys with the Playlists page's own fetches, so this doesn't add an extra

@@ -13,13 +13,32 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { memoryStorage } from 'multer';
 import type { AssetCategory, TextSize, TickerDirection } from '@lumina/db';
 import { FONT_IDS } from '@lumina/types';
 import { AssetsService } from './assets.service';
+import { AppsService } from '../apps/apps.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -53,6 +72,43 @@ class UpdateTextAssetDto extends TextStyleDto {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(5000) content?: string;
 }
 
+class ImportStockPhotoDto { @IsInt() @Min(1) photoId!: number; }
+
+class CreateAppAssetDto {
+  @IsString() providerId!: string;
+  @IsUrl() sourceUrl!: string;
+  @IsOptional() @IsString() name?: string;
+}
+
+class AppPlaylistItemDto {
+  @IsUrl() sourceUrl!: string;
+}
+
+const PLAYBACK_ORDERS = ['SEQUENTIAL', 'SHUFFLE'] as const;
+
+class CreateAppPlaylistDto {
+  @IsString() providerId!: string;
+  @IsString() @MinLength(1) @MaxLength(200) name!: string;
+  @IsIn(PLAYBACK_ORDERS) playbackOrder!: (typeof PLAYBACK_ORDERS)[number];
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50)
+  @ValidateNested({ each: true }) @Type(() => AppPlaylistItemDto)
+  items!: AppPlaylistItemDto[];
+}
+
+const ASSET_CATEGORIES = ['BACKGROUND', 'ICON', 'ILLUSTRATION', 'STOCK_PHOTO', 'LOGO', 'VIDEO_LOOP', 'AUDIO_JINGLE', 'GENERIC'] as const;
+
+class LibraryUploadMetaDto {
+  @IsOptional() @IsIn(ASSET_CATEGORIES) category?: AssetCategory;
+  // Multipart fields always arrive as strings — comma-separated here, split in the controller method below.
+  @IsOptional() @IsString() tags?: string;
+}
+
+class UpdateLibraryAssetDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsIn(ASSET_CATEGORIES) category?: AssetCategory;
+  @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
+}
+
 @ApiTags('assets')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -60,6 +116,7 @@ class UpdateTextAssetDto extends TextStyleDto {
 export class AssetsController {
   constructor(
     private readonly assets: AssetsService,
+    private readonly apps: AppsService,
     @InjectQueue('media') private readonly mediaQueue: Queue,
   ) {}
 
@@ -114,6 +171,21 @@ export class AssetsController {
     return this.assets.updateText(user.orgId, id, dto);
   }
 
+  // Re-resolves server-side (rather than trusting whatever preview the Apps tab's /apps/resolve
+  // call showed the user) so the stored appConfig always reflects a real, current lookup.
+  @Post('apps')
+  async createApp(@CurrentUser() user: JwtUser, @Body() dto: CreateAppAssetDto) {
+    const resolved = await this.apps.resolve(dto.providerId, dto.sourceUrl);
+    return this.assets.createApp(user.orgId, resolved, dto.name);
+  }
+
+  // Same re-resolve-server-side principle as createApp above, applied to every item.
+  @Post('apps/playlist')
+  async createAppPlaylist(@CurrentUser() user: JwtUser, @Body() dto: CreateAppPlaylistDto) {
+    const resolved = await this.apps.resolveMany(dto.providerId, dto.items.map(i => i.sourceUrl));
+    return this.assets.createAppPlaylist(user.orgId, dto.providerId, dto.name.trim(), resolved, dto.playbackOrder);
+  }
+
   @Get()
   list(@CurrentUser() user: JwtUser) {
     return this.assets.list(user.orgId);
@@ -129,6 +201,48 @@ export class AssetsController {
   @Post('library/:id/use')
   useFromLibrary(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.assets.copyFromLibrary(user.orgId, id);
+  }
+
+  // The three routes below manage the shared library itself (organizationId: null) rather than
+  // any tenant's own assets — restricted to LIBRARY_MANAGER, not the default "anyone but VIEWER"
+  // policy every other route in this controller falls under (see RolesGuard).
+  @Post('library')
+  @Roles('LIBRARY_MANAGER')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }))
+  uploadLibraryAsset(@UploadedFile() file: Express.Multer.File, @Body() dto: LibraryUploadMetaDto) {
+    const tags = dto.tags ? dto.tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : undefined;
+    return this.assets.uploadToLibrary(file, dto.category, tags, async (assetId, key, type, mimeType) => {
+      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
+    });
+  }
+
+  @Put('library/:id')
+  @Roles('LIBRARY_MANAGER')
+  updateLibraryAsset(@Param('id') id: string, @Body() dto: UpdateLibraryAssetDto) {
+    return this.assets.updateLibraryAsset(id, dto);
+  }
+
+  @Delete('library/:id')
+  @Roles('LIBRARY_MANAGER')
+  removeLibraryAsset(@Param('id') id: string) {
+    return this.assets.removeFromLibrary(id);
+  }
+
+  @Get('stock/search')
+  async searchStockPhotos(@Query('query') query?: string, @Query('page') page?: string) {
+    const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    return {
+      configured: this.assets.stockPhotosConfigured(),
+      photos: await this.assets.searchStockPhotos(query, pageNum),
+    };
+  }
+
+  @Post('stock/import')
+  importStockPhoto(@CurrentUser() user: JwtUser, @Body() dto: ImportStockPhotoDto) {
+    return this.assets.importStockPhoto(user.orgId, dto.photoId, async (assetId, key, type, mimeType) => {
+      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
+    });
   }
 
   @Get(':id')

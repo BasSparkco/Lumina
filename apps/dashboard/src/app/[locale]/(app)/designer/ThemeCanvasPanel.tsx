@@ -140,6 +140,9 @@ interface ThemeCanvasPanelProps {
   brushSize: number;
   setBrushSize: (size: number) => void;
   setBgRemoveError: (msg: string) => void;
+  // Hands the parent the exact DOM node "save as asset" should rasterize — the clipped
+  // element frame, not the zoom controls or unclipped resize-handle overlay around it.
+  exportRef?: (el: HTMLDivElement | null) => void;
 }
 
 // Owns everything about the visual preview canvas — zoom, drag/resize/rotate-in-progress state,
@@ -178,6 +181,7 @@ export function ThemeCanvasPanel({
   brushSize,
   setBrushSize,
   setBgRemoveError,
+  exportRef,
 }: ThemeCanvasPanelProps) {
   const qc = useQueryClient();
   const t = useTranslations('themes');
@@ -229,6 +233,22 @@ export function ThemeCanvasPanel({
     ro.observe(el);
     return () => ro.disconnect();
   }, [editing]);
+
+  // Ctrl/Cmd+scroll zooms the canvas instead of the browser page, but only while the cursor is
+  // over this viewport — bound as a native, non-passive listener because React's onWheel is
+  // registered passive by default, so calling preventDefault() there does not actually stop the
+  // browser's own page zoom (it only appears to work because the canvas zoom masks it).
+  useEffect(() => {
+    const el = zoomViewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => clampZoom(z * Math.exp(-e.deltaY * 0.0015)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   // A locked element (editable: false) can never be dragged/resized/rotated, regardless of
   // selection or the requireSelectToEdit setting.
@@ -985,11 +1005,6 @@ export function ThemeCanvasPanel({
       )}
       <div
         ref={zoomViewportRef}
-        onWheel={(e) => {
-          if (!e.ctrlKey) return;
-          e.preventDefault();
-          setZoom((z) => clampZoom(z * Math.exp(-e.deltaY * 0.0015)));
-        }}
         style={{
           width: '100%',
           aspectRatio: aspectRatio.replace(':', ' / '),
@@ -1005,7 +1020,10 @@ export function ThemeCanvasPanel({
           }}
         >
         <div
-          ref={previewRef}
+          ref={(node) => {
+            previewRef.current = node;
+            exportRef?.(node);
+          }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) onSelectElement(null);
           }}

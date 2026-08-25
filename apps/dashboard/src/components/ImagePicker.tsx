@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Upload, Clipboard, RefreshCw, Wand2 } from 'lucide-react';
-import { assetsApi } from '@/lib/api';
+import { Upload, Clipboard, RefreshCw, Wand2, Search, ImageOff } from 'lucide-react';
+import { assetsApi, type StockPhoto } from '@/lib/api';
 import { removeAssetBackground } from '@/lib/backgroundRemoval';
 import { AssetSelect } from './AssetSelect';
 
-type Mode = 'existing' | 'upload' | 'paste';
+type Mode = 'existing' | 'upload' | 'paste' | 'stock';
 
 interface ImagePickerProps {
   value: string | null;
@@ -17,6 +17,7 @@ interface ImagePickerProps {
     existing: string;
     upload: string;
     paste: string;
+    stock: string;
     uploading: string;
     uploadFailed: string;
     pasteHint: string;
@@ -24,6 +25,11 @@ interface ImagePickerProps {
     removeBackground: string;
     removingBackground: string;
     removeBackgroundFailed: string;
+    stockSearchPlaceholder: string;
+    stockEmpty: string;
+    stockNotConfigured: string;
+    stockCredit: string;
+    importStockFailed: string;
   };
 }
 
@@ -122,7 +128,7 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
   return (
     <div className="space-y-1.5">
       <div className="flex gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
-        {(['existing', 'upload', 'paste'] as const).map((m) => (
+        {(['existing', 'upload', 'paste', 'stock'] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -195,6 +201,17 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
         </div>
       )}
 
+      {mode === 'stock' && (
+        <StockPhotosTab
+          disabled={disabled}
+          onImported={(assetId) => {
+            void qc.invalidateQueries({ queryKey: ['assets'] });
+            onChange(assetId);
+          }}
+          labels={labels}
+        />
+      )}
+
       {error && <p className="text-[10px] text-red-500">{error}</p>}
 
       {preview && (
@@ -225,6 +242,112 @@ export function ImagePicker({ value, onChange, placeholder, disabled, labels }: 
           )}
         </button>
       )}
+    </div>
+  );
+}
+
+type StockLabels = Pick<
+  ImagePickerProps['labels'],
+  'stockSearchPlaceholder' | 'stockEmpty' | 'stockNotConfigured' | 'stockCredit' | 'importStockFailed'
+>;
+
+// Search Pexels and drop the picked photo straight in as a brand-new asset — same "produces an
+// assetId, nothing more" contract as the upload/paste tabs, just sourced from a stock library
+// instead of the user's own files. The Pexels key itself never reaches this component: search
+// and import both go through the API, which proxies to Pexels server-side.
+function StockPhotosTab({
+  disabled,
+  onImported,
+  labels,
+}: {
+  disabled?: boolean;
+  onImported: (assetId: string) => void;
+  labels: StockLabels;
+}) {
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [importingId, setImportingId] = useState<number | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['stockPhotos', debouncedSearch],
+    queryFn: () => assetsApi.searchStockPhotos({ query: debouncedSearch || undefined }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  async function handlePick(photo: StockPhoto) {
+    if (importingId) return;
+    setError('');
+    setImportingId(photo.id);
+    try {
+      const asset = await assetsApi.importStockPhoto(photo.id);
+      onImported(asset.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : labels.importStockFailed);
+    } finally {
+      setImportingId(null);
+    }
+  }
+
+  if (data && !data.configured) {
+    return <p className="px-1 py-2 text-[11px] text-gray-500 dark:text-gray-400">{labels.stockNotConfigured}</p>;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
+        <input
+          type="text"
+          disabled={disabled}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={labels.stockSearchPlaceholder}
+          className="w-full rounded border border-gray-200 py-1 pl-6 pr-2 text-[11px] focus:border-indigo-400 focus:outline-none disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+        />
+      </div>
+
+      {isFetching ? (
+        <div className="flex items-center justify-center gap-1.5 py-4 text-[11px] text-gray-400">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+        </div>
+      ) : !data?.photos.length ? (
+        <div className="flex flex-col items-center gap-1 py-4 text-center text-[11px] text-gray-400">
+          <ImageOff className="h-4 w-4" />
+          {labels.stockEmpty}
+        </div>
+      ) : (
+        <div className="grid max-h-52 grid-cols-3 gap-1 overflow-y-auto">
+          {data.photos.map((photo) => (
+            <button
+              key={photo.id}
+              type="button"
+              disabled={disabled || importingId !== null}
+              onClick={() => void handlePick(photo)}
+              title={photo.alt ?? undefined}
+              className="relative aspect-square overflow-hidden rounded border border-gray-200 disabled:cursor-wait dark:border-gray-700"
+              style={{ opacity: importingId !== null && importingId !== photo.id ? 0.5 : 1 }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary remote Pexels thumbnail, not a static/local image */}
+              <img src={photo.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+              {importingId === photo.id && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <RefreshCw className="h-4 w-4 animate-spin text-white" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="text-[10px] text-red-500">{error}</p>}
+
+      {!!data?.photos.length && <p className="text-center text-[10px] text-gray-400">{labels.stockCredit}</p>}
     </div>
   );
 }

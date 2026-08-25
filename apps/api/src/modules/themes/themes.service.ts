@@ -33,7 +33,7 @@ export class ThemesService {
     return this.prisma.theme.findMany({
       where: { OR: [{ organizationId: null }, { organizationId: orgId }] },
       orderBy: [{ organizationId: 'asc' }, { createdAt: 'desc' }],
-      include: { _count: { select: { screens: true } } },
+      include: { _count: { select: { playlistItems: true } } },
     });
   }
 
@@ -104,10 +104,10 @@ export class ThemesService {
       'Theme not found',
     );
 
-    const screenCount = await this.prisma.screen.count({ where: { themeId: id } });
-    if (screenCount > 0) {
+    const itemCount = await this.prisma.playlistItem.count({ where: { themeId: id } });
+    if (itemCount > 0) {
       throw new BadRequestException(
-        `This theme is assigned to ${screenCount} screen${screenCount === 1 ? '' : 's'}. Unassign it from those screens before deleting.`,
+        `This theme is used in ${itemCount} playlist item${itemCount === 1 ? '' : 's'}. Remove it from those playlists before deleting.`,
       );
     }
 

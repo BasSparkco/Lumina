@@ -4,18 +4,17 @@ import { useTranslations } from 'next-intl';
 import { CreditCard, Check, AlertTriangle } from 'lucide-react';
 import { screensApi } from '@/lib/api';
 import { billingApi, PLANS, planLimit, type PlanId } from '@/lib/mocks/billing';
-import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 
 export default function BillingPage() {
   const qc = useQueryClient();
-  const { canManageBilling } = usePermissions();
-  const canRender = useRouteGuard(canManageBilling);
+  // Temporarily hidden for the testing phase — restore `useRouteGuard(usePermissions().canManageBilling)` to bring it back.
+  const canRender = useRouteGuard(false);
   const t = useTranslations('billing');
 
   const { data: screens = [] } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list, enabled: canRender });
-  const { data: currentPlan = 'FREE', isLoading } = useQuery({
+  const { data: currentPlan = 'STARTER', isLoading } = useQuery({
     queryKey: ['billingPlan'], queryFn: billingApi.getCurrentPlan, enabled: canRender,
   });
 

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { AssetCategory, AssetType, TextSize, TickerDirection } from '@lumina/db';
 import { DEFAULT_FONT_ID } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -57,6 +58,7 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly orgScoped: OrgScopedService,
+    private readonly config: ConfigService,
   ) {}
 
   async upload(
@@ -266,6 +268,73 @@ export class AssetsService {
     return this.toDto(updated, null);
   }
 
+  async createApp(
+    orgId: string,
+    resolved: { providerId: string; sourceUrl: string; title: string; thumbnailUrl: string | null; embedUrl: string; width: number | null; height: number | null },
+    name?: string,
+  ) {
+    // Same "nothing ever uploaded" pattern as createText — the embed is described entirely by
+    // appConfig, so storageKey is just a unique placeholder. remove() below skips storage.delete()
+    // for this type too.
+    let finalName = resolved.title;
+    const trimmedName = name?.trim();
+    if (trimmedName) finalName = trimmedName;
+    const asset = await this.prisma.asset.create({
+      data: {
+        name: finalName,
+        type: 'APP',
+        mimeType: 'text/html',
+        storageKey: `${orgId}/app/${crypto.randomUUID()}`,
+        sizeBytes: 0,
+        appProviderId: resolved.providerId,
+        sourceUrl: resolved.sourceUrl,
+        appConfig: {
+          kind: 'video',
+          title: resolved.title,
+          thumbnailUrl: resolved.thumbnailUrl,
+          embedUrl: resolved.embedUrl,
+          width: resolved.width,
+          height: resolved.height,
+        },
+        organizationId: orgId,
+        status: 'READY',
+      },
+    });
+    return this.toDto(asset, ...this.appUrls(asset));
+  }
+
+  /** A curated, ordered list of videos from one provider — created from the Apps tab's "Create
+   * Playlist" flow. Stored as a single APP asset (appConfig.kind: 'playlist') rather than a
+   * separate table: see appsroadmap.md's Phase 6 design note for why. */
+  async createAppPlaylist(
+    orgId: string,
+    providerId: string,
+    name: string,
+    items: { sourceUrl: string; title: string; thumbnailUrl: string | null; embedUrl: string }[],
+    playbackOrder: 'SEQUENTIAL' | 'SHUFFLE',
+  ) {
+    const asset = await this.prisma.asset.create({
+      data: {
+        name,
+        type: 'APP',
+        mimeType: 'text/html',
+        storageKey: `${orgId}/app/${crypto.randomUUID()}`,
+        sizeBytes: 0,
+        appProviderId: providerId,
+        // No single sourceUrl for a playlist of many — appConfig.items carries each one instead.
+        sourceUrl: null,
+        appConfig: {
+          kind: 'playlist',
+          playbackOrder,
+          items: items.map(i => ({ sourceUrl: i.sourceUrl, title: i.title, thumbnailUrl: i.thumbnailUrl, embedUrl: i.embedUrl })),
+        },
+        organizationId: orgId,
+        status: 'READY',
+      },
+    });
+    return this.toDto(asset, ...this.appUrls(asset));
+  }
+
   async list(orgId: string) {
     const assets = await this.prisma.asset.findMany({
       where: { organizationId: orgId },
@@ -274,14 +343,23 @@ export class AssetsService {
     });
     return assets.map(a => {
       const usageCount = a._count.playlistItems + a._count.screens + a._count.zones;
-      // TEXT assets have no real object behind storageKey (see createText) — a "url" built
-      // from it would 404, so skip it and let the frontend render textContent instead.
+      // TEXT/APP assets have no real object behind storageKey (see createText/createApp) — a
+      // "url" built from it would 404, so each derives its own url/thumbnail instead.
       if (a.type === 'TEXT') return this.toDto(a, null, undefined, undefined, usageCount);
+      if (a.type === 'APP') return this.toDto(a, ...this.appUrls(a), usageCount);
       const url = this.storage.publicUrl(a.storageKey);
       const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
       const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
       return this.toDto(a, url, thumbUrl, downloadUrl, usageCount);
     });
+  }
+
+  private appUrls(asset: { appConfig: unknown }): [string | null, string | null, null] {
+    const cfg = asset.appConfig as
+      | { kind?: string; embedUrl?: string; thumbnailUrl?: string | null; items?: { thumbnailUrl?: string | null }[] }
+      | null;
+    if (cfg?.kind === 'playlist') return [null, cfg.items?.[0]?.thumbnailUrl ?? null, null];
+    return [cfg?.embedUrl ?? null, cfg?.thumbnailUrl ?? null, null];
   }
 
   /** Stamps lastUsedAt = now — called when an asset is picked in an editor's "existing asset" picker (Layouts/Themes Add Item), driving that picker's "recently used" sort. */
@@ -348,12 +426,195 @@ export class AssetsService {
     return this.toDto(copy, url, thumbUrl, downloadUrl);
   }
 
+  /** Adds a new stock asset to the shared library (organizationId: null) — the in-app equivalent
+   * of running seed-library.ts, reachable only by LIBRARY_MANAGER (see AssetsController). Same
+   * mimetype/magic-byte validation as upload(); storage key uses the "system/" prefix
+   * seed-library.ts already established rather than an org id, since there is none here. */
+  async uploadToLibrary(
+    file: Express.Multer.File,
+    category: AssetCategory | undefined,
+    tags: string[] | undefined,
+    queueThumbnail: (assetId: string, key: string, type: AssetType, mimeType: string) => Promise<void>,
+  ) {
+    const assetType = ALLOWED_MIME[file.mimetype];
+    if (!assetType) throw new BadRequestException(`Unsupported file type: ${file.mimetype}`);
+
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detected = await fileTypeFromBuffer(file.buffer);
+    const acceptableMimes = MAGIC_BYTE_COMPAT[file.mimetype] ?? [file.mimetype];
+    if (!detected || !acceptableMimes.includes(detected.mime)) {
+      throw new BadRequestException(
+        `File content doesn't match its declared type (${file.mimetype})${detected ? ` — detected ${detected.mime}` : ''}.`,
+      );
+    }
+
+    const ext = file.originalname.split('.').pop() ?? 'bin';
+    const key = `system/assets/${crypto.randomUUID()}.${ext}`;
+    await this.storage.upload(key, file.buffer, file.mimetype);
+
+    const asset = await this.prisma.asset.create({
+      data: {
+        name: file.originalname,
+        type: assetType,
+        mimeType: file.mimetype,
+        storageKey: key,
+        sizeBytes: file.size,
+        category: category ?? 'GENERIC',
+        tags: tags ?? [],
+        organizationId: null,
+        status: 'PROCESSING',
+      },
+    });
+
+    await queueThumbnail(asset.id, key, assetType, file.mimetype);
+    return this.toDto(asset, null);
+  }
+
+  /** Renames / recategorizes / retags a library asset. There's no orgId to scope by — assertOwns
+   * just confirms the row exists and is actually a library row (organizationId: null), not some
+   * tenant's private asset. */
+  async updateLibraryAsset(id: string, dto: { name?: string; category?: AssetCategory; tags?: string[] }) {
+    await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: null } }),
+      'Library asset not found',
+    );
+    const updated = await this.prisma.asset.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.category !== undefined ? { category: dto.category } : {}),
+        ...(dto.tags !== undefined ? { tags: dto.tags } : {}),
+      },
+    });
+    const url = this.storage.publicUrl(updated.storageKey);
+    const thumbUrl = updated.thumbnailKey ? this.storage.publicUrl(updated.thumbnailKey) : null;
+    return this.toDto(updated, url, thumbUrl, null);
+  }
+
+  /** Removes a library listing. Tenant copies made via copyFromLibrary above own an independent
+   * Asset row (their own id, same storageKey) — nothing ever references a library row's id
+   * directly, so unlike remove() there's no playlist/screen/zone in-use check to run here. The
+   * storage object itself is only deleted once no other row (a tenant's copy, or another library
+   * row that happens to share the key) still points at it — same otherRefs gate remove() uses —
+   * so retiring a library listing never breaks a tenant who already copied it. */
+  async removeFromLibrary(id: string) {
+    const asset = await this.orgScoped.assertOwns(
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: null } }),
+      'Library asset not found',
+    );
+    const otherRefs = await this.prisma.asset.count({ where: { storageKey: asset.storageKey, id: { not: id } } });
+    if (otherRefs === 0) {
+      await this.storage.delete(asset.storageKey);
+      if (asset.thumbnailKey) await this.storage.delete(asset.thumbnailKey);
+    }
+    await this.prisma.asset.delete({ where: { id } });
+  }
+
+  /** Whether PEXELS_API_KEY is set — drives the dashboard's "stock photos" tab between a live
+   * search UI and a one-line setup hint, without the key itself ever reaching the client. */
+  stockPhotosConfigured(): boolean {
+    return !!this.config.get<string>('PEXELS_API_KEY');
+  }
+
+  /** Proxies Pexels search (or, with no query, its curated feed) server-side — the API key
+   * never goes to the browser, unlike the reference implementation this was ported from, which
+   * called Pexels directly from client code with the key baked into the bundle. */
+  async searchStockPhotos(query: string | undefined, page: number) {
+    const apiKey = this.config.get<string>('PEXELS_API_KEY');
+    if (!apiKey) return [];
+
+    const endpoint = query?.trim()
+      ? `https://api.pexels.com/v1/search?query=${encodeURIComponent(query.trim())}&per_page=24&page=${page}`
+      : `https://api.pexels.com/v1/curated?per_page=24&page=${page}`;
+
+    const res = await fetch(endpoint, { headers: { Authorization: apiKey } });
+    if (!res.ok) throw new BadRequestException('Stock photo search is temporarily unavailable');
+    const data = (await res.json()) as {
+      photos: {
+        id: number; width: number; height: number; alt: string | null;
+        photographer: string; photographer_url: string;
+        src: { medium: string; large2x: string; large: string };
+      }[];
+    };
+
+    return data.photos.map(p => ({
+      id: p.id,
+      thumbnailUrl: p.src.medium,
+      previewUrl: p.src.large2x ?? p.src.large,
+      width: p.width,
+      height: p.height,
+      photographer: p.photographer,
+      photographerUrl: p.photographer_url,
+      alt: p.alt,
+    }));
+  }
+
+  /**
+   * Imports one Pexels photo into the org's own assets. Re-looks up the photo by id server-side
+   * (rather than trusting a client-supplied image URL) so the only host this ever fetches image
+   * bytes from is api.pexels.com/images.pexels.com — never an arbitrary caller-chosen URL.
+   */
+  async importStockPhoto(
+    orgId: string,
+    photoId: number,
+    queueThumbnail: (assetId: string, key: string, type: AssetType, mimeType: string) => Promise<void>,
+  ) {
+    const apiKey = this.config.get<string>('PEXELS_API_KEY');
+    if (!apiKey) throw new BadRequestException('Stock photos are not configured on this server');
+
+    const photoRes = await fetch(`https://api.pexels.com/v1/photos/${photoId}`, { headers: { Authorization: apiKey } });
+    if (!photoRes.ok) throw new BadRequestException("Couldn't find that stock photo");
+    const photo = (await photoRes.json()) as {
+      alt: string | null; photographer: string;
+      src: { original: string; large2x: string; large: string };
+    };
+
+    const imageRes = await fetch(photo.src.large2x ?? photo.src.large ?? photo.src.original);
+    if (!imageRes.ok) throw new BadRequestException("Couldn't download that stock photo");
+    const contentLength = Number(imageRes.headers.get('content-length') ?? 0);
+    if (contentLength > 20 * 1024 * 1024) throw new BadRequestException('That stock photo is too large to import');
+    const buffer = Buffer.from(await imageRes.arrayBuffer());
+
+    // Same magic-byte sniff as a direct upload — trust nothing about what a third party claims
+    // a file is, only what it actually contains.
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detected = await fileTypeFromBuffer(buffer);
+    const assetType = detected ? ALLOWED_MIME[detected.mime] : undefined;
+    if (!detected || assetType !== 'IMAGE') {
+      throw new BadRequestException("That stock photo doesn't look like a valid image");
+    }
+
+    const key = `${orgId}/assets/${crypto.randomUUID()}.${detected.ext}`;
+    await this.storage.upload(key, buffer, detected.mime);
+
+    let name = `Stock photo by ${photo.photographer}`;
+    const trimmedAlt = photo.alt?.trim();
+    if (trimmedAlt) name = trimmedAlt;
+    const asset = await this.prisma.asset.create({
+      data: {
+        name,
+        type: 'IMAGE',
+        mimeType: detected.mime,
+        storageKey: key,
+        sizeBytes: buffer.length,
+        category: 'STOCK_PHOTO',
+        tags: ['pexels'],
+        organizationId: orgId,
+        status: 'PROCESSING',
+      },
+    });
+
+    await queueThumbnail(asset.id, key, 'IMAGE', detected.mime);
+    return this.toDto(asset, null);
+  }
+
   async findOne(orgId: string, id: string) {
     const asset = await this.orgScoped.assertOwns(
       () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
       'Asset not found',
     );
     if (asset.type === 'TEXT') return this.toDto(asset, null);
+    if (asset.type === 'APP') return this.toDto(asset, ...this.appUrls(asset));
 
     const url = this.storage.publicUrl(asset.storageKey);
     const downloadUrl = this.storage.publicUrl(asset.storageKey, asset.name);
@@ -413,13 +674,13 @@ export class AssetsService {
       );
     }
 
-    // TEXT assets never had anything uploaded (see createText) — deleting their placeholder
-    // storageKey would just be a wasted round-trip to the storage backend. Assets copied from
-    // the library (see copyFromLibrary) share their storageKey/thumbnailKey with the library
-    // original and every other org's copy — only delete the actual object once nothing else
-    // still points at it, or every other copy silently loses its file underneath it.
+    // TEXT/APP assets never had anything uploaded (see createText/createApp) — deleting their
+    // placeholder storageKey would just be a wasted round-trip to the storage backend. Assets
+    // copied from the library (see copyFromLibrary) share their storageKey/thumbnailKey with the
+    // library original and every other org's copy — only delete the actual object once nothing
+    // else still points at it, or every other copy silently loses its file underneath it.
     const otherRefs = await this.prisma.asset.count({ where: { storageKey: asset.storageKey, id: { not: id } } });
-    if (asset.type !== 'TEXT' && otherRefs === 0) {
+    if (asset.type !== 'TEXT' && asset.type !== 'APP' && otherRefs === 0) {
       await this.storage.delete(asset.storageKey);
       if (asset.thumbnailKey) await this.storage.delete(asset.thumbnailKey);
     }
@@ -427,7 +688,7 @@ export class AssetsService {
   }
 
   private toDto(
-    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null; hasAudioTrack: boolean; audioEnabled: boolean; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date; lastUsedAt?: Date | null },
+    asset: { id: string; name: string; type: AssetType; mimeType: string; storageKey: string; thumbnailKey: string | null; sizeBytes: bigint; durationSecs: number | null; width: number | null; height: number | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: TextSize | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: TickerDirection; textTickerSpeed: number | null; textTickerCrossOffset: number | null; hasAudioTrack: boolean; audioEnabled: boolean; appProviderId: string | null; sourceUrl: string | null; appConfig: unknown; status: string; category: AssetCategory; tags: string[]; organizationId: string | null; createdAt: Date; lastUsedAt?: Date | null },
     url: string | null,
     thumbUrl?: string | null,
     downloadUrl?: string | null,
@@ -454,6 +715,9 @@ export class AssetsService {
       textTickerCrossOffset: asset.textTickerCrossOffset,
       hasAudioTrack: asset.hasAudioTrack,
       audioEnabled: asset.audioEnabled,
+      appProviderId: asset.appProviderId,
+      sourceUrl: asset.sourceUrl,
+      appConfig: asset.appConfig,
       status: asset.status,
       category: asset.category,
       tags: asset.tags,

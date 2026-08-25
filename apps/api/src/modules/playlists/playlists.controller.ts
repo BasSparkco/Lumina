@@ -9,10 +9,15 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
+const PLAYLIST_ITEM_KINDS = ['ASSET', 'THEME', 'LAYOUT'] as const;
+
 class CreatePlaylistDto { @IsString() name!: string; }
 class RenamePlaylistDto { @IsString() name!: string; }
 class AddItemDto {
-  @IsString() assetId!: string;
+  @IsIn(PLAYLIST_ITEM_KINDS) @IsOptional() kind: (typeof PLAYLIST_ITEM_KINDS)[number] = 'ASSET';
+  @IsString() @IsOptional() assetId?: string;
+  @IsString() @IsOptional() themeId?: string;
+  @IsString() @IsOptional() layoutId?: string;
   @IsInt() @Min(1) durationSecs = 10;
   @IsBoolean() @IsOptional() muted?: boolean;
   @IsBoolean() @IsOptional() playFullVideo?: boolean;
@@ -72,8 +77,9 @@ export class PlaylistsController {
   @Post(':id/items')
   addItem(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: AddItemDto) {
     return this.playlists.addItem(
-      user.orgId, id, dto.assetId, dto.durationSecs, dto.muted, dto.playFullVideo,
-      dto.cropZoom, dto.cropOffsetX, dto.cropOffsetY,
+      user.orgId, id, dto.kind, dto.durationSecs,
+      { assetId: dto.assetId, themeId: dto.themeId, layoutId: dto.layoutId },
+      dto.muted, dto.playFullVideo, dto.cropZoom, dto.cropOffsetX, dto.cropOffsetY,
     );
   }
 

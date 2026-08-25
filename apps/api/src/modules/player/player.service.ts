@@ -5,8 +5,48 @@ import { ScreenGateway } from '../ws/screen.gateway';
 import { SchedulesService } from '../schedules/schedules.service';
 import { PowerSchedulesService } from '../power-schedules/power-schedules.service';
 
+// hydratePlaylist/hydrateZones/hydrateAssetAsPlaylist call each other (a LAYOUT-kind playlist
+// item's zones can each play a playlist, whose items can themselves be THEME/LAYOUT-kind) —
+// explicit return types on all three break that mutual-recursion type inference cycle.
+interface HydratedPlaylistItemAsset {
+  id: string; name: string; type: string; mimeType: string; url: string | null; thumbnailUrl: string | null;
+  pageUrls: string[]; textContent: string | null; textFontFamily: string | null; textColor: string | null;
+  textSize: string | null; textBackgroundColor: string | null; textTickerEnabled: boolean;
+  textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null;
+  // APP-type assets only — an embedded item from an external service (e.g. YouTube). Present on
+  // every item regardless of type (null for non-APP) rather than a separate field, so the player
+  // can key off `asset.type === 'APP'` the same way it already does for every other type.
+  appProviderId: string | null; appConfig: unknown;
+}
+interface HydratedTheme {
+  id: string; name: string; category: string; aspectRatio: string; palette: unknown; typography: unknown; elements: unknown;
+}
+interface HydratedZone {
+  id: string; name: string; x: number; y: number; width: number; height: number; zIndex: number; rotation: number;
+  zoneType: string; shape: string; widgetConfig: unknown; audioPriority: boolean; audioVolume: number | null;
+  playlist: HydratedPlaylist | null;
+}
+interface HydratedLayout { id: string; name: string; zones: HydratedZone[]; }
+interface HydratedPlaylistItem {
+  id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
+  cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null; kind: string;
+  asset: HydratedPlaylistItemAsset | null; theme: HydratedTheme | null; layout: HydratedLayout | null;
+}
+interface HydratedPlaylist {
+  id: string; name: string; transitionStyle: string; transitionDurationMs: number; playbackOrder: string;
+  items: HydratedPlaylistItem[];
+}
+
 @Injectable()
 export class PlayerService {
+  // A playlist item can be a THEME whose elements can include a PLAYLIST, or a LAYOUT whose zone
+  // can play a PLAYLIST — and now that a playlist item can itself be a THEME/LAYOUT, that new
+  // reference can point right back at an ancestor, a cycle that was structurally impossible before
+  // playlist items only ever pointed at plain assets. This bounds worst-case hydration work
+  // regardless of whether the data actually cycles: depth 0 is the screen's own playlist, depth 1
+  // is one level of THEME/LAYOUT nesting inside it; past that, THEME/LAYOUT items stop expanding.
+  private static readonly MAX_PLAYLIST_ITEM_DEPTH = 2;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -73,20 +113,6 @@ export class PlayerService {
         emergencyPlaylist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },
-        layout: {
-          include: {
-            zones: {
-              orderBy: { zIndex: 'asc' },
-              include: {
-                playlist: {
-                  include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
-                },
-                asset: true,
-              },
-            },
-          },
-        },
-        theme: true,
         playlist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
         },
@@ -163,31 +189,6 @@ export class PlayerService {
         })
       : [];
 
-    const hydrateZones = (zones: NonNullable<typeof screen.layout>['zones']) =>
-      zones.map((z: (typeof zones)[number]) => ({
-        id: z.id,
-        name: z.name,
-        x: z.x,
-        y: z.y,
-        width: z.width,
-        height: z.height,
-        zIndex: z.zIndex,
-        rotation: z.rotation,
-        zoneType: z.zoneType,
-        shape: z.shape,
-        widgetConfig: z.widgetConfig,
-        audioPriority: z.audioPriority,
-        audioVolume: z.audioVolume,
-        // A zone's MEDIA content is either a playlist or a single asset, never both (enforced
-        // in LayoutsService) — asset wins the null-coalesce below only because at most one of
-        // the two is ever actually set.
-        playlist: z.playlist
-          ? this.hydratePlaylist(z.playlist)
-          : z.asset
-            ? this.hydrateAssetAsPlaylist(z.asset, { cropZoom: z.cropZoom, cropOffsetX: z.cropOffsetX, cropOffsetY: z.cropOffsetY })
-            : null,
-      }));
-
     return {
       screenId,
       streamingType: screen.streamingType,
@@ -198,25 +199,12 @@ export class PlayerService {
       athanEnabled: screen.athanEnabled,
       stopped: screen.stopped,
       showClock: screen.showClock,
+      orientation: screen.orientation,
       emergencyActive: screen.emergencyActive,
       emergencyPlaylist: screen.emergencyPlaylist
-        ? this.hydratePlaylist(screen.emergencyPlaylist)
+        ? await this.hydratePlaylist(screen.emergencyPlaylist)
         : null,
-      asset: screen.streamingType === 'ASSET' && screen.asset ? this.hydrateAssetAsPlaylist(screen.asset) : null,
-      layout: screen.streamingType === 'LAYOUT' && screen.layout
-        ? { id: screen.layout.id, name: screen.layout.name, zones: hydrateZones(screen.layout.zones) }
-        : null,
-      theme: screen.streamingType === 'THEME' && screen.theme
-        ? {
-            id: screen.theme.id,
-            name: screen.theme.name,
-            category: screen.theme.category,
-            aspectRatio: screen.theme.aspectRatio,
-            palette: screen.theme.palette,
-            typography: screen.theme.typography,
-            elements: await this.hydrateThemeElements(screen.theme.elements),
-          }
-        : null,
+      asset: screen.streamingType === 'ASSET' && screen.asset ? await this.hydrateAssetAsPlaylist(screen.asset) : null,
       wayfinding: screen.streamingType === 'WAYFINDING' && screen.kioskLocation
         ? {
             kiosk: {
@@ -275,7 +263,7 @@ export class PlayerService {
             // (ScreensService.setKioskAttractPlaylist/setKioskAttractTheme each clear the
             // other), the player just shows whichever is non-null after its idle timeout.
             attractPlaylist: screen.kioskLocation.attractPlaylist
-              ? this.hydratePlaylist(screen.kioskLocation.attractPlaylist)
+              ? await this.hydratePlaylist(screen.kioskLocation.attractPlaylist)
               : null,
             attractTheme: screen.kioskLocation.attractTheme
               ? {
@@ -290,7 +278,7 @@ export class PlayerService {
               : null,
           }
         : null,
-      scheduleRules: rules.map(r => ({
+      scheduleRules: await Promise.all(rules.map(async r => ({
         id: r.id,
         name: r.name,
         priority: r.priority,
@@ -301,11 +289,11 @@ export class PlayerService {
         endDate: r.endDate?.toISOString() ?? null,
         playlistId: r.playlistId,
         playlist: rulePlaylistMap[r.playlistId]
-          ? this.hydratePlaylist(rulePlaylistMap[r.playlistId]!)
+          ? await this.hydratePlaylist(rulePlaylistMap[r.playlistId]!)
           : null,
-      })),
+      }))),
       resolvedPlaylistId,
-      defaultPlaylist: screen.streamingType === 'PLAYLIST' && screen.playlist ? this.hydratePlaylist(screen.playlist) : null,
+      defaultPlaylist: screen.streamingType === 'PLAYLIST' && screen.playlist ? await this.hydratePlaylist(screen.playlist) : null,
       poweredOn: power.poweredOn,
       powerScheduleRules: power.rules.map(r => ({
         id: r.id,
@@ -327,8 +315,8 @@ export class PlayerService {
     id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null;
     textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null;
     textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null;
-    hasAudioTrack: boolean; audioEnabled: boolean;
-  }, crop?: { cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null }) {
+    hasAudioTrack: boolean; audioEnabled: boolean; appProviderId: string | null; appConfig: unknown;
+  }, crop?: { cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null }): Promise<HydratedPlaylist> {
     return this.hydratePlaylist({
       id: `asset:${asset.id}`,
       name: asset.name,
@@ -339,11 +327,18 @@ export class PlayerService {
         id: `asset-item:${asset.id}`,
         position: 0,
         durationSecs: 10,
-        muted: asset.type === 'VIDEO' && asset.hasAudioTrack ? !asset.audioEnabled : true,
+        // VIDEO only gets sound once a track's actually been detected on it; every other
+        // audio-capable type (currently just APP/YouTube, which has no hasAudioTrack probe of
+        // its own) just follows the asset's own audio toggle, defaulting to unmuted.
+        muted: asset.type === 'VIDEO' ? (asset.hasAudioTrack ? !asset.audioEnabled : true) : !asset.audioEnabled,
         playFullVideo: true,
         cropZoom: crop?.cropZoom,
         cropOffsetX: crop?.cropOffsetX,
         cropOffsetY: crop?.cropOffsetY,
+        kind: 'ASSET',
+        assetId: asset.id,
+        themeId: null,
+        layoutId: null,
         asset,
       }],
     });
@@ -395,7 +390,7 @@ export class PlayerService {
    * content/styling/ticker fields — everything else (SHAPE/WIDGET/BRUSH, and TEXT with no
    * assetId) passes through untouched.
    */
-  private async hydrateThemeElements(elements: unknown): Promise<unknown> {
+  private async hydrateThemeElements(elements: unknown, depth = 0): Promise<unknown> {
     if (!Array.isArray(elements)) return [];
     const els = elements as { kind: string; content: Record<string, unknown> }[];
 
@@ -404,7 +399,11 @@ export class PlayerService {
         .map(e => e.content.assetId as string | null)
         .filter((id): id is string => !!id),
     )];
-    const playlistIds = [...new Set(
+    // A PLAYLIST element's playlist can itself now contain THEME/LAYOUT items that reference a
+    // theme with its own PLAYLIST element, and so on — a cycle is representable in the data even
+    // if nobody built one on purpose. Past MAX_PLAYLIST_ITEM_DEPTH (see hydratePlaylist), stop
+    // resolving further and just leave these elements pointing at an id with no playlist data.
+    const playlistIds = depth >= PlayerService.MAX_PLAYLIST_ITEM_DEPTH ? [] : [...new Set(
       els.filter(e => e.kind === 'PLAYLIST')
         .map(e => e.content.playlistId as string | null)
         .filter((id): id is string => !!id),
@@ -436,7 +435,7 @@ export class PlayerService {
         })
       : [];
     const playlistMap = new Map(
-      await Promise.all(playlists.map(async p => [p.id, await this.hydratePlaylist(p)] as const)),
+      await Promise.all(playlists.map(async p => [p.id, await this.hydratePlaylist(p, depth + 1)] as const)),
     );
 
     return els.map(e => {
@@ -488,19 +487,22 @@ export class PlayerService {
     });
   }
 
-  private hydratePlaylist(playlist: {
+  private async hydratePlaylist(playlist: {
     id: string;
     name: string;
     transitionStyle: string;
     transitionDurationMs: number;
     playbackOrder: string;
-    items: { id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean; cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null; asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null } }[];
-  }) {
-    const items = playlist.items.map(item => {
-      // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
-      // the player renders textContent directly instead of loading a url.
-      const isText = item.asset.type === 'TEXT';
-      return {
+    items: {
+      id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
+      cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null;
+      kind: string; assetId?: string | null; themeId?: string | null; layoutId?: string | null;
+      asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null; appProviderId: string | null; appConfig: unknown } | null;
+    }[];
+  }, depth = 0): Promise<HydratedPlaylist> {
+    const canExpand = depth < PlayerService.MAX_PLAYLIST_ITEM_DEPTH;
+    const items = await Promise.all(playlist.items.map(async item => {
+      const base = {
         id: item.id,
         position: item.position,
         durationSecs: item.durationSecs,
@@ -509,6 +511,62 @@ export class PlayerService {
         cropZoom: item.cropZoom ?? null,
         cropOffsetX: item.cropOffsetX ?? null,
         cropOffsetY: item.cropOffsetY ?? null,
+        kind: item.kind,
+      };
+
+      if (item.kind === 'THEME' && item.themeId && canExpand) {
+        const theme = await this.prisma.theme.findUnique({ where: { id: item.themeId } });
+        return {
+          ...base,
+          asset: null,
+          layout: null,
+          theme: theme
+            ? {
+                id: theme.id,
+                name: theme.name,
+                category: theme.category,
+                aspectRatio: theme.aspectRatio,
+                palette: theme.palette,
+                typography: theme.typography,
+                elements: await this.hydrateThemeElements(theme.elements, depth + 1),
+              }
+            : null,
+        };
+      }
+
+      if (item.kind === 'LAYOUT' && item.layoutId && canExpand) {
+        const layout = await this.prisma.layout.findUnique({
+          where: { id: item.layoutId },
+          include: {
+            zones: {
+              orderBy: { zIndex: 'asc' },
+              include: {
+                playlist: { include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } } },
+                asset: true,
+              },
+            },
+          },
+        });
+        return {
+          ...base,
+          asset: null,
+          theme: null,
+          layout: layout ? { id: layout.id, name: layout.name, zones: await this.hydrateZones(layout.zones, depth + 1) } : null,
+        };
+      }
+
+      // ASSET kind (the common case), or a THEME/LAYOUT item past the depth cap — either way,
+      // nothing further to expand, and an ASSET item always carries its asset per the CHECK
+      // constraint enforced at the DB level.
+      if (!item.asset) return { ...base, asset: null, theme: null, layout: null };
+
+      // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
+      // the player renders textContent directly instead of loading a url.
+      const isText = item.asset.type === 'TEXT';
+      return {
+        ...base,
+        theme: null,
+        layout: null,
         asset: {
           id: item.asset.id,
           name: item.asset.name,
@@ -532,9 +590,11 @@ export class PlayerService {
           textTickerDirection: item.asset.textTickerDirection,
           textTickerSpeed: item.asset.textTickerSpeed,
           textTickerCrossOffset: item.asset.textTickerCrossOffset,
+          appProviderId: item.asset.appProviderId,
+          appConfig: item.asset.appConfig,
         },
       };
-    });
+    }));
     return {
       id: playlist.id,
       name: playlist.name,
@@ -543,6 +603,43 @@ export class PlayerService {
       playbackOrder: playlist.playbackOrder,
       items,
     };
+  }
+
+  // Shared by a LAYOUT-kind playlist item (via hydratePlaylist above) — Screen-level LAYOUT
+  // streaming mode is gone, so this is its only caller now.
+  private async hydrateZones(
+    zones: {
+      id: string; name: string; x: number; y: number; width: number; height: number; zIndex: number; rotation: number;
+      zoneType: string; shape: string; widgetConfig: unknown; audioPriority: boolean; audioVolume: number | null;
+      cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null;
+      playlist: Parameters<PlayerService['hydratePlaylist']>[0] | null;
+      asset: Parameters<PlayerService['hydrateAssetAsPlaylist']>[0] | null;
+    }[],
+    depth = 0,
+  ): Promise<HydratedZone[]> {
+    return Promise.all(zones.map(async z => ({
+      id: z.id,
+      name: z.name,
+      x: z.x,
+      y: z.y,
+      width: z.width,
+      height: z.height,
+      zIndex: z.zIndex,
+      rotation: z.rotation,
+      zoneType: z.zoneType,
+      shape: z.shape,
+      widgetConfig: z.widgetConfig,
+      audioPriority: z.audioPriority,
+      audioVolume: z.audioVolume,
+      // A zone's MEDIA content is either a playlist or a single asset, never both (enforced
+      // in LayoutsService) — asset wins the null-coalesce below only because at most one of
+      // the two is ever actually set.
+      playlist: z.playlist
+        ? await this.hydratePlaylist(z.playlist, depth)
+        : z.asset
+          ? await this.hydrateAssetAsPlaylist(z.asset, { cropZoom: z.cropZoom, cropOffsetX: z.cropOffsetX, cropOffsetY: z.cropOffsetY })
+          : null,
+    })));
   }
 
   // Reconstructs the derived page-image keys media.processor.ts uploaded during DOCUMENT

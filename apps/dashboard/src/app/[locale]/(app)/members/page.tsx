@@ -12,13 +12,14 @@ import { useRouteGuard } from '@/hooks/useRouteGuard';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 
-const ROLES: UserRole[] = ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER'];
+const ROLES: UserRole[] = ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER', 'LIBRARY_MANAGER'];
 
 const ROLE_STYLES: Record<UserRole, string> = {
   OWNER: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300',
   ADMIN: 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300',
   EDITOR: 'bg-teal-100 dark:bg-teal-950 text-teal-700 dark:text-teal-300',
   VIEWER: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
+  LIBRARY_MANAGER: 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300',
 };
 
 export default function MembersPage() {

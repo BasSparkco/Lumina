@@ -72,7 +72,8 @@
       "OWNER": "مالك",
       "ADMIN": "مسؤول",
       "EDITOR": "محرر",
-      "VIEWER": "مشاهد"
+      "VIEWER": "مشاهد",
+      "LIBRARY_MANAGER": "مدير المكتبة"
     },
     "approvalStatus": {
       "DRAFT": "مسودة",
@@ -144,18 +145,31 @@
     "online": "متصل",
     "offline": "غير متصل",
     "defaultPlaylist": "قائمة التشغيل الافتراضية",
+    "customPlayer": {
+      "label": "مشغّل مخصص",
+      "waiting": "بانتظار تقرير الشاشة عن التشغيل…",
+      "pause": "إيقاف مؤقت",
+      "resume": "استئناف",
+      "back5": "رجوع 5 ثوانٍ",
+      "forward5": "تقديم 5 ثوانٍ"
+    },
     "none": "— لا شيء —",
     "uploadingImage": "جارٍ الرفع…",
     "uploadImageFailed": "فشل الرفع",
     "pasteImageHint": "انقر هنا ثم اضغط Ctrl+V (⌘V على ماك) للصق صورة",
     "pasteImageError": "الحافظة لا تحتوي على صورة",
-    "layoutZones": "التخطيط (المناطق)",
-    "fullscreenNoLayout": "— ملء الشاشة (بدون تخطيط) —",
     "timezone": "المنطقة الزمنية (تُستخدم لتحديد مواعيد الجداول لهذه الشاشة)",
     "hideTimezone": "إخفاء المنطقة الزمنية",
     "configureTimezone": "ضبط المنطقة الزمنية",
     "showClock": "إظهار الساعة على الشاشة",
     "volume": "مستوى الصوت",
+    "tabs": {
+      "content": "المحتوى",
+      "settings": "الإعدادات"
+    },
+    "orientation": {
+      "label": "اتجاه الشاشة"
+    },
     "timezoneEnable": "منطقة زمنية مخصصة",
     "hideFaith": "إخفاء إعدادات العبادة",
     "configureFaith": "ضبط إعدادات العبادة",
@@ -165,11 +179,8 @@
       "label": "نوع البث",
       "ASSET": "أصل",
       "PLAYLIST": "قائمة تشغيل",
-      "LAYOUT": "تخطيط",
-      "THEME": "سمة",
       "WAYFINDING": "إرشاد",
-      "assetLabel": "الأصل المراد تشغيله",
-      "themeLabel": "السمة المراد عرضها"
+      "assetLabel": "الأصل المراد تشغيله"
     },
     "kiosk": {
       "floor": "طابق الكشك",
@@ -198,6 +209,8 @@
     "deactivateEmergency": "إلغاء تفعيل التجاوز الطارئ",
     "activateEmergency": "تفعيل التجاوز الطارئ",
     "reloadTitle": "إعادة تحميل مشغّل الشاشة",
+    "clearCache": "مسح ذاكرة التخزين المؤقت",
+    "clearCacheTitle": "مسح بيانات المشغّل المخزّنة وإعادة التحميل — استخدم هذا إذا لم تُصلح إعادة التحميل العادية شاشة عالقة أو قديمة",
     "lastSeen": "آخر ظهور {when}",
     "neverSeen": "لم يظهر مطلقًا",
     "deleteTitle": "حذف الشاشة",
@@ -280,9 +293,7 @@
         "UNCAUGHT_EXCEPTION": "عطل",
         "WATCHDOG_RECOVERY": "استعادة قسرية (تجمّد)"
       }
-    },
-    "awaitingContent": "بانتظار المحتوى",
-    "awaitingContentTitle": "هذه الشاشة لا تعرض حاليًا أي محتوى قابل للتشغيل"
+    }
   },
   "assets": {
     "title": "الأصول",
@@ -290,9 +301,9 @@
     "uploading": "جارٍ الرفع {progress}%",
     "upload": "رفع",
     "uploadFailed": "فشل الرفع",
-        "pasteHint": "أو الصق صورة (Ctrl+V)",
+    "pasteHint": "أو الصق صورة (Ctrl+V)",
     "newMenu": {
-      "button": "جديد",
+      "button": "إضافة أصل",
       "layout": "تخطيط",
       "theme": "سمة",
       "wayfinding": "إرشاد"
@@ -315,6 +326,11 @@
       "bodyPlural": "هل تريد رفع الفيديوهات كاملة، أم استخراج الصوت فقط كأصول منفصلة؟ ({count} فيديوهات)",
       "uploadVideo": "رفع الفيديو",
       "extractAudioOnly": "استخراج الصوت فقط"
+    },
+    "pasteConfirm": {
+      "title": "إضافة الصورة الملصقة؟",
+      "body": "تم للتو لصق هذه الصورة من الحافظة. هل تريد إضافتها كأصل جديد؟",
+      "confirm": "رفع"
     },
     "newText": "نص جديد",
     "newTextModalTitle": "أصل نصي جديد",
@@ -352,10 +368,17 @@
       "preview": "معاينة"
     },
     "myAssetsTab": "أصولي",
+    "appsTab": "التطبيقات",
     "libraryTab": "المكتبة",
     "librarySearchPlaceholder": "ابحث في المكتبة…",
     "allCategories": "كل الفئات",
     "libraryEmpty": "لا توجد أصول في المكتبة تطابق بحثك.",
+    "libraryUpload": "رفع إلى المكتبة",
+    "libraryUploadFile": "الملف",
+    "categoryLabel": "الفئة",
+    "libraryTags": "الوسوم",
+    "libraryTagsPlaceholder": "وسوم مفصولة بفواصل",
+    "libraryDeleteConfirm": "إزالة هذا الأصل من المكتبة المشتركة؟ المستأجرون الذين أضافوه بالفعل إلى أصولهم سيحتفظون بنسختهم.",
     "addToMyAssets": "أضف إلى أصولي",
     "addedToMyAssets": "تمت الإضافة",
     "allTypes": "كل الأنواع",
@@ -368,6 +391,29 @@
       "AUDIO": "ملفات صوتية",
       "DOCUMENT": "مستندات",
       "TEXT": "نصوص"
+    },
+    "apps": {
+      "empty": "لا توجد تطبيقات متاحة بعد.",
+      "galleryEmpty": "لم تُضِف شيئًا بعد — اضغط إنشاء للبدء.",
+      "createButton": "إنشاء",
+      "backToGallery": "رجوع",
+      "addVideo": "إضافة فيديو",
+      "createPlaylist": "إنشاء قائمة تشغيل",
+      "addModalTitle": "إضافة من {provider}",
+      "createPlaylistTitle": "إنشاء قائمة تشغيل {provider}",
+      "playlistNamePlaceholder": "اسم قائمة التشغيل",
+      "playbackOrderLabel": "ترتيب التشغيل",
+      "sequential": "متسلسل",
+      "shuffle": "عشوائي",
+      "addItem": "إضافة",
+      "itemCount": "{count, plural, one {فيديو واحد} other {# فيديوهات}}",
+      "urlLabel": "الرابط",
+      "urlPlaceholder": "الصق رابط يوتيوب…",
+      "checking": "جارٍ التحقق…",
+      "add": "إضافة",
+      "adding": "جارٍ الإضافة…",
+      "createPlaylistSave": "إنشاء قائمة التشغيل",
+      "openSource": "فتح"
     },
     "categories": {
       "BACKGROUND": "خلفية",
@@ -396,9 +442,16 @@
   "playlistDetail": {
     "backToPlaylists": "العودة إلى قوائم التشغيل",
     "addItem": "إضافة عنصر",
-    "pickAsset": "اختر أصلًا",
+    "pickAsset": "إضافة إلى قائمة التشغيل",
+    "itemKind": {
+      "asset": "أصل",
+      "theme": "سمة",
+      "layout": "تخطيط"
+    },
     "noReadyAssets": "لا توجد أصول جاهزة. ارفع بعضها أولًا.",
-    "empty": "لا توجد عناصر في قائمة التشغيل هذه. أضف بعض الأصول أعلاه.",
+    "noThemes": "لا توجد سمات بعد.",
+    "noLayouts": "لا توجد تخطيطات بعد.",
+    "empty": "لا توجد عناصر في قائمة التشغيل هذه. أضف أصولًا أو سمات أو تخطيطات أو تطبيقات أعلاه.",
     "clickToView": "اضغط لعرض الحجم الكامل",
     "seconds": "ث",
     "loading": "جارٍ التحميل…",
@@ -452,6 +505,8 @@
     "pasteImageError": "الحافظة لا تحتوي على صورة",
     "zones": "المناطق",
     "addZone": "إضافة منطقة",
+    "collapseAll": "طي الكل",
+    "expandAll": "توسيع الكل",
     "addGroups": {
       "media": "الوسائط",
       "dataFeeds": "بيانات حية",
@@ -461,6 +516,10 @@
     },
     "saveLayout": "حفظ التخطيط",
     "saving": "جارٍ الحفظ…",
+    "saveAsAsset": "حفظ كأصل",
+    "savingAsset": "جارٍ الحفظ…",
+    "saveAsAssetHint": "تصدير هذا التصميم كصورة عادية في الأصول — لا يحل محل حفظه كتخطيط",
+    "saveAsAssetSuccess": "تم الحفظ في الأصول",
     "loading": "جارٍ تحميل التخطيطات…",
     "empty": "لا توجد تخطيطات بعد. أنشئ واحدًا لتقسيم شاشاتك إلى مناطق.",
     "deleteConfirm": "هل تريد حذف التخطيط؟",
@@ -468,7 +527,7 @@
     "editLayout": "تعديل التخطيط",
     "currentlyEditing": "قيد التعديل حاليًا",
     "noPlaylistBadge": "بدون قائمة تشغيل",
-    "screenCount": "{count, plural, zero {لا شاشات} one {شاشة واحدة} two {شاشتان} few {# شاشات} many {# شاشة} other {# شاشة}}",
+    "playlistItemCount": "{count, plural, zero {غير مستخدم في أي قائمة تشغيل} one {مستخدم في عنصر تشغيل واحد} two {مستخدم في عنصري تشغيل} few {مستخدم في # عناصر تشغيل} many {مستخدم في # عنصر تشغيل} other {مستخدم في # عنصر تشغيل}}",
     "duplicate": "نسخ التخطيط",
     "duplicating": "جارٍ النسخ…",
     "undo": "تراجع",
@@ -563,7 +622,7 @@
     "loading": "جارٍ تحميل السمات…",
     "empty": "لا توجد سمات بعد. ابدأ من قالب جاهز أو أنشئ سمة فارغة.",
     "deleteConfirm": "هل تريد حذف السمة؟",
-    "screenCount": "{count, plural, zero {لا شاشات} one {شاشة واحدة} two {شاشتان} few {# شاشات} many {# شاشة} other {# شاشة}}",
+    "playlistItemCount": "{count, plural, zero {غير مستخدم في أي قائمة تشغيل} one {مستخدم في عنصر تشغيل واحد} two {مستخدم في عنصري تشغيل} few {مستخدم في # عناصر تشغيل} many {مستخدم في # عنصر تشغيل} other {مستخدم في # عنصر تشغيل}}",
     "themeName": "اسم السمة",
     "clickToEdit": "اضغط لتعديل السمة",
     "editTheme": "تعديل السمة",
@@ -576,6 +635,8 @@
     "scale": "مقياس الحجم",
     "elements": "العناصر",
     "addElement": "إضافة عنصر",
+    "collapseAll": "طي الكل",
+    "expandAll": "توسيع الكل",
     "filter": "تصفية",
     "filterAll": "الكل",
     "addGroups": {
@@ -648,6 +709,7 @@
     "imageSourceExisting": "موجودة",
     "imageSourceUpload": "رفع",
     "imageSourcePaste": "لصق",
+    "imageSourceStock": "مكتبة الصور",
     "uploadImage": "رفع صورة",
     "uploadingImage": "جارٍ الرفع…",
     "uploadImageFailed": "فشل الرفع",
@@ -656,6 +718,11 @@
     "removeBackground": "إزالة الخلفية",
     "removingBackground": "جارٍ إزالة الخلفية…",
     "removeBackgroundFailed": "فشلت إزالة الخلفية",
+    "stockSearchPlaceholder": "ابحث في صور مجانية…",
+    "stockEmpty": "لم يتم العثور على صور",
+    "stockNotConfigured": "لم يتم إعداد مكتبة الصور على هذا الخادم بعد.",
+    "stockCredit": "الصور مقدمة من Pexels",
+    "importStockFailed": "تعذّرت إضافة هذه الصورة",
     "noPlaylist": "— بدون قائمة تشغيل —",
     "widgetType": "الأداة",
     "color": "لون النص",
@@ -684,6 +751,10 @@
     "customColor": "لون مخصص",
     "saveTheme": "حفظ السمة",
     "saving": "جارٍ الحفظ…",
+    "saveAsAsset": "حفظ كأصل",
+    "savingAsset": "جارٍ الحفظ…",
+    "saveAsAssetHint": "تصدير هذا التصميم كصورة عادية في الأصول — لا يحل محل حفظه كسمة",
+    "saveAsAssetSuccess": "تم الحفظ في الأصول",
     "field": {
       "x": "X",
       "y": "Y",
@@ -768,6 +839,7 @@
     "imageSourceExisting": "موجودة",
     "imageSourceUpload": "رفع",
     "imageSourcePaste": "لصق",
+    "imageSourceStock": "مكتبة الصور",
     "uploadingImage": "جارٍ الرفع",
     "uploadImageFailed": "فشل الرفع",
     "pasteImageHint": "انقر، ثم الصق صورة",
@@ -775,6 +847,11 @@
     "removeBackground": "إزالة الخلفية",
     "removingBackground": "جارٍ إزالة الخلفية…",
     "removeBackgroundFailed": "فشلت إزالة الخلفية",
+    "stockSearchPlaceholder": "ابحث في صور مجانية…",
+    "stockEmpty": "لم يتم العثور على صور",
+    "stockNotConfigured": "لم يتم إعداد مكتبة الصور على هذا الخادم بعد.",
+    "stockCredit": "الصور مقدمة من Pexels",
+    "importStockFailed": "تعذّرت إضافة هذه الصورة",
     "noFloors": "لا توجد طوابق بعد. أضف طابقًا وارفع مخططه.",
     "deleteFloorConfirm": "حذف هذا الطابق وجميع نقاط الاهتمام فيه؟",
     "poiCount": "{count, plural, one {# نقطة اهتمام} other {# نقاط اهتمام}}",

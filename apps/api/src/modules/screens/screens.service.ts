@@ -136,20 +136,16 @@ export class ScreensService {
         throw new BadRequestException('Only approved playlists can be assigned to a screen');
       }
     }
-    // A screen shows either its playlist or its layout, never a leftover mix of both — picking
-    // one here clears the other so the dropdowns (and the player) never disagree about which
-    // is active.
     const updated = await this.prisma.screen.update({
       where: { id: screen.id },
-      data: { playlistId, ...(playlistId ? { layoutId: null } : {}) },
+      data: { playlistId },
     });
     await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }
 
-  // Unlike assignPlaylist/setLayout/setTheme, this never touches playlistId/layoutId/assetId/
-  // themeId — those stay exactly as they were, so switching types and back restores whatever was
-  // last chosen in each.
+  // Unlike assignPlaylist, this never touches playlistId/assetId — those stay exactly as they
+  // were, so switching types and back restores whatever was last chosen in each.
   async setStreamingType(orgId: string, screenId: string, streamingType: StreamingType) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { streamingType } });
@@ -171,26 +167,11 @@ export class ScreensService {
     return updated;
   }
 
-  async setTheme(orgId: string, screenId: string, themeId: string | null) {
-    await this.findOne(orgId, screenId);
-    if (themeId) {
-      await this.orgScoped.assertOwns(
-        () => this.prisma.theme.findFirst({
-          where: { id: themeId, OR: [{ organizationId: null }, { organizationId: orgId }] },
-        }),
-        'Theme not found',
-      );
-    }
-    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { themeId } });
-    await this.pushIfAutoPublish(orgId, screenId);
-    return updated;
-  }
-
-  // Binds a screen to a "you are here" floor coordinate for wayfinding (Phase 7) — mirrors
-  // setLayout/setTheme's shape, but the target lives in its own KioskLocation table (it carries
-  // x/y placement, not just a foreign key) rather than a column on Screen. Deliberately doesn't
-  // touch streamingType, same as setAsset/setLayout/setTheme — the dashboard flips that
-  // separately via setStreamingType so switching types and back doesn't lose the binding.
+  // Binds a screen to a "you are here" floor coordinate for wayfinding (Phase 7) — the target
+  // lives in its own KioskLocation table (it carries x/y placement, not just a foreign key)
+  // rather than a column on Screen. Deliberately doesn't touch streamingType, same as setAsset —
+  // the dashboard flips that separately via setStreamingType so switching types and back doesn't
+  // lose the binding.
   async setKioskLocation(orgId: string, screenId: string, floorId: string, x: number, y: number) {
     await this.findOne(orgId, screenId);
     await this.orgScoped.assertOwns(
@@ -270,9 +251,49 @@ export class ScreensService {
     return { ok: true };
   }
 
+  // Stronger than reloadScreen: clears the player's own IndexedDB cache (cached playlist/asset
+  // data — see apps/player/src/lib/db.ts) before reloading, and a fresh page load also gives the
+  // browser's service worker a chance to fetch a newer deployed bundle. Exists as its own command
+  // (not folded into reload) since a plain reload doesn't clear anything — most of the time
+  // that's what you want (fast, no re-fetching), this is for when the player seems stuck on old
+  // cached data/code and a plain reload alone doesn't shake it loose.
+  async clearCacheScreen(orgId: string, screenId: string) {
+    await this.findOne(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'clear-cache' });
+    return { ok: true };
+  }
+
   async captureScreenshot(orgId: string, screenId: string) {
     await this.findOne(orgId, screenId);
     this.gateway.sendToScreen(screenId, { type: 'capture-screenshot' });
+    return { ok: true };
+  }
+
+  // Custom Player (appsroadmap.md Phase 9) — remote control of whatever video the screen is
+  // currently playing. Fire-and-forget over the socket, same shape as publish/reload/
+  // capture-screenshot above; the player itself decides whether anything controllable is on
+  // screen right now (see Phase 10), so there's nothing to validate here beyond screen ownership.
+  async pauseScreen(orgId: string, screenId: string) {
+    await this.findOne(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'pause' });
+    return { ok: true };
+  }
+
+  async resumeScreen(orgId: string, screenId: string) {
+    await this.findOne(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'resume' });
+    return { ok: true };
+  }
+
+  async seekScreen(orgId: string, screenId: string, toSeconds: number) {
+    await this.findOne(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'seek', toSeconds });
+    return { ok: true };
+  }
+
+  async setScreenSpeed(orgId: string, screenId: string, rate: number) {
+    await this.findOne(orgId, screenId);
+    this.gateway.sendToScreen(screenId, { type: 'setSpeed', rate });
     return { ok: true };
   }
 
@@ -319,6 +340,13 @@ export class ScreensService {
     return updated;
   }
 
+  async setOrientation(orgId: string, screenId: string, orientation: 0 | 90 | 180 | 270) {
+    await this.findOne(orgId, screenId);
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { orientation } });
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
+  }
+
   async updatePrayerConfig(orgId: string, screenId: string, dto: UpdatePrayerDto) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({
@@ -335,24 +363,6 @@ export class ScreensService {
     // Without this, a screen already displaying a Prayer/Weather zone keeps showing "no
     // location set" (or stale times) until its next periodic 60s state refresh — every other
     // screen setter below pushes live, this one silently didn't.
-    await this.pushIfAutoPublish(orgId, screenId);
-    return updated;
-  }
-
-  async setLayout(orgId: string, screenId: string, layoutId: string | null) {
-    await this.findOne(orgId, screenId);
-    if (layoutId) {
-      await this.orgScoped.assertOwns(
-        () => this.prisma.layout.findFirst({ where: { id: layoutId, organizationId: orgId } }),
-        'Layout not found',
-      );
-    }
-    // Mirrors assignPlaylist: choosing a layout clears the screen's playlist so the two never
-    // both claim to be "what's showing" at once.
-    const updated = await this.prisma.screen.update({
-      where: { id: screenId },
-      data: { layoutId, ...(layoutId ? { playlistId: null } : {}) },
-    });
     await this.pushIfAutoPublish(orgId, screenId);
     return updated;
   }

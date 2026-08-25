@@ -5,7 +5,8 @@ import { ScreensService } from './screens.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
 import { AssignPlaylistDto } from './dto/assign-playlist.dto';
 import { AssignAssetDto } from './dto/assign-asset.dto';
-import { SetThemeDto } from './dto/set-theme.dto';
+import { SeekScreenDto } from './dto/seek-screen.dto';
+import { SetScreenSpeedDto } from './dto/set-screen-speed.dto';
 import { SetStreamingTypeDto } from './dto/set-streaming-type.dto';
 import { SetKioskLocationDto } from './dto/set-kiosk-location.dto';
 import { SetKioskAttractPlaylistDto } from './dto/set-kiosk-attract-playlist.dto';
@@ -14,8 +15,8 @@ import { SetEmergencyDto } from './dto/set-emergency.dto';
 import { SetStoppedDto } from './dto/set-stopped.dto';
 import { SetShowClockDto } from './dto/set-show-clock.dto';
 import { UpdatePrayerDto } from './dto/update-prayer.dto';
-import { SetLayoutDto } from './dto/set-layout.dto';
 import { SetVolumeDto } from './dto/set-volume.dto';
+import { SetOrientationDto } from './dto/set-orientation.dto';
 import { SetGroupDto } from './dto/set-group.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -82,11 +83,6 @@ export class ScreensController {
     return this.screens.setAsset(user.orgId, id, dto.assetId);
   }
 
-  @Put(':id/theme')
-  setTheme(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetThemeDto) {
-    return this.screens.setTheme(user.orgId, id, dto.themeId);
-  }
-
   @Post('pair')
   pair(@CurrentUser() user: JwtUser, @Body() dto: PairDto) {
     return this.screens.confirmPairing(user.orgId, dto.code);
@@ -102,9 +98,35 @@ export class ScreensController {
     return this.screens.reloadScreen(user.orgId, id);
   }
 
+  @Post(':id/clear-cache')
+  clearCache(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.clearCacheScreen(user.orgId, id);
+  }
+
   @Post(':id/capture-screenshot')
   captureScreenshot(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.screens.captureScreenshot(user.orgId, id);
+  }
+
+  // Custom Player (appsroadmap.md Phase 9)
+  @Post(':id/pause')
+  pauseScreen(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.pauseScreen(user.orgId, id);
+  }
+
+  @Post(':id/resume')
+  resumeScreen(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.screens.resumeScreen(user.orgId, id);
+  }
+
+  @Post(':id/seek')
+  seekScreen(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SeekScreenDto) {
+    return this.screens.seekScreen(user.orgId, id, dto.toSeconds);
+  }
+
+  @Post(':id/speed')
+  setScreenSpeed(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: SetScreenSpeedDto) {
+    return this.screens.setScreenSpeed(user.orgId, id, dto.rate);
   }
 
   @Get(':id/crash-reports')
@@ -139,6 +161,15 @@ export class ScreensController {
     return this.screens.setShowClock(user.orgId, id, dto.showClock);
   }
 
+  @Put(':id/orientation')
+  setOrientation(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: SetOrientationDto,
+  ) {
+    return this.screens.setOrientation(user.orgId, id, dto.orientation);
+  }
+
   @Put(':id/prayer')
   updatePrayer(
     @CurrentUser() user: JwtUser,
@@ -146,15 +177,6 @@ export class ScreensController {
     @Body() dto: UpdatePrayerDto,
   ) {
     return this.screens.updatePrayerConfig(user.orgId, id, dto);
-  }
-
-  @Put(':id/layout')
-  setLayout(
-    @CurrentUser() user: JwtUser,
-    @Param('id') id: string,
-    @Body() dto: SetLayoutDto,
-  ) {
-    return this.screens.setLayout(user.orgId, id, dto.layoutId);
   }
 
   @Put(':id/volume')

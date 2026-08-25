@@ -1,59 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
-import { shapeClipStyle } from '@lumina/types';
-import type { PrayerMethod } from '@lumina/prayer';
-import { api, ApiError, type Playlist, type PlayerState, type Zone } from '../lib/api';
+import { api, ApiError, type Playlist, type PlayerState } from '../lib/api';
 import { cache } from '../lib/db';
-import { connectSocket, disconnectSocket } from '../lib/socket';
+import { connectSocket, disconnectSocket, getSocket } from '../lib/socket';
 import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/scheduler';
 import { usePlayerStore } from '../store/playerStore';
-import ZonePlayer from '../components/ZonePlayer';
-import ThemeRenderer from '../components/ThemeRenderer';
-import PrayerZoneWidget from '../components/PrayerZoneWidget';
-import WeatherWidget from '../components/WeatherWidget';
-import CurrencyWidget from '../components/CurrencyWidget';
-import TickerWidget from '../components/TickerWidget';
-import TimeWidget from '../components/TimeWidget';
-import DateWidget from '../components/DateWidget';
-import QrCodeWidget from '../components/QrCodeWidget';
+import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
+import { isAudioUnlocked, onAudioUnlock } from '../lib/audioUnlock';
+import ZonePlayer, { type ZonePlayerHandle } from '../components/ZonePlayer';
 import WayfindingDirectoryBoard from '../components/WayfindingDirectoryBoard';
 import WayfindingKioskMap from '../components/WayfindingKioskMap';
 import WayfindingEvacuationView from '../components/WayfindingEvacuationView';
 import Splash from '../components/Splash';
+import PlayerControlPanel from '../components/PlayerControlPanel';
 
 const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
 
+// Mirrors apps/api/src/modules/ws/screen.gateway.ts's PlayerCommand.
 type PlayerCommand =
   | { type: 'publish' | 'reload' | 'clear-cache' | 'capture-screenshot' | 'deleted' }
-  | { type: 'unpair'; pairingCode: string };
-
-// Whether a given zone actually has something to show, mirroring each widget's own "nothing
-// configured" fallback in ZoneRenderer below (a Prayer/Weather zone with no location, or a
-// Ticker with no feed URL, is exactly the kind of gap the "Awaiting content" badge exists to
-// flag — it just wasn't ever being reported to the dashboard).
-function zoneHasContent(zone: Zone, state: PlayerState): boolean {
-  const cfg = zone.widgetConfig ?? {};
-  switch (zone.zoneType) {
-    case 'PRAYER':
-    case 'WEATHER': {
-      const lat = (cfg.latitude as number | undefined) ?? state.latitude;
-      const lon = (cfg.longitude as number | undefined) ?? state.longitude;
-      return lat != null && lon != null;
-    }
-    case 'TICKER':
-      return !!cfg.feedUrl || !!(cfg.staticText as string | undefined)?.trim();
-    case 'CURRENCY':
-    case 'TIME':
-    case 'DATE':
-      return true;
-    case 'QR':
-      return !!(cfg.value as string | undefined)?.trim();
-    default:
-      return !!zone.playlist && zone.playlist.items.length > 0;
-  }
-}
+  | { type: 'unpair'; pairingCode: string }
+  | { type: 'pause' | 'resume' }
+  | { type: 'seek'; toSeconds: number }
+  | { type: 'setSpeed'; rate: number };
 
 // Item 5 (awaiting-content badge) — the backend only flips this from the player's own
 // heartbeat, so it needs an honest answer for whatever's *actually* about to render, not just
@@ -62,7 +33,6 @@ function zoneHasContent(zone: Zone, state: PlayerState): boolean {
 function computeHasContent(state: PlayerState, activePlaylist: Playlist | null): boolean {
   if (state.emergencyActive && state.emergencyPlaylist) return state.emergencyPlaylist.items.length > 0;
   if (state.emergencyActive && state.wayfinding) return true; // evacuation view always renders something
-  if (state.layout) return state.layout.zones.some(z => zoneHasContent(z, state));
   if (state.wayfinding) return state.wayfinding.pois.length > 0;
   return !!activePlaylist && activePlaylist.items.length > 0;
 }
@@ -112,15 +82,26 @@ function prefetchWayfindingImages(wayfinding: PlayerState['wayfinding']) {
 
 export default function PlayerPage() {
   const { token, unpair, forget } = usePlayerStore();
+  const autoStart = useDeviceSettingsStore(s => s.autoStart);
+  const muted = useDeviceSettingsStore(s => s.muted);
   const navigate = useNavigate();
   const [state, setState] = useState<PlayerState | null>(null);
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
   const [poweredOn, setPoweredOn] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  // Auto-start off (device setting) — gates rendering behind a "Tap to start" screen until the
+  // first interaction. Initialized from `autoStart` once and never re-read: flipping the setting
+  // mid-session shouldn't un-start a session that's already playing, only change what happens on
+  // the *next* boot.
+  const [started, setStarted] = useState(() => autoStart);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scheduleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentAssetRef = useRef<string | null>(null);
+  // Custom Player (Phase 9/10) — only meaningful while streamingType is 'ASSET' (see
+  // ZonePlayer's `controllable` prop below); a ref rather than state since commands arrive
+  // imperatively over the socket and shouldn't trigger a re-render.
+  const zonePlayerRef = useRef<ZonePlayerHandle>(null);
   // Read by the heartbeat interval below, which is set up once on mount and would otherwise
   // only ever see the `activePlaylist`/`state` values from that first render.
   const hasContentRef = useRef(false);
@@ -157,6 +138,13 @@ export default function PlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleRevoked]);
 
+  // Custom Player (Phase 9/10) — forwards ZonePlayer's ~1x/second position samples to the
+  // dashboard over the socket. A stable callback (not inline) so ZonePlayer's progress-reporting
+  // effect isn't torn down and restarted on every PlayerPage render.
+  const handlePlaybackProgress = useCallback((progress: { currentTime: number; duration: number; paused: boolean; rate: number }) => {
+    getSocket()?.emit('playback-progress', progress);
+  }, []);
+
   // Schedule resolution: pick the right playlist from schedule rules
   const resolvePlaylist = useCallback((s: PlayerState): Playlist | null => {
     if (s.emergencyActive && s.emergencyPlaylist) return s.emergencyPlaylist;
@@ -164,8 +152,6 @@ export default function PlayerPage() {
     // (see hydrateAssetAsPlaylist), so the existing single-playlist render path below handles
     // it unchanged — no separate render branch needed.
     if (s.streamingType === 'ASSET') return s.asset;
-    if (s.theme) return null; // theme mode — elements handle their own media
-    if (s.layout) return null; // layout mode — zones handle their own playlists
     if (s.wayfinding) return null; // wayfinding mode — directory board renders itself
     const matchedId = resolveSchedule(s.scheduleRules, new Date());
     if (matchedId) {
@@ -231,7 +217,23 @@ export default function PlayerPage() {
       } else if (cmd.type === 'reload') {
         window.location.reload();
       } else if (cmd.type === 'clear-cache') {
+        // Previously this only cleared the app's own IndexedDB (playlist/state/config data) —
+        // it never touched the service worker's Cache Storage or the registration itself, so a
+        // device stuck on an old deployed bundle (stale cached JS/CSS/HTML) had no way to force
+        // a truly fresh fetch; a plain Reload can leave it running the same old code indefinitely
+        // if the service worker hasn't independently decided to check for an update. This is the
+        // actual "hard reset": app data, every Cache Storage entry the service worker owns, and
+        // the registration itself, so the next load re-registers from scratch against whatever
+        // is currently deployed.
         await cache.clear();
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(key => caches.delete(key)));
+        }
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map(registration => registration.unregister()));
+        }
         window.location.reload();
       } else if (cmd.type === 'capture-screenshot') {
         void captureAndUploadScreenshot();
@@ -243,6 +245,14 @@ export default function PlayerPage() {
         await cache.clear();
         forget();
         void navigate('/');
+      } else if (cmd.type === 'pause') {
+        zonePlayerRef.current?.pause();
+      } else if (cmd.type === 'resume') {
+        zonePlayerRef.current?.resume();
+      } else if (cmd.type === 'seek') {
+        zonePlayerRef.current?.seek(cmd.toSeconds);
+      } else if (cmd.type === 'setSpeed') {
+        zonePlayerRef.current?.setSpeed(cmd.rate);
       }
     });
 
@@ -264,22 +274,36 @@ export default function PlayerPage() {
   }, [token]);
 
   if (!loaded) return <FullscreenContainer><Splash text="Loading…" /></FullscreenContainer>;
+
+  // Auto-start off (device setting, see PlayerControlPanel) — wait for a tap before rendering
+  // any real content. Doubles as the audio-unlock gesture (see lib/audioUnlock.ts).
+  if (!started) {
+    return (
+      <FullscreenContainer>
+        <button onClick={() => setStarted(true)} style={startButtonStyle}>
+          Tap to start
+        </button>
+      </FullscreenContainer>
+    );
+  }
+
   if (!state) return <FullscreenContainer><Splash text="No content assigned" /></FullscreenContainer>;
 
   // Outside its power-on window — highest priority of all, above even an explicit stop or
   // emergency override, since it represents the physical display being off. A real off screen
-  // shows nothing, so this is a bare black container with no status text (unlike Splash).
-  if (!poweredOn) return <FullscreenContainer />;
+  // shows nothing, so this is a bare black container with no status text (unlike Splash). Device
+  // controls are hidden too, matching a real screen that's actually off.
+  if (!poweredOn) return <FullscreenContainer hideControls />;
 
   // Paused from the dashboard — takes priority over everything else, including an
   // active emergency override, since it's an explicit "blank this screen now" action.
-  if (state.stopped) return <Splash text="Playback paused" />;
+  if (state.stopped) return <FullscreenContainer orientation={state.orientation}><Splash text="Playback paused" /></FullscreenContainer>;
 
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (
-      <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
-        <ZonePlayer playlist={state.emergencyPlaylist} volume={state.volume} onAssetChange={id => { currentAssetRef.current = id; }} />
+      <FullscreenContainer orientation={state.orientation} showClock={state.showClock} timezone={state.timezone}>
+        <ZonePlayer playlist={state.emergencyPlaylist} state={state} volume={state.volume} forceMuted={muted} onAssetChange={id => { currentAssetRef.current = id; }} />
       </FullscreenContainer>
     );
   }
@@ -290,53 +314,8 @@ export default function PlayerPage() {
   // flips this flag for every kiosk in a building at once).
   if (state.emergencyActive && state.wayfinding) {
     return (
-      <FullscreenContainer>
+      <FullscreenContainer orientation={state.orientation}>
         <WayfindingEvacuationView directory={state.wayfinding} />
-      </FullscreenContainer>
-    );
-  }
-
-  // Theme mode — styled template (text/images/colors), takes precedence over a plain layout
-  if (state.theme) {
-    return (
-      <FullscreenContainer>
-        <ThemeRenderer theme={state.theme} state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
-      </FullscreenContainer>
-    );
-  }
-
-  // Multi-zone layout mode
-  if (state.layout && state.layout.zones.length > 0) {
-    // At most one zone should ever have audioPriority (the dashboard enforces this as a
-    // single-select when editing a layout) — while it's set, every other zone gets forced
-    // silent regardless of its own muted/volume settings.
-    const priorityZone = state.layout.zones.find(z => z.audioPriority) ?? null;
-    return (
-      <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
-        {state.layout.zones.map(zone => (
-          <div
-            key={zone.id}
-            style={{
-              position: 'absolute',
-              left: `${zone.x}%`,
-              top: `${zone.y}%`,
-              width: `${zone.width}%`,
-              height: `${zone.height}%`,
-              zIndex: zone.zIndex,
-              overflow: 'hidden',
-              transform: zone.rotation ? `rotate(${zone.rotation}deg)` : undefined,
-              ...shapeClipStyle(zone.shape),
-            }}
-          >
-            <ZoneRenderer
-              zone={zone}
-              state={state}
-              onAssetChange={id => { currentAssetRef.current = id; }}
-              volume={zone.audioVolume ?? state.volume}
-              forceMuted={priorityZone !== null && priorityZone.id !== zone.id}
-            />
-          </div>
-        ))}
       </FullscreenContainer>
     );
   }
@@ -344,11 +323,10 @@ export default function PlayerPage() {
   // Wayfinding mode — a real touchscreen gets the interactive pan/zoom/tap kiosk map (Phase
   // 7.2); a cheap non-touch panel (still a real, supported deployment target per Phase 7.1)
   // falls back to the passive auto-rotating directory board. No per-screen config needed: the
-  // browser's own touch-capability signal is the right source of truth here, same way the
-  // theme/layout renderers don't need a flag to know what to draw.
+  // browser's own touch-capability signal is the right source of truth here.
   if (state.wayfinding) {
     return (
-      <FullscreenContainer>
+      <FullscreenContainer orientation={state.orientation}>
         {isTouchCapable()
           ? <WayfindingKioskMap state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
           : <WayfindingDirectoryBoard directory={state.wayfinding} />}
@@ -356,106 +334,100 @@ export default function PlayerPage() {
     );
   }
 
-  // Single-playlist mode (schedule-resolved)
+  // Single-playlist mode (schedule-resolved) — a playlist item can itself be a THEME, a LAYOUT,
+  // or an APP-type asset; ZonePlayer (via ZoneRenderer for LAYOUT items) handles all of it.
   if (!activePlaylist || activePlaylist.items.length === 0) {
-    return <FullscreenContainer><Splash text="No content scheduled right now" /></FullscreenContainer>;
+    return <FullscreenContainer orientation={state.orientation}><Splash text="No content scheduled right now" /></FullscreenContainer>;
   }
 
   return (
-    <FullscreenContainer showClock={state.showClock} timezone={state.timezone}>
+    <FullscreenContainer orientation={state.orientation} showClock={state.showClock} timezone={state.timezone}>
       <ZonePlayer
+        ref={zonePlayerRef}
         playlist={activePlaylist}
+        state={state}
         volume={state.volume}
+        forceMuted={muted}
         onAssetChange={id => { currentAssetRef.current = id; }}
+        controllable={state.streamingType === 'ASSET'}
+        onPlaybackProgress={handlePlaybackProgress}
       />
     </FullscreenContainer>
   );
 }
 
-function ZoneRenderer({ zone, state, onAssetChange, volume, forceMuted }: {
-  zone: Zone; state: PlayerState; onAssetChange: (id: string) => void; volume: number; forceMuted: boolean;
-}) {
-  const cfg = zone.widgetConfig ?? {};
-  const lat = (cfg.latitude as number | undefined) ?? state.latitude;
-  const lon = (cfg.longitude as number | undefined) ?? state.longitude;
-  const lang = (cfg.lang as 'en' | 'ar' | undefined) ?? 'en';
-
-  switch (zone.zoneType) {
-    case 'PRAYER':
-      if (lat == null || lon == null) return <Splash text="Prayer zone: no location set" />;
-      return (
-        <PrayerZoneWidget
-          latitude={lat}
-          longitude={lon}
-          method={((cfg.method as string | undefined) ?? state.prayerMethod) as PrayerMethod}
-          athanEnabled={(cfg.athanEnabled as boolean | undefined) ?? state.athanEnabled}
-          athanUrl={(cfg.athanUrl as string | undefined)}
-          lang={lang}
-        />
-      );
-    case 'WEATHER':
-      if (lat == null || lon == null) return <Splash text="Weather zone: no location set" />;
-      return <WeatherWidget latitude={lat} longitude={lon} lang={lang} />;
-    case 'CURRENCY':
-      return (
-        <CurrencyWidget
-          base={(cfg.base as string | undefined) ?? 'USD'}
-          currencies={cfg.currencies as string[] | undefined}
-          lang={lang}
-        />
-      );
-    case 'TICKER':
-      if (!cfg.feedUrl && !cfg.staticText) return <Splash text="Ticker zone: no content source set" />;
-      return (
-        <TickerWidget
-          feedUrl={cfg.feedUrl as string | undefined}
-          staticText={cfg.staticText as string | undefined}
-          direction={(cfg.direction as 'horizontal' | 'vertical' | undefined) ?? 'horizontal'}
-          lang={lang}
-        />
-      );
-    case 'TIME':
-      return (
-        <TimeWidget
-          timezone={(cfg.timezone as string | undefined) ?? state.timezone}
-          hour12={(cfg.hour12 as boolean | undefined) ?? true}
-          showSeconds={!!cfg.showSeconds}
-          lang={lang}
-        />
-      );
-    case 'DATE':
-      return (
-        <DateWidget
-          timezone={(cfg.timezone as string | undefined) ?? state.timezone}
-          format={(cfg.format as 'short' | 'long' | undefined) ?? 'long'}
-          lang={lang}
-        />
-      );
-    case 'QR':
-      if (!(cfg.value as string | undefined)?.trim()) return <Splash text="QR zone: no content set" />;
-      return (
-        <QrCodeWidget
-          value={cfg.value as string | undefined}
-          color={cfg.color as string | undefined}
-          background={cfg.background as string | undefined}
-          sizePercent={cfg.sizePercent as number | undefined}
-        />
-      );
-    default:
-      return zone.playlist
-        ? <ZonePlayer playlist={zone.playlist} volume={volume} forceMuted={forceMuted} onAssetChange={onAssetChange} />
-        : null;
-  }
-}
-
-function FullscreenContainer({ children, showClock, timezone }: { children?: React.ReactNode; showClock?: boolean; timezone?: string }) {
+// Rotates the whole display for kiosks physically mounted sideways/upside-down. Dashboard-driven
+// (Screen.orientation, see ScreensPage's Content tab) rather than a device setting, so it can be
+// set remotely without anyone standing at the screen. Centers a box sized to the *rotated*
+// dimensions inside the true (unrotated) viewport so it fills the screen exactly at every angle:
+// rotation happens about the box's own center, which `translate(-50%, -50%)` has already pinned
+// to the viewport's center, so the two operations commute regardless of transform order.
+function FullscreenContainer({ children, orientation = 0, showClock, timezone, hideControls }: { children?: React.ReactNode; orientation?: 0 | 90 | 180 | 270; showClock?: boolean; timezone?: string; hideControls?: boolean }) {
+  const deviceMuted = useDeviceSettingsStore(s => s.muted);
+  const sideways = orientation === 90 || orientation === 270;
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#000', position: 'relative', overflow: 'hidden' }}>
-      {children}
-      {showClock && timezone && <ClockOverlay timezone={timezone} />}
+    <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', position: 'fixed', inset: 0 }}>
+      <div
+        style={{
+          position: 'absolute', top: '50%', left: '50%',
+          width: sideways ? '100vh' : '100vw',
+          height: sideways ? '100vw' : '100vh',
+          transform: `translate(-50%, -50%) rotate(${orientation}deg)`,
+        }}
+      >
+        <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+          {children}
+          {showClock && timezone && <ClockOverlay timezone={timezone} />}
+          {!hideControls && !deviceMuted && <SoundLockedIndicator />}
+          {!hideControls && <PlayerControlPanel />}
+        </div>
+      </div>
     </div>
   );
 }
+
+// Chrome/Firefox refuse unmuted autoplay until the page has seen a real click/tap/keypress (see
+// audioUnlock.ts) — with autoStart on (the default), that gesture may never happen on its own, so
+// video/app content that's meant to have sound silently plays muted instead, with nothing on
+// screen to explain why. This surfaces that state and doubles as an obvious tap target: any click
+// on it (or anywhere else in the document) unlocks audio for every player already mounted.
+function SoundLockedIndicator() {
+  const [unlocked, setUnlocked] = useState(isAudioUnlocked);
+  useEffect(() => {
+    if (unlocked) return;
+    return onAudioUnlock(() => setUnlocked(true));
+  }, [unlocked]);
+  if (unlocked) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 9998,
+        display: 'flex', alignItems: 'center', gap: 8, color: '#fff', background: 'rgba(0,0,0,0.55)',
+        padding: '8px 16px', borderRadius: 999, fontFamily: 'system-ui, sans-serif', fontSize: '0.9rem',
+        pointerEvents: 'none',
+      }}
+    >
+      <MutedSpeakerIcon />
+      Tap anywhere for sound
+    </div>
+  );
+}
+
+function MutedSpeakerIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      <line x1="23" y1="9" x2="17" y2="15" />
+      <line x1="17" y1="9" x2="23" y2="15" />
+    </svg>
+  );
+}
+
+const startButtonStyle: React.CSSProperties = {
+  position: 'absolute', inset: 0, width: '100%', height: '100%',
+  background: '#000', color: '#fff', border: 'none', cursor: 'pointer',
+  fontFamily: 'system-ui, sans-serif', fontSize: '1.5rem', fontWeight: 600, letterSpacing: '0.02em',
+};
 
 function ClockOverlay({ timezone }: { timezone: string }) {
   const [now, setNow] = useState(() => new Date());

@@ -1,7 +1,17 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Rnd } from 'react-rnd';
+import {
+  Canvas,
+  FabricImage,
+  FabricText,
+  FixedLayout,
+  Group,
+  LayoutManager,
+  Rect,
+  type FabricObject,
+  type TPointerEvent,
+} from 'fabric';
 import {
   Plus,
   Pencil,
@@ -12,39 +22,33 @@ import {
   ArrowUpToLine,
   ArrowDownToLine,
   Wand2,
-  RefreshCw,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { shapeClipStyle, mediaCropStyle } from '@lumina/types';
 import type { Asset, ZoneInput, Layout } from '@/lib/api';
 import { ContextMenu, type ContextMenuState, type ContextMenuAction } from '@/components/ContextMenu';
 import { useRequireSelectToEdit } from '@/hooks/useRequireSelectToEdit';
-import { useRotateHandleStyle } from '@/hooks/useRotateHandleStyle';
-import { ZoneRotateHandle } from '@/components/ZoneRotateHandle';
-import {
-  type Box,
-  clampBox,
-  computeAlignTargets,
-  resolveResize,
-  snapDragAxis,
-} from '@/lib/canvasSnap';
-import {
-  RESIZE_HANDLES,
-  RESIZE_HANDLE_AXIS,
-  resizeHandleStyle,
-  rotatedResizeAnchor,
-  rotatedResizeBox,
-  type ResizeHandle,
-} from '@/lib/rotatedResize';
+import { type Box, clampBox, computeAlignTargets, resolveResize, snapDragAxis } from '@/lib/canvasSnap';
 import { ZOOM_STEP, clampPct, clampZoom } from '@/lib/editorZoom';
+import { buildShapeClipPath, fitMediaInBox } from '@/lib/fabricShapes';
+import { getCachedImageElement, loadImageElement } from '@/lib/fabricImageCache';
 import { ZONE_COLORS } from './LayoutsSection';
 
 const PREVIEW_W = 400;
 const PREVIEW_H = 225;
 const MIN_ZONE_PX = 20;
-// Rotation drag snaps to the nearest 15° once within this many degrees.
-const SNAP_DEG = 4;
+// Corner-drag names fabric reports on object:scaling -> the same substrings
+// canvasSnap's resolveResize() matches against (top/bottom/left/right).
+const CORNER_DIRECTION: Record<string, string> = {
+  tl: 'top-left',
+  tr: 'top-right',
+  bl: 'bottom-left',
+  br: 'bottom-right',
+  ml: 'left',
+  mr: 'right',
+  mt: 'top',
+  mb: 'bottom',
+};
 
 interface LayoutCanvasPanelProps {
   editing: Layout | 'new' | null;
@@ -62,12 +66,32 @@ interface LayoutCanvasPanelProps {
   hideZoneBackground: (i: number, key: string) => void;
   bgRemovingZoneKey: string | null;
   onOpenAddPanel: () => void;
+  // Hands the parent a function that rasterizes the live fabric canvas to a PNG data URL, for
+  // "Save as Asset" — replaces the old DOM-node ref html2canvas used to rasterize from outside.
+  exportRef?: (getPngDataUrl: (() => string) | null) => void;
 }
 
-// Owns everything about the visual preview canvas — zoom, drag/resize/rotate-in-progress state,
-// hover/right-click, and the alignment-guide/rotate-handle overlays. Split out of LayoutsSection
-// (H7) so that a mousemove tick during a drag only re-renders this component, not the zone-card
-// list or the add-zone sidebar sitting next to it.
+type ZoneGroup = Group & {
+  zoneKey: string;
+  _hovered?: boolean;
+  _selected?: boolean;
+};
+
+function zoneKeyOf(z: ZoneInput, i: number): string {
+  return z._localId ?? String(i);
+}
+
+function updateOutlineVisibility(group: ZoneGroup) {
+  const outline = group.getObjects().find((o) => (o as FabricObject & { _role?: string })._role === 'outline');
+  if (outline) outline.set('visible', !!(group._hovered || group._selected));
+}
+
+// Owns everything about the visual preview canvas — a single fabric.Canvas instance persisted
+// across renders, reconciled against the `zones` array. Zoom, live drag/resize/rotate, alignment
+// snapping and rotation are all fabric-native; shape clipping, media crop, the lock badge and the
+// background-removal indicator are drawn as plain canvas objects since fabric has no CSS
+// clip-path/object-fit equivalent. Split out of LayoutsSection (H7) so interaction frames only
+// touch this component, not the zone-card list or add-zone sidebar sitting next to it.
 export function LayoutCanvasPanel({
   editing,
   zones,
@@ -84,24 +108,53 @@ export function LayoutCanvasPanel({
   hideZoneBackground,
   bgRemovingZoneKey,
   onOpenAddPanel,
+  exportRef,
 }: LayoutCanvasPanelProps) {
   const t = useTranslations('layouts');
   const tc = useTranslations('common');
   const { enabled: requireSelectToEdit } = useRequireSelectToEdit();
-  const { style: rotateHandleStyle } = useRotateHandleStyle();
 
-  const previewRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const canvasElRef = useRef<HTMLCanvasElement>(null);
+  const fabricRef = useRef<Canvas | null>(null);
+  const groupsRef = useRef<Map<string, ZoneGroup>>(new Map());
+
   const [previewSize, setPreviewSize] = useState({ width: PREVIEW_W, height: PREVIEW_H });
-  // The zone currently being dragged/resized, tracked outside `zones` state so interaction
-  // frames don't re-render the settings list below the preview — only committed on drop.
-  const [dragBox, setDragBox] = useState<({ index: number } & Box) | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(zoom);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
-  const [rotationDrag, setRotationDrag] = useState<{ index: number; deg: number } | null>(null);
-  const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
 
+  // Latest props/state the stable (registered-once) fabric event handlers below need to read —
+  // avoids re-registering canvas listeners on every render just to close over fresh values.
+  const latest = useRef({
+    zones,
+    assets,
+    previewSize,
+    selectedZoneId,
+    requireSelectToEdit,
+    bgRemovingZoneKey,
+    onSelectZone,
+    updateZone,
+    commit,
+  });
   useEffect(() => {
-    const el = previewRef.current;
+    zoomRef.current = zoom;
+    latest.current = {
+      zones,
+      assets,
+      previewSize,
+      selectedZoneId,
+      requireSelectToEdit,
+      bgRemovingZoneKey,
+      onSelectZone,
+      updateZone,
+      commit,
+    };
+  });
+
+  useEffect(() => {
+    const el = viewportRef.current;
     if (!el) return;
     const update = () =>
       setPreviewSize({ width: el.clientWidth, height: (el.clientWidth * 9) / 16 });
@@ -111,47 +164,27 @@ export function LayoutCanvasPanel({
     return () => ro.disconnect();
   }, [editing]);
 
-  // Canvas zoom: previewRef's own box is deliberately resized (not CSS-transform-scaled), so every
-  // existing bit of pointer math above — which already works purely off previewSize/getBoundingClientRect
-  // of the real rendered box — keeps working unchanged at any zoom level. zoomViewportRef measures the
-  // *unzoomed* available width so the scroll window's size stays stable while only its content grows.
-  const [zoom, setZoom] = useState(1);
-  const zoomViewportRef = useRef<HTMLDivElement>(null);
-  const [naturalWidth, setNaturalWidth] = useState(0);
-
-  // Resets zoom/drag/hover/menu state whenever a different layout (or 'new') is opened — the
-  // layout list stays visible while editing, so switching which layout is open re-renders this
-  // component in place rather than remounting it, and this state must not leak across that
-  // switch. Adjusted during render rather than in an effect, so there's no flash of the previous
-  // zoom before the reset lands.
+  // Resets zoom/guides/menu state whenever a different layout (or 'new') is opened — see
+  // LayoutsSection for why this is done during render rather than in an effect.
   const [prevEditing, setPrevEditing] = useState(editing);
   if (editing !== prevEditing) {
     setPrevEditing(editing);
     setZoom(1);
-    setDragBox(null);
     setGuides({ v: [], h: [] });
-    setRotationDrag(null);
-    setHoveredZoneId(null);
     setContextMenu(null);
   }
 
   useEffect(() => {
-    const el = zoomViewportRef.current;
+    const el = viewportRef.current;
     if (!el) return;
-    const update = () => setNaturalWidth(el.clientWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [editing]);
-
-  // A locked zone (editable: false) can never be dragged/resized/rotated, regardless of
-  // selection or the requireSelectToEdit setting. Otherwise interaction is gated on selection
-  // only when that setting is on — off restores immediate drag/resize on first touch.
-  function zoneIsInteractive(z: ZoneInput, isSelected: boolean) {
-    if (z.editable === false) return false;
-    return !requireSelectToEdit || isSelected;
-  }
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => clampZoom(z * Math.exp(-e.deltaY * 0.0015)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   function zoneContextMenuActions(i: number, key: string, z: ZoneInput): ContextMenuAction[] {
     const locked = z.editable === false;
@@ -180,256 +213,534 @@ export function LayoutCanvasPanel({
       },
     ];
   }
+  // zoneContextMenuActions needs `t`/`tc`/assets/handlers that change across renders, but it's
+  // only invoked from the stable (registered-once) contextmenu listener below — bridge via a ref
+  // instead of reinitializing the canvas on every render.
+  const zoneContextMenuActionsRef = useRef(zoneContextMenuActions);
+  useEffect(() => {
+    zoneContextMenuActionsRef.current = zoneContextMenuActions;
+  });
 
-  const getBoxPx = useCallback(
-    (z: ZoneInput): Box => ({
-      left: (z.x / 100) * previewSize.width,
-      top: (z.y / 100) * previewSize.height,
-      width: (z.width / 100) * previewSize.width,
-      height: (z.height / 100) * previewSize.height,
-    }),
-    [previewSize],
-  );
+  function getBoxPxFor(z: ZoneInput, size: { width: number; height: number }): Box {
+    return {
+      left: (z.x / 100) * size.width,
+      top: (z.y / 100) * size.height,
+      width: (z.width / 100) * size.width,
+      height: (z.height / 100) * size.height,
+    };
+  }
 
-  // Alignment guides only make sense against another zone's actual visible edges — a rotated
-  // zone's unrotated left/top/width/height box doesn't correspond to anything on screen, so it's
-  // excluded both as a snap target for others and (in handleDrag/handleResize below) as something
-  // that itself snaps while being dragged/resized.
-  const computeTargets = useCallback(
-    (excludeIndex: number) => {
-      const otherBoxes = zones
-        .filter((z, idx) => idx !== excludeIndex && !(z.rotation ?? 0))
-        .map(getBoxPx);
-      return computeAlignTargets(previewSize.width, previewSize.height, otherBoxes);
+  // Per-zone-key counter guarding buildZoneGroup's async image-load callback against a since-
+  // superseded rebuild (new asset, resize, etc.) inserting its now-stale image late.
+  const contentGenRef = useRef<Map<string, number>>(new Map());
+  // Points at the latest render's `syncZone` (defined below) — buildZoneGroup's async image-load
+  // callback needs to call it well after this render has finished, so a plain reference to the
+  // function wouldn't do; the ref is written by an effect right after syncZone is (re)declared.
+  const syncZoneRef = useRef<(canvas: Canvas, key: string) => void>(() => {});
+
+  // A fresh Group is constructed on every rebuild rather than mutating an existing one's children
+  // (group.remove()+add()) — fabric's `Group.add()` treats an object's left/top as *canvas-plane*
+  // coordinates and converts them into the group's local plane on entry (so the object's on-screen
+  // position is preserved if you're moving it between groups); that conversion double-offsets
+  // children that were already built in local coordinates, which is what every child below is.
+  // Only the constructor path (`new Group(children, ...)`) takes local coordinates as-is.
+  function buildZoneGroup(
+    key: string,
+    box: Box,
+    opts: {
+      shape: ZoneInput['shape'];
+      color: string;
+      thumb: string | null;
+      name: string;
+      zoneTypeLabel: string;
+      assetType: Asset['type'] | undefined;
+      crop: { cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null };
+      locked: boolean;
+      lockedHint: string;
+      bgRemoving: boolean;
+      removingBackgroundHint: string;
     },
-    [zones, previewSize, getBoxPx],
-  );
+  ): ZoneGroup {
+    const w = box.width;
+    const h = box.height;
 
-  const clampToCanvas = useCallback(
-    (box: Box): Box => clampBox(box, previewSize.width, previewSize.height),
-    [previewSize],
-  );
+    const children: FabricObject[] = [];
+    const bg = new Rect({
+      left: -w / 2,
+      top: -h / 2,
+      width: w,
+      height: h,
+      originX: 'left',
+      originY: 'top',
+      fill: opts.thumb ? '#000' : opts.color + '55',
+      stroke: opts.color,
+      strokeWidth: 2,
+      strokeUniform: true,
+      selectable: false,
+      evented: false,
+    });
+    children.push(bg);
 
-  function handleDrag(i: number, x: number, y: number) {
-    const z = zones[i];
-    if (!z) return;
-    const box = getBoxPx(z);
-    if (z.rotation) {
-      setDragBox({
-        index: i,
-        ...clampToCanvas({ left: x, top: y, width: box.width, height: box.height }),
+    if (opts.thumb) {
+      const cachedEl = getCachedImageElement(opts.thumb);
+      const applyImage = (el: HTMLImageElement) => {
+        const fit = opts.assetType === 'IMAGE' && !opts.crop.cropZoom ? 'fill' : opts.crop.cropZoom ? 'cover' : 'contain';
+        const { left, top, scaleX, scaleY } = fitMediaInBox(w, h, el.naturalWidth, el.naturalHeight, fit, opts.crop);
+        return new FabricImage(el, { left, top, scaleX, scaleY, originX: 'left', originY: 'top', selectable: false, evented: false });
+      };
+      if (cachedEl) {
+        children.push(applyImage(cachedEl));
+      } else {
+        // Not cached yet — render the colorless placeholder for now and trigger a full re-sync
+        // of this zone (by key) once the image resolves, unless a newer build for the same key
+        // (new asset, etc.) has since superseded this one.
+        const gen = (contentGenRef.current.get(key) ?? 0) + 1;
+        contentGenRef.current.set(key, gen);
+        loadImageElement(opts.thumb)
+          .then(() => {
+            if (contentGenRef.current.get(key) !== gen) return;
+            const canvas = fabricRef.current;
+            if (canvas) syncZoneRef.current(canvas, key);
+          })
+          .catch(() => {});
+      }
+    } else {
+      const nameText = new FabricText(opts.name, {
+        left: 0,
+        top: -6,
+        originX: 'center',
+        originY: 'center',
+        fontSize: 11,
+        fontWeight: '600',
+        fill: '#fff',
+        textAlign: 'center',
+        selectable: false,
+        evented: false,
       });
-      setGuides({ v: [], h: [] });
-      return;
+      const typeText = new FabricText(opts.zoneTypeLabel, {
+        left: 0,
+        top: 8,
+        originX: 'center',
+        originY: 'center',
+        fontSize: 10,
+        opacity: 0.7,
+        fill: '#fff',
+        selectable: false,
+        evented: false,
+      });
+      children.push(nameText, typeText);
     }
-    const { xs, ys } = computeTargets(i);
-    const snapX = snapDragAxis(x, box.width, xs);
-    const snapY = snapDragAxis(y, box.height, ys);
-    const next = clampToCanvas({
-      left: snapX.pos,
-      top: snapY.pos,
-      width: box.width,
-      height: box.height,
+
+    const outline = new Rect({
+      left: -w / 2 - 2,
+      top: -h / 2 - 2,
+      width: w + 4,
+      height: h + 4,
+      originX: 'left',
+      originY: 'top',
+      fill: 'transparent',
+      stroke: opts.color,
+      strokeWidth: 1,
+      strokeDashArray: [4, 4],
+      selectable: false,
+      evented: false,
+      visible: false,
     });
-    setDragBox({ index: i, ...next });
-    setGuides({
-      v: snapX.guide !== null ? [snapX.guide] : [],
-      h: snapY.guide !== null ? [snapY.guide] : [],
-    });
+    (outline as FabricObject & { _role?: string })._role = 'outline';
+    children.push(outline);
+
+    if (opts.locked) {
+      const badgeBg = new Rect({
+        left: -w / 2 + 3,
+        top: -h / 2 + 3,
+        width: 14,
+        height: 14,
+        originX: 'left',
+        originY: 'top',
+        rx: 4,
+        ry: 4,
+        fill: 'rgba(0,0,0,0.5)',
+        selectable: false,
+        evented: false,
+      });
+      const badgeIcon = new FabricText('🔒', {
+        left: -w / 2 + 10,
+        top: -h / 2 + 10,
+        originX: 'center',
+        originY: 'center',
+        fontSize: 8,
+        selectable: false,
+        evented: false,
+      });
+      children.push(badgeBg, badgeIcon);
+    }
+
+    if (opts.bgRemoving) {
+      const overlay = new Rect({
+        left: -w / 2,
+        top: -h / 2,
+        width: w,
+        height: h,
+        originX: 'left',
+        originY: 'top',
+        fill: 'rgba(0,0,0,0.55)',
+        selectable: false,
+        evented: false,
+      });
+      const overlayText = new FabricText(opts.removingBackgroundHint, {
+        left: 0,
+        top: 0,
+        originX: 'center',
+        originY: 'center',
+        fontSize: 10,
+        fontWeight: '500',
+        fill: '#fff',
+        selectable: false,
+        evented: false,
+      });
+      children.push(overlay, overlayText);
+    }
+
+    const group = new Group(children, {
+      width: w,
+      height: h,
+      originX: 'left',
+      originY: 'top',
+      layoutManager: new LayoutManager(new FixedLayout()),
+      subTargetCheck: false,
+      interactive: false,
+      // Rebuilt from scratch on every content change (see comment above `buildZoneGroup`), so
+      // there's no long-lived per-object cache worth keeping warm here.
+      objectCaching: false,
+    }) as ZoneGroup;
+    group.clipPath = buildShapeClipPath(opts.shape, w, h);
+    group.zoneKey = key;
+    return group;
   }
 
-  function handleDragStop(i: number, x: number, y: number) {
-    const z = zones[i];
+  // Rebuilds and swaps in the fabric group for one zone (by key), applying its current
+  // position/rotation/interactive state. Used both by the main per-render sync pass below and by
+  // buildZoneGroup's async image-load callback, which needs to re-sync a single zone well after
+  // that render has finished — hence pulling everything from `latest.current` rather than props.
+  function syncZone(canvas: Canvas, key: string) {
+    const { zones: zs, assets: as, selectedZoneId: sel, requireSelectToEdit: req, bgRemovingZoneKey: bgKey, previewSize: size } =
+      latest.current;
+    const i = zs.findIndex((z, idx) => zoneKeyOf(z, idx) === key);
+    const z = zs[i];
     if (!z) return;
-    const box = getBoxPx(z);
-    if (z.rotation) {
-      const next = clampToCanvas({ left: x, top: y, width: box.width, height: box.height });
-      commit(() =>
-        updateZone(i, {
-          x: clampPct((next.left / previewSize.width) * 100),
-          y: clampPct((next.top / previewSize.height) * 100),
-        }),
-      );
-      setDragBox(null);
-      setGuides({ v: [], h: [] });
-      return;
-    }
-    const { xs, ys } = computeTargets(i);
-    const snapX = snapDragAxis(x, box.width, xs);
-    const snapY = snapDragAxis(y, box.height, ys);
-    const next = clampToCanvas({
-      left: snapX.pos,
-      top: snapY.pos,
-      width: box.width,
-      height: box.height,
-    });
-    commit(() =>
-      updateZone(i, {
-        x: clampPct((next.left / previewSize.width) * 100),
-        y: clampPct((next.top / previewSize.height) * 100),
-      }),
-    );
-    setDragBox(null);
-    setGuides({ v: [], h: [] });
-  }
 
-  function handleResize(
-    i: number,
-    direction: string,
-    ref: HTMLElement,
-    position: { x: number; y: number },
-  ) {
-    const box: Box = {
-      left: position.x,
-      top: position.y,
-      width: parseFloat(ref.style.width),
-      height: parseFloat(ref.style.height),
-    };
-    const { box: next, guides } = resolveResize(
-      direction,
-      box,
-      computeTargets(i),
-      MIN_ZONE_PX,
-      previewSize.width,
-      previewSize.height,
-    );
-    setDragBox({ index: i, ...next });
-    setGuides(guides);
-  }
-
-  function handleResizeStop(
-    i: number,
-    direction: string,
-    ref: HTMLElement,
-    position: { x: number; y: number },
-  ) {
-    const box: Box = {
-      left: position.x,
-      top: position.y,
-      width: parseFloat(ref.style.width),
-      height: parseFloat(ref.style.height),
-    };
-    const { box: next } = resolveResize(
-      direction,
-      box,
-      computeTargets(i),
-      MIN_ZONE_PX,
-      previewSize.width,
-      previewSize.height,
-    );
-    commit(() =>
-      updateZone(i, {
-        x: clampPct((next.left / previewSize.width) * 100),
-        y: clampPct((next.top / previewSize.height) * 100),
-        width: clampPct((next.width / previewSize.width) * 100),
-        height: clampPct((next.height / previewSize.height) * 100),
-      }),
-    );
-    setDragBox(null);
-    setGuides({ v: [], h: [] });
-  }
-
-  // Drag-to-rotate: mirrors the theme editor's handle — angle is measured from the zone's own
-  // (unrotated) center to the mouse, in the preview canvas's own coordinate space.
-  function startRotateZone(e: React.MouseEvent, i: number) {
-    e.preventDefault();
-    e.stopPropagation();
-    const canvas = previewRef.current;
-    const z = zones[i];
-    if (!canvas || !z) return;
-    const canvasRect = canvas.getBoundingClientRect();
-    const box = getBoxPx(z);
-    const cx = box.left + box.width / 2;
-    const cy = box.top + box.height / 2;
-
-    function rawAngleFor(clientX: number, clientY: number): number {
-      const mx = clientX - canvasRect.left;
-      const my = clientY - canvasRect.top;
-      let deg = Math.atan2(my - cy, mx - cx) * (180 / Math.PI) + 90;
-      return ((deg % 360) + 360) % 360;
-    }
-
-    // The corner handles sit well off the box's own top-center reference point, so the mouse's
-    // raw angle at drag start doesn't equal the zone's current rotation (e.g. grabbing the "ne"
-    // handle starts ~45-135° off, depending on aspect ratio) — using it directly would snap the
-    // rotation to wherever that handle happens to sit the instant the drag begins. Capturing that
-    // gap once and holding it constant for the drag makes rotation track the mouse's angular
-    // movement from whichever point was actually grabbed, continuing smoothly from the current
-    // rotation instead of jumping to it.
-    const startOffset = rawAngleFor(e.clientX, e.clientY) - (z.rotation ?? 0);
-
-    function angleFor(clientX: number, clientY: number): number {
-      let deg = rawAngleFor(clientX, clientY) - startOffset;
-      deg = ((deg % 360) + 360) % 360;
-      const nearest15 = Math.round(deg / 15) * 15;
-      if (Math.abs(deg - nearest15) <= SNAP_DEG) deg = nearest15 % 360;
-      return Math.round(deg);
-    }
-
-    function onMove(ev: MouseEvent) {
-      setRotationDrag({ index: i, deg: angleFor(ev.clientX, ev.clientY) });
-    }
-    function onUp(ev: MouseEvent) {
-      commit(() => updateZone(i, { rotation: angleFor(ev.clientX, ev.clientY) }));
-      setRotationDrag(null);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
-
-  // Custom resize handles for rotated zones — react-rnd's own resize handles stay anchored to
-  // the zone's unrotated bounding box, so once a zone is rotated they end up nowhere near its
-  // visible (rotated) corners/edges. These handles are rendered inside the same rotated wrapper
-  // as the shape, so they always sit at its true visual corners/edges, and the drag math in
-  // rotatedResizeBox() undoes the rotation before computing the new width/height.
-  function startResizeZone(e: React.MouseEvent, i: number, handle: ResizeHandle) {
-    e.preventDefault();
-    e.stopPropagation();
-    const canvas = previewRef.current;
-    const z = zones[i];
-    if (!canvas || !z) return;
-    const canvasRect = canvas.getBoundingClientRect();
-    const box = getBoxPx(z);
+    const box = getBoxPxFor(z, size);
     const rotation = z.rotation ?? 0;
-    const anchor = rotatedResizeAnchor(box, rotation, handle);
+    const isSelected = sel === key;
+    const interactive = z.editable === false ? false : !req || isSelected;
+    const locked = z.editable === false;
+    const color = ZONE_COLORS[i % ZONE_COLORS.length] ?? '#6366f1';
+    const asset = z.assetId ? as.find((a) => a.id === z.assetId) : undefined;
+    const thumb = asset && asset.status === 'READY' ? (asset.thumbnailUrl ?? asset.url) : null;
+    const bgRemoving = bgKey === key;
 
-    function compute(clientX: number, clientY: number): Box {
-      const mouse = { x: clientX - canvasRect.left, y: clientY - canvasRect.top };
-      return clampBox(
-        rotatedResizeBox(rotation, handle, anchor, mouse, box, MIN_ZONE_PX),
-        previewSize.width,
-        previewSize.height,
+    const prevGroup = groupsRef.current.get(key);
+    const wasActive = !!prevGroup && canvas.getActiveObject() === prevGroup;
+    const group = buildZoneGroup(key, box, {
+      shape: z.shape,
+      color,
+      thumb,
+      name: z.name,
+      zoneTypeLabel: t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`),
+      assetType: asset?.type,
+      crop: z,
+      locked,
+      lockedHint: t('lockedHint'),
+      bgRemoving,
+      removingBackgroundHint: tc('removingBackgroundHint'),
+    });
+    group._hovered = prevGroup?._hovered ?? false;
+    group._selected = isSelected;
+
+    if (prevGroup) canvas.remove(prevGroup);
+    canvas.add(group);
+    groupsRef.current.set(key, group);
+
+    group.set({
+      left: box.left,
+      top: box.top,
+      angle: rotation,
+      selectable: true,
+      evented: true,
+      hasControls: interactive,
+      lockMovementX: !interactive,
+      lockMovementY: !interactive,
+      lockScalingX: !interactive,
+      lockScalingY: !interactive,
+      lockRotation: !interactive,
+      lockSkewingX: true,
+      lockSkewingY: true,
+      snapAngle: 15,
+      snapThreshold: 4,
+      hoverCursor: interactive ? 'move' : 'pointer',
+      cornerColor: '#fff',
+      cornerStrokeColor: color,
+      borderColor: color,
+      transparentCorners: false,
+      cornerStyle: 'rect',
+      cornerSize: 8,
+      rotatingPointOffset: 22,
+    });
+    // `.set()` doesn't invalidate fabric's cached corner coordinates (aCoords) — only its first
+    // computation gets cached automatically, e.g. at construction. Without this, hit-testing
+    // (click-to-select, findTarget) and getBoundingRect() keep using wherever the group *used to*
+    // be, not the position/rotation just applied above.
+    group.setCoords();
+    updateOutlineVisibility(group);
+
+    if (isSelected || wasActive) canvas.setActiveObject(group);
+  }
+  useEffect(() => {
+    syncZoneRef.current = syncZone;
+  });
+
+  // ---- fabric canvas lifecycle -------------------------------------------------------------
+
+  useEffect(() => {
+    const el = canvasElRef.current;
+    if (!el) return;
+    const canvas = new Canvas(el, {
+      selection: false, // no marquee multi-select — the designer stays single-select
+      preserveObjectStacking: true,
+      backgroundColor: '#111',
+    });
+    fabricRef.current = canvas;
+
+    canvas.on('selection:created', (e) => {
+      const obj = e.selected?.[0] as ZoneGroup | undefined;
+      if (obj?.zoneKey) latest.current.onSelectZone(obj.zoneKey);
+    });
+    canvas.on('selection:updated', (e) => {
+      const obj = e.selected?.[0] as ZoneGroup | undefined;
+      if (obj?.zoneKey) latest.current.onSelectZone(obj.zoneKey);
+    });
+    canvas.on('selection:cleared', () => latest.current.onSelectZone(null));
+
+    canvas.on('mouse:over', (e) => {
+      const obj = e.target as ZoneGroup | undefined;
+      if (!obj?.zoneKey) return;
+      obj._hovered = true;
+      updateOutlineVisibility(obj);
+      canvas.requestRenderAll();
+    });
+    canvas.on('mouse:out', (e) => {
+      const obj = e.target as ZoneGroup | undefined;
+      if (!obj?.zoneKey) return;
+      obj._hovered = false;
+      updateOutlineVisibility(obj);
+      canvas.requestRenderAll();
+    });
+
+    canvas.on('object:moving', (e) => {
+      const obj = e.target as ZoneGroup;
+      if (!obj.zoneKey) return;
+      const { zones: zs, previewSize: size } = latest.current;
+      const i = zs.findIndex((z, idx) => zoneKeyOf(z, idx) === obj.zoneKey);
+      const z = zs[i];
+      if (!z) return;
+      const w = obj.width * obj.scaleX;
+      const h = obj.height * obj.scaleY;
+      if (z.rotation) {
+        const box = clampBox({ left: obj.left ?? 0, top: obj.top ?? 0, width: w, height: h }, size.width, size.height);
+        obj.set({ left: box.left, top: box.top });
+        obj.setCoords();
+        setGuides({ v: [], h: [] });
+        return;
+      }
+      const others = zs.filter((oz, idx) => idx !== i && !(oz.rotation ?? 0)).map((oz) => getBoxPxFor(oz, size));
+      const targets = computeAlignTargets(size.width, size.height, others);
+      const snapX = snapDragAxis(obj.left ?? 0, w, targets.xs);
+      const snapY = snapDragAxis(obj.top ?? 0, h, targets.ys);
+      const box = clampBox({ left: snapX.pos, top: snapY.pos, width: w, height: h }, size.width, size.height);
+      obj.set({ left: box.left, top: box.top });
+      obj.setCoords();
+      setGuides({
+        v: snapX.guide !== null ? [snapX.guide * (zoomRef.current)] : [],
+        h: snapY.guide !== null ? [snapY.guide * (zoomRef.current)] : [],
+      });
+    });
+
+    canvas.on('object:scaling', (e) => {
+      const obj = e.target as ZoneGroup;
+      if (!obj.zoneKey) return;
+      const { zones: zs, previewSize: size } = latest.current;
+      const i = zs.findIndex((z, idx) => zoneKeyOf(z, idx) === obj.zoneKey);
+      const z = zs[i];
+      if (!z) return;
+      const liveW = obj.width * obj.scaleX;
+      const liveH = obj.height * obj.scaleY;
+      if (z.rotation) {
+        const w = Math.max(MIN_ZONE_PX, liveW);
+        const h = Math.max(MIN_ZONE_PX, liveH);
+        obj.set({ scaleX: w / obj.width, scaleY: h / obj.height });
+        obj.setCoords();
+        setGuides({ v: [], h: [] });
+        return;
+      }
+      const corner = e.transform?.corner ?? '';
+      const direction = CORNER_DIRECTION[corner] ?? '';
+      const others = zs.filter((oz, idx) => idx !== i && !(oz.rotation ?? 0)).map((oz) => getBoxPxFor(oz, size));
+      const targets = computeAlignTargets(size.width, size.height, others);
+      const { box, guides: g } = resolveResize(
+        direction,
+        { left: obj.left ?? 0, top: obj.top ?? 0, width: liveW, height: liveH },
+        targets,
+        MIN_ZONE_PX,
+        size.width,
+        size.height,
       );
-    }
+      obj.set({
+        left: box.left,
+        top: box.top,
+        scaleX: box.width / obj.width,
+        scaleY: box.height / obj.height,
+      });
+      obj.setCoords();
+      setGuides({ v: g.v.map((x) => x * zoomRef.current), h: g.h.map((y) => y * zoomRef.current) });
+    });
 
-    function onMove(ev: MouseEvent) {
-      setDragBox({ index: i, ...compute(ev.clientX, ev.clientY) });
-    }
-    function onUp(ev: MouseEvent) {
-      const next = compute(ev.clientX, ev.clientY);
-      commit(() =>
-        updateZone(i, {
-          x: clampPct((next.left / previewSize.width) * 100),
-          y: clampPct((next.top / previewSize.height) * 100),
-          width: clampPct((next.width / previewSize.width) * 100),
-          height: clampPct((next.height / previewSize.height) * 100),
+    canvas.on('object:modified', (e) => {
+      const obj = e.target as ZoneGroup;
+      if (!obj.zoneKey) return;
+      setGuides({ v: [], h: [] });
+      const { zones: zs, previewSize: size, updateZone: update, commit: doCommit } = latest.current;
+      const i = zs.findIndex((z, idx) => zoneKeyOf(z, idx) === obj.zoneKey);
+      if (i < 0) return;
+      const center = obj.getCenterPoint();
+      const w = obj.width * obj.scaleX;
+      const h = obj.height * obj.scaleY;
+      const left = center.x - w / 2;
+      const top = center.y - h / 2;
+      doCommit(() =>
+        update(i, {
+          x: clampPct((left / size.width) * 100),
+          y: clampPct((top / size.height) * 100),
+          width: clampPct((w / size.width) * 100),
+          height: clampPct((h / size.height) * 100),
+          rotation: Math.round(obj.angle),
         }),
       );
-      setDragBox(null);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+    });
+
+    const upperEl = canvas.upperCanvasEl;
+    const onContextMenu = (ev: MouseEvent) => {
+      ev.preventDefault();
+      const target = canvas.findTarget(ev as TPointerEvent).target as ZoneGroup | undefined;
+      const { zones: zs } = latest.current;
+      if (!target?.zoneKey) {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+        setContextMenu({
+          x: ev.clientX,
+          y: ev.clientY,
+          actions: [{ key: 'add', label: t('addZone'), icon: Plus, onClick: onOpenAddPanel }],
+        });
+        return;
+      }
+      const i = zs.findIndex((z, idx) => zoneKeyOf(z, idx) === target.zoneKey);
+      const z = zs[i];
+      if (i < 0 || !z) return;
+      canvas.setActiveObject(target);
+      canvas.requestRenderAll();
+      latest.current.onSelectZone(target.zoneKey);
+      setContextMenu({ x: ev.clientX, y: ev.clientY, actions: zoneContextMenuActionsRef.current(i, target.zoneKey, z) });
+    };
+    upperEl.addEventListener('contextmenu', onContextMenu);
+
+    return () => {
+      upperEl.removeEventListener('contextmenu', onContextMenu);
+      void canvas.dispose();
+      fabricRef.current = null;
+      groupsRef.current = new Map();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally initialized once; see `latest` ref above
+  }, []);
+
+  // ---- canvas sizing / zoom ------------------------------------------------------------------
+
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || previewSize.width <= 0) return;
+    canvas.setDimensions({ width: previewSize.width * zoom, height: previewSize.height * zoom });
+    canvas.setZoom(zoom);
+    canvas.requestRenderAll();
+  }, [previewSize, zoom]);
+
+  // ---- zone content sync -----------------------------------------------------------------
+
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || previewSize.width <= 0) return;
+
+    const keysInOrder = zones.map((z, i) => zoneKeyOf(z, i));
+    const keepSet = new Set(keysInOrder);
+    for (const [key, group] of groupsRef.current) {
+      if (!keepSet.has(key)) {
+        canvas.remove(group);
+        groupsRef.current.delete(key);
+      }
     }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
+
+    zones.forEach((z, i) => syncZone(canvas, zoneKeyOf(z, i)));
+
+    if (!selectedZoneId && canvas.getActiveObject()) {
+      canvas.discardActiveObject();
+    }
+
+    // Re-establish stacking order to match zIndex (falls back to array order) — fixes bring-to-
+    // front/send-to-back, which previously set `zIndex` without anything ever rendering it.
+    const sorted = [...zones.entries()]
+      .map(([i, z]) => ({ key: zoneKeyOf(z, i), zIndex: z.zIndex ?? 0, i }))
+      .sort((a, b) => a.zIndex - b.zIndex || a.i - b.i);
+    sorted.forEach(({ key }, idx) => {
+      const g = groupsRef.current.get(key);
+      if (g) canvas.moveObjectTo(g, idx);
+    });
+
+    canvas.requestRenderAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncZone reads fresh values via `latest.current` itself; these deps only need to trigger a re-run, not be captured by it
+  }, [zones, assets, selectedZoneId, requireSelectToEdit, bgRemovingZoneKey, previewSize, t, tc]);
+
+  useEffect(() => {
+    // Self-contained rather than relying on the caller to clear React selection state first —
+    // that would need a state update's effects (the content-sync effect above) to have already
+    // flushed by the time this runs, which flushSync doesn't reliably guarantee across an effect
+    // boundary. Deselecting the fabric canvas directly, synchronously, sidesteps that entirely.
+    exportRef?.(() => {
+      const canvas = fabricRef.current;
+      if (!canvas) return '';
+      const hadActive = !!canvas.getActiveObject();
+      if (hadActive) canvas.discardActiveObject();
+      const hovered = [...groupsRef.current.values()].filter((g) => g._hovered);
+      hovered.forEach((g) => {
+        g._hovered = false;
+        updateOutlineVisibility(g);
+      });
+      canvas.requestRenderAll();
+      const dataUrl = canvas.toDataURL({ format: 'png', multiplier: 1 });
+      hovered.forEach((g) => {
+        g._hovered = true;
+        updateOutlineVisibility(g);
+      });
+      const currentSelection = latest.current.selectedZoneId;
+      if (hadActive && currentSelection) {
+        const g = groupsRef.current.get(currentSelection);
+        if (g) canvas.setActiveObject(g);
+      }
+      canvas.requestRenderAll();
+      return dataUrl;
+    });
+    return () => exportRef?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- exportRef identity is stable per LayoutsSection render; re-running per zones/zoom change isn't needed since it reads fabricRef/groupsRef live
+  }, []);
 
   return (
     <div>
-      {/* Extra bottom margin (vs. a plain mb-1) leaves clearance above the frame so the
-          corner rotate handles — which sit outside the frame's own edge — don't get
-          visually covered by this row. */}
       <div className="mb-6 flex items-center justify-between">
         <span className="text-xs text-gray-400 dark:text-gray-500">{t('preview')}</span>
         <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500">
@@ -460,324 +771,46 @@ export function LayoutCanvasPanel({
         </div>
       </div>
       <div
-        ref={zoomViewportRef}
-        onWheel={(e) => {
-          if (!e.ctrlKey) return;
-          e.preventDefault();
-          setZoom((z) => clampZoom(z * Math.exp(-e.deltaY * 0.0015)));
-        }}
-        // Only clip once actually zoomed in (there's then real off-screen content to pan
-        // to via scrolling) — at the default 100% zoom, staying unclipped lets the corner
-        // rotate handles stick out past the frame edge instead of being cut off flush
-        // against it.
-        style={{ width: '100%', aspectRatio: '16 / 9', overflow: zoom > 1 ? 'auto' : 'visible', borderRadius: 6 }}
+        ref={viewportRef}
+        style={{ width: '100%', aspectRatio: '16 / 9', overflow: 'auto', borderRadius: 6, position: 'relative' }}
       >
         <div
           style={{
             position: 'relative',
-            width: naturalWidth ? naturalWidth * zoom : '100%',
-            aspectRatio: '16 / 9',
+            width: previewSize.width * zoom,
+            height: previewSize.height * zoom,
           }}
         >
-        <div
-          ref={previewRef}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onSelectZone(null);
-          }}
-          onContextMenu={(e) => {
-            if (e.target !== e.currentTarget) return;
-            e.preventDefault();
-            onSelectZone(null);
-            setContextMenu({
-              x: e.clientX,
-              y: e.clientY,
-              actions: [{ key: 'add', label: t('addZone'), icon: Plus, onClick: onOpenAddPanel }],
-            });
-          }}
-          // Clipped to the frame — a rotated zone's fill must never visually spill onto
-          // the rest of the editor once its rotated footprint exceeds the canvas rect.
-          // The rotate grip and the custom rotation-aware resize handles are rendered
-          // separately, in the unclipped overlay just below (same box/rotation math), so
-          // they stay reachable even where they'd otherwise land outside the frame.
-          style={{
-            width: '100%',
-            aspectRatio: '16 / 9',
-            background: '#111',
-            position: 'relative',
-            // Contains each zone's own stacking (if it ever gets a `zIndex` CSS style) within
-            // this frame, so nothing can paint above the unclipped resize-handle overlay
-            // rendered as this div's sibling further down.
-            isolation: 'isolate',
-            borderRadius: 6,
-            overflow: 'hidden',
-          }}
-        >
-          {previewSize.width > 0 &&
-            zones.map((z, i) => {
-              const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
-              const liveRotation =
-                rotationDrag && rotationDrag.index === i
-                  ? rotationDrag.deg
-                  : (z.rotation ?? 0);
-              const key = z._localId ?? String(i);
-              const isSelected = selectedZoneId === key;
-              const isHovered = hoveredZoneId === key;
-              const locked = z.editable === false;
-              const interactive = zoneIsInteractive(z, isSelected);
-              const rotation = z.rotation ?? 0;
-              const color = ZONE_COLORS[i % ZONE_COLORS.length];
-              const asset = z.assetId ? assets.find((a) => a.id === z.assetId) : undefined;
-              const thumb =
-                asset && asset.status === 'READY'
-                  ? (asset.thumbnailUrl ?? asset.url)
-                  : null;
-              return (
-                <Rnd
-                  key={key}
-                  bounds="parent"
-                  minWidth={MIN_ZONE_PX}
-                  minHeight={MIN_ZONE_PX}
-                  disableDragging={!interactive}
-                  // react-rnd's own resize handles are anchored to the unrotated box, which no
-                  // longer matches the visible (rotated) shape — once rotated, use the custom
-                  // rotation-aware handles rendered below instead.
-                  enableResizing={interactive && rotation === 0 ? undefined : false}
-                  cancel=".rotate-handle, .resize-handle"
-                  size={{ width: box.width, height: box.height }}
-                  position={{ x: box.left, y: box.top }}
-                  onMouseDown={() => onSelectZone(key)}
-                  onDragStart={() => onSelectZone(key)}
-                  onDrag={(_e, d) => handleDrag(i, d.x, d.y)}
-                  onDragStop={(_e, d) => handleDragStop(i, d.x, d.y)}
-                  onResize={(_e, dir, ref, _delta, position) =>
-                    handleResize(i, dir, ref, position)
-                  }
-                  onResizeStop={(_e, dir, ref, _delta, position) =>
-                    handleResizeStop(i, dir, ref, position)
-                  }
-                  style={{ overflow: 'visible' }}
-                >
-                  {/* react-rnd/react-draggable owns the root node's own `transform` (translate()
-                    for positioning) and clobbers a rotate() set alongside it — rotation lives
-                    on this separate inner wrapper instead. */}
-                  <div
-                    onMouseEnter={() => setHoveredZoneId(key)}
-                    onMouseLeave={() => setHoveredZoneId((id) => (id === key ? null : id))}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onSelectZone(key);
-                      setContextMenu({ x: e.clientX, y: e.clientY, actions: zoneContextMenuActions(i, key, z) });
-                    }}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      position: 'relative',
-                      transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
-                    }}
-                  >
-                    {/* Shape-clipped fill — the actual visible zone. The true rectangular
-                      bounding box (below) only shows on hover/select, since a circle/triangle
-                      shape would otherwise look like it has an invisible rectangular halo. */}
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: thumb ? '#000' : color + '55',
-                        border: `2px solid ${color}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'column',
-                        gap: 2,
-                        overflow: 'hidden',
-                        ...shapeClipStyle(z.shape),
-                      }}
-                    >
-                      {thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote asset URL, not a static/local image
-                        <img
-                          src={thumb}
-                          alt={z.name}
-                          draggable={false}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: asset?.type === 'IMAGE' ? 'fill' : 'contain',
-                            ...mediaCropStyle(z),
-                          }}
-                        />
-                      ) : (
-                        <>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              color: '#fff',
-                              fontWeight: 600,
-                              textAlign: 'center',
-                            }}
-                          >
-                            {z.name}
-                          </span>
-                          <span style={{ opacity: 0.7, fontSize: 10, color: '#fff' }}>
-                            {t(`zoneTypes.${z.zoneType ?? 'MEDIA'}`)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    {(isHovered || isSelected) && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: -2,
-                          border: `1px dashed ${color}`,
-                          pointerEvents: 'none',
-                        }}
-                      />
-                    )}
-                    {locked && (
-                      <div
-                        title={t('lockedHint')}
-                        style={{
-                          position: 'absolute',
-                          top: 3,
-                          insetInlineStart: 3,
-                          color: '#fff',
-                          background: 'rgba(0,0,0,0.5)',
-                          borderRadius: 4,
-                          padding: 2,
-                          lineHeight: 0,
-                        }}
-                      >
-                        <Lock className="h-2.5 w-2.5" />
-                      </div>
-                    )}
-                    {bgRemovingZoneKey === key && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 4,
-                          background: 'rgba(0,0,0,0.55)',
-                          color: '#fff',
-                          fontSize: 10,
-                          fontWeight: 500,
-                        }}
-                      >
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                        {tc('removingBackgroundHint')}
-                      </div>
-                    )}
-                  </div>
-                </Rnd>
-              );
-            })}
-          {guides.v.map((x, idx) => (
-            <div
-              key={`v-${idx}`}
-              style={{
-                position: 'absolute',
-                left: x,
-                top: 0,
-                width: 0,
-                height: '100%',
-                borderLeft: '1px solid #ec4899',
-                pointerEvents: 'none',
-                zIndex: 50,
-              }}
-            />
-          ))}
-          {guides.h.map((y, idx) => (
-            <div
-              key={`h-${idx}`}
-              style={{
-                position: 'absolute',
-                top: y,
-                left: 0,
-                height: 0,
-                width: '100%',
-                borderTop: '1px solid #ec4899',
-                pointerEvents: 'none',
-                zIndex: 50,
-              }}
-            />
-          ))}
+          <canvas ref={canvasElRef} style={{ borderRadius: 6 }} />
+          <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+            {guides.v.map((x, idx) => (
+              <div
+                key={`v-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: x,
+                  top: 0,
+                  width: 0,
+                  height: '100%',
+                  borderLeft: '1px solid #ec4899',
+                }}
+              />
+            ))}
+            {guides.h.map((y, idx) => (
+              <div
+                key={`h-${idx}`}
+                style={{
+                  position: 'absolute',
+                  top: y,
+                  left: 0,
+                  height: 0,
+                  width: '100%',
+                  borderTop: '1px solid #ec4899',
+                }}
+              />
+            ))}
+          </div>
         </div>
-        {/* Unclipped overlay for the rotate grip + rotation-aware resize handles — sits
-            outside the frame's overflow:hidden clip above so they stay grabbable even when
-            a rotated zone's box would put them past the frame edge. Absolutely positioned
-            over the exact same rect as the frame; only individual handles accept pointer
-            events, the rest passes clicks through to the frame beneath. */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            overflow: 'visible',
-            pointerEvents: 'none',
-          }}
-        >
-          {previewSize.width > 0 &&
-            zones.map((z, i) => {
-              const box = dragBox && dragBox.index === i ? dragBox : getBoxPx(z);
-              const liveRotation =
-                rotationDrag && rotationDrag.index === i
-                  ? rotationDrag.deg
-                  : (z.rotation ?? 0);
-              const key = z._localId ?? String(i);
-              const isSelected = selectedZoneId === key;
-              const interactive = zoneIsInteractive(z, isSelected);
-              const rotation = z.rotation ?? 0;
-              const color = ZONE_COLORS[i % ZONE_COLORS.length];
-              if (!interactive) return null;
-              return (
-                <div
-                  key={key}
-                  style={{
-                    position: 'absolute',
-                    left: box.left,
-                    top: box.top,
-                    width: box.width,
-                    height: box.height,
-                    transform: liveRotation ? `rotate(${liveRotation}deg)` : undefined,
-                  }}
-                >
-                  {/* Resize handles render before the rotate handle so that, wherever the
-                      two visually overlap near a corner, the rotate handle — painted last
-                      — is the one that actually receives the click. */}
-                  {rotation !== 0 &&
-                    RESIZE_HANDLES.map((h) => (
-                      <div
-                        key={h}
-                        className="resize-handle"
-                        onMouseDown={(e) => startResizeZone(e, i, h)}
-                        title={t('resizeHint')}
-                        style={{
-                          ...resizeHandleStyle(h),
-                          width: 8,
-                          height: 8,
-                          borderRadius: 2,
-                          background: color,
-                          border: '1.5px solid white',
-                          cursor: RESIZE_HANDLE_AXIS[h].cursor,
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
-                          pointerEvents: 'auto',
-                        }}
-                      />
-                    ))}
-                  <ZoneRotateHandle
-                    style={rotateHandleStyle}
-                    color={color ?? '#6366f1'}
-                    hint={t('rotateHint')}
-                    onStartRotate={(e) => startRotateZone(e, i)}
-                  />
-                </div>
-              );
-            })}
-        </div>
-      </div>
       </div>
       <ContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
     </div>
