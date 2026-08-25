@@ -106,8 +106,13 @@ export class MediaProcessor extends WorkerHost {
   private async processImage(assetId: string, key: string) {
     const original = await this.storage.download(key);
 
+    // fit: 'inside' (not 'cover') so a tall/portrait source is never cropped to fit this
+    // landscape-ish bounding box — it's scaled down to fit within it, preserving the full frame,
+    // with the actual output dimensions varying per source aspect ratio (e.g. a 300x700 source
+    // comes out ~257x600, not force-cropped to exactly 480x600). withoutEnlargement so a small
+    // source thumbnail isn't upscaled/blurred past its native size.
     const thumbnail = await sharp(original)
-      .resize(400, 300, { fit: 'cover' })
+      .resize(480, 600, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 80 })
       .toBuffer();
 

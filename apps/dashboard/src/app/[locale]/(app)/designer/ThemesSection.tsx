@@ -39,6 +39,7 @@ import {
   ImageDown,
   ChevronsDownUp,
   ChevronsUpDown,
+  Layers,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -57,6 +58,8 @@ import {
   type ElementShape,
 } from '@/lib/api';
 import { EditorAddSidebar } from '@/components/EditorAddSidebar';
+import { LayersPanel } from '@/components/LayersPanel';
+import { nextLayerZIndex, bringToFront, sendToBack, sortByZDesc, reindexLayers } from '@/lib/layers';
 import { ThemeCanvasPanel } from './ThemeCanvasPanel';
 import { captureCanvasAsAsset } from '@/lib/exportDesignAsAsset';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -625,6 +628,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   const [typography, setTypography] = useState<ThemeTypography>(defaultTypography());
   const [elements, setElements] = useState<ThemeElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
   // Populated by ThemeCanvasPanel's exportRef with the actual canvas DOM node "save as asset"
   // rasterizes — a plain ref (not state) since it never needs to trigger a re-render.
   const canvasElRef = useRef<HTMLDivElement | null>(null);
@@ -928,7 +932,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
       y: 20,
       width: 40,
       height: 15,
-      zIndex: elements.length,
+      zIndex: nextLayerZIndex(elements),
       rotation: 0,
       editable: true,
       style: { ...(kind === 'TEXT' ? { color: 'palette.text' } : {}), ...styleOverrides },
@@ -948,17 +952,31 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   function duplicateElement(id: string) {
     const el = elements.find((e) => e.id === id);
     if (!el) return;
-    const copy = { ...el, id: newElementId(), x: clampPct(el.x + 3), y: clampPct(el.y + 3), zIndex: elements.length };
+    const copy = { ...el, id: newElementId(), x: clampPct(el.x + 3), y: clampPct(el.y + 3), zIndex: nextLayerZIndex(elements) };
     commit(() => setElements((prev) => [...prev, copy]));
     setSelectedElementId(copy.id);
   }
   function bringElementToFront(id: string) {
-    const maxZ = Math.max(0, ...elements.map((e) => e.zIndex));
-    commit(() => updateElement(id, { zIndex: maxZ + 1 }));
+    const el = elements.find((e) => e.id === id);
+    if (!el) return;
+    commit(() => updateElement(id, { zIndex: bringToFront(elements, el.zIndex) }));
   }
   function sendElementToBack(id: string) {
-    const minZ = Math.min(0, ...elements.map((e) => e.zIndex));
-    commit(() => updateElement(id, { zIndex: minZ - 1 }));
+    const el = elements.find((e) => e.id === id);
+    if (!el) return;
+    commit(() => updateElement(id, { zIndex: sendToBack(elements, el.zIndex) }));
+  }
+  // Layers panel drag-reorder — `orderedIds` is front-to-back (topmost row = front-most).
+  function reorderLayers(orderedIds: string[]) {
+    commit(() =>
+      setElements((prev) => {
+        const byId = new Map(prev.map((el) => [el.id, el]));
+        const ordered = orderedIds.map((id) => byId.get(id)).filter((el): el is ThemeElement => !!el);
+        const reindexed = reindexLayers(ordered, (el, zIndex) => ({ ...el, zIndex }));
+        const reindexedById = new Map(reindexed.map((el) => [el.id, el]));
+        return prev.map((el) => reindexedById.get(el.id) ?? el);
+      }),
+    );
   }
 
   const saving = createMut.isPending || updateMut.isPending;
@@ -1177,6 +1195,18 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
               className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
             >
               <Redo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setLayersPanelOpen((v) => !v)}
+              title={tc('layers')}
+              aria-pressed={layersPanelOpen}
+              className={`rounded-lg border p-2 hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                layersPanelOpen
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
+                  : 'border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400'
+              }`}
+            >
+              <Layers className="h-4 w-4" />
             </button>
             <button
               onClick={() => saveAsAssetMut.mutate()}
@@ -2435,6 +2465,22 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
             ]}
           />
 
+          <LayersPanel
+            open={layersPanelOpen}
+            onOpenChange={setLayersPanelOpen}
+            items={sortByZDesc(elements).map((el) => ({
+              id: el.id,
+              zIndex: el.zIndex,
+              label: el.label ?? el.kind,
+              icon: el.kind === 'WIDGET' ? WIDGET_TYPE_ICONS[el.content.widgetType] : ELEMENT_KIND_ICONS[el.kind],
+            }))}
+            selectedId={selectedElementId}
+            onSelect={setSelectedElementId}
+            onReorder={reorderLayers}
+            title={tc('layers')}
+            emptyLabel={tc('noLayers')}
+            closeLabel={tc('closeLayersPanel')}
+          />
         </div>
       )}
 

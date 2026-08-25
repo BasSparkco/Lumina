@@ -88,8 +88,11 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
   });
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {/* max-h + overflow-y-auto — with ticker options expanded this panel can be taller than
+          the viewport (especially on shorter screens), and without a scroll boundary here the
+          Save/Cancel row at the bottom becomes unreachable. */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <Type className="w-4 h-4 text-amber-500" /> {asset ? t('editTextModalTitle') : t('newTextModalTitle')}
         </h2>

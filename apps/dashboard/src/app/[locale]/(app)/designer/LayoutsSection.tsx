@@ -44,6 +44,8 @@ import {
   type ZoneType,
 } from '@/lib/api';
 import { EditorAddSidebar } from '@/components/EditorAddSidebar';
+import { LayersPanel } from '@/components/LayersPanel';
+import { nextLayerZIndex, bringToFront, sendToBack, sortByZDesc, reindexLayers } from '@/lib/layers';
 import { LayoutCanvasPanel } from './LayoutCanvasPanel';
 import { removeAssetBackground } from '@/lib/backgroundRemoval';
 import { captureFabricCanvasAsAsset } from '@/lib/exportDesignAsAsset';
@@ -212,6 +214,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
   // A zone must be selected (single click) before it can be dragged/resized/rotated — unless
   // requireSelectToEdit is off, or the zone is locked (editable: false), which always wins.
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
   // Populated by LayoutCanvasPanel's exportRef with a function that rasterizes the live fabric
   // canvas to a PNG data URL — a plain ref (not state) since it never needs to trigger a re-render.
   const getCanvasPngRef = useRef<(() => string) | null>(null);
@@ -405,6 +408,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
       width: 50,
       height: 50,
       zoneType,
+      zIndex: nextLayerZIndex(zones.map((z) => ({ zIndex: z.zIndex ?? 0 }))),
     });
     commit(() => setZones((prev) => [...prev, zone]));
     setSelectedZoneId(zone._localId ?? null);
@@ -419,7 +423,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
       _localId: undefined,
       x: clampPct(z.x + 3),
       y: clampPct(z.y + 3),
-      zIndex: zones.length,
+      zIndex: nextLayerZIndex(zones.map((z) => ({ zIndex: z.zIndex ?? 0 }))),
     });
     commit(() => setZones((prev) => [...prev, copy]));
     setSelectedZoneId(copy._localId ?? null);
@@ -428,12 +432,28 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
     commit(() => setZones((prev) => prev.filter((_, idx) => idx !== i)));
   }
   function bringZoneToFront(i: number) {
-    const maxZ = Math.max(0, ...zones.map((z) => z.zIndex ?? 0));
-    commit(() => updateZone(i, { zIndex: maxZ + 1 }));
+    const z = zones[i];
+    if (!z) return;
+    const zIndex = bringToFront(zones.map((z) => ({ zIndex: z.zIndex ?? 0 })), z.zIndex ?? 0);
+    commit(() => updateZone(i, { zIndex }));
   }
   function sendZoneToBack(i: number) {
-    const minZ = Math.min(0, ...zones.map((z) => z.zIndex ?? 0));
-    commit(() => updateZone(i, { zIndex: minZ - 1 }));
+    const z = zones[i];
+    if (!z) return;
+    const zIndex = sendToBack(zones.map((z) => ({ zIndex: z.zIndex ?? 0 })), z.zIndex ?? 0);
+    commit(() => updateZone(i, { zIndex }));
+  }
+  // Layers panel drag-reorder — `orderedKeys` is front-to-back (topmost row = front-most).
+  function reorderZoneLayers(orderedKeys: string[]) {
+    commit(() =>
+      setZones((prev) => {
+        const byKey = new Map(prev.map((z, i) => [z._localId ?? String(i), z]));
+        const ordered = orderedKeys.map((k) => byKey.get(k)).filter((z): z is ZoneInput => !!z);
+        const reindexed = reindexLayers(ordered, (z, zIndex) => ({ ...z, zIndex }));
+        const reindexedByKey = new Map(reindexed.map((z, i) => [z._localId ?? String(i), z]));
+        return prev.map((z, i) => reindexedByKey.get(z._localId ?? String(i)) ?? z);
+      }),
+    );
   }
   // Right-click "Edit" — unlike the theme editor, a zone's card always shows its full field set
   // regardless of selection, so this just needs to scroll it into view (it may be below the fold).
@@ -543,6 +563,18 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
               className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
             >
               <Redo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setLayersPanelOpen((v) => !v)}
+              title={tc('layers')}
+              aria-pressed={layersPanelOpen}
+              className={`rounded-lg border p-2 hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                layersPanelOpen
+                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
+                  : 'border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400'
+              }`}
+            >
+              <Layers className="h-4 w-4" />
             </button>
             <button
               onClick={() => saveAsAssetMut.mutate()}
@@ -1067,6 +1099,24 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
             ]}
           />
 
+          <LayersPanel
+            open={layersPanelOpen}
+            onOpenChange={setLayersPanelOpen}
+            items={sortByZDesc(zones.map((z, i) => ({ ...z, zIndex: z.zIndex ?? 0, _key: z._localId ?? String(i) }))).map(
+              (z) => ({
+                id: z._key,
+                zIndex: z.zIndex,
+                label: z.name,
+                icon: ZONE_TYPE_ICONS[z.zoneType ?? 'MEDIA'],
+              }),
+            )}
+            selectedId={selectedZoneId}
+            onSelect={setSelectedZoneId}
+            onReorder={reorderZoneLayers}
+            title={tc('layers')}
+            emptyLabel={tc('noLayers')}
+            closeLabel={tc('closeLayersPanel')}
+          />
         </div>
       )}
 
