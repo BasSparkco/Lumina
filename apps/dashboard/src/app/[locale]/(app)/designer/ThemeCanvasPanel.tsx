@@ -57,8 +57,8 @@ import {
   rotatedResizeBox,
   type ResizeHandle,
 } from '@/lib/rotatedResize';
-import { shapeClipStyle, mediaCropStyle, brushPolylinePoints, resolveThemeColor } from '@lumina/types';
-import { ShapeOutline } from '@lumina/ui';
+import { shapeClipStyle, mediaCropStyle, brushPolylinePoints, resolveThemeColor, resolveThemeFill, resolveThemeFillColor, buildImageFilterCss, needsSvgImageFilter, buildEntranceAnimationStyle, buildEmphasisAnimationStyle, combineAnimationStyles } from '@lumina/types';
+import { ShapeOutline, ImageAdjustmentFilter, ElementAnimationStyles } from '@lumina/ui';
 import {
   type BrushType,
   type PaintTool,
@@ -143,6 +143,12 @@ interface ThemeCanvasPanelProps {
   // Hands the parent the exact DOM node "save as asset" should rasterize — the clipped
   // element frame, not the zoom controls or unclipped resize-handle overlay around it.
   exportRef?: (el: HTMLDivElement | null) => void;
+  // Bumped per-element (in ThemesSection, by the properties panel's "Preview" button) to force
+  // that element's animation wrapper div to remount — a CSS `animation` only (re)plays when its
+  // element is freshly created, so this is how entrance/emphasis get replayed on demand instead
+  // of only ever playing once when the element was first added. Lifted to ThemesSection for the
+  // same cross-component reason brushArmed etc. are (see the component comment below).
+  animationReplayKey: Record<string, number>;
 }
 
 // Owns everything about the visual preview canvas — zoom, drag/resize/rotate-in-progress state,
@@ -182,6 +188,7 @@ export function ThemeCanvasPanel({
   setBrushSize,
   setBgRemoveError,
   exportRef,
+  animationReplayKey,
 }: ThemeCanvasPanelProps) {
   const qc = useQueryClient();
   const t = useTranslations('themes');
@@ -1051,6 +1058,7 @@ export function ThemeCanvasPanel({
             border: '1px solid rgba(0,0,0,0.1)',
           }}
         >
+          <ElementAnimationStyles />
           {previewSize.width > 0 &&
             elements.map((el) => {
               const isSelected = el.id === selectedElementId;
@@ -1070,6 +1078,12 @@ export function ThemeCanvasPanel({
                   : null;
               const isCanvasOutlineShape = el.kind === 'SHAPE' && el.style.shapeFill === 'outline';
               const isCanvasBrush = el.kind === 'BRUSH';
+              const imageAdjustments = el.kind === 'IMAGE' ? el.style.imageAdjustments : undefined;
+              const imageFilterId = `img-adj-${el.id}`;
+              const imageFilter = [
+                imageAdjustments && needsSvgImageFilter(imageAdjustments) ? `url(#${imageFilterId})` : null,
+                buildImageFilterCss(imageAdjustments),
+              ].filter(Boolean).join(' ') || undefined;
               return (
                 <Rnd
                   key={el.id}
@@ -1093,6 +1107,21 @@ export function ThemeCanvasPanel({
                   }
                   style={{ zIndex: el.zIndex, overflow: 'visible' }}
                 >
+                  {/* Animation (translate/scale via entrance/emphasis keyframes) gets its own
+                      wrapper, separate from the rotation div below it — on the same element,
+                      the keyframes' `transform` would overwrite (not compose with) the static
+                      rotate(), and permanently wipe it once fill-mode locks in the final value. */}
+                  <div
+                    key={`${el.id}-${animationReplayKey[el.id] ?? 0}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      ...combineAnimationStyles(
+                        buildEntranceAnimationStyle(el.animation?.entrance),
+                        buildEmphasisAnimationStyle(el.animation?.emphasis),
+                      ),
+                    }}
+                  >
                   <div
                     onMouseEnter={() => setHoveredElementId(el.id)}
                     onMouseLeave={() =>
@@ -1119,11 +1148,11 @@ export function ThemeCanvasPanel({
                         background: thumb
                           ? '#000'
                           : el.kind === 'SHAPE'
-                            ? (isCanvasOutlineShape ? 'transparent' : (resolveThemeColor(el.style.backgroundColor, palette) ??
+                            ? (isCanvasOutlineShape ? 'transparent' : (resolveThemeFill(el.style.backgroundColor, palette) ??
                               KIND_COLORS.SHAPE + '55'))
                             : isCanvasBrush
                               ? 'transparent'
-                              : el.kind === 'TEXT'
+                              : el.kind === 'TEXT' || el.kind === 'ICON'
                                 ? 'transparent'
                                 : KIND_COLORS[el.kind] + '33',
                         display: 'flex',
@@ -1138,7 +1167,7 @@ export function ThemeCanvasPanel({
                       {isCanvasOutlineShape && (
                         <ShapeOutline
                           shape={el.style.shape}
-                          color={resolveThemeColor(el.style.backgroundColor, palette) ?? palette.text}
+                          color={resolveThemeFillColor(el.style.backgroundColor, palette) ?? palette.text}
                           strokeWidthPx={el.style.strokeWidthPx}
                         />
                       )}
@@ -1155,7 +1184,7 @@ export function ThemeCanvasPanel({
                             <polyline
                               points={brushPolylinePoints(el.content.points)}
                               fill="none"
-                              stroke={resolveThemeColor(el.style.backgroundColor, palette) ?? palette.text}
+                              stroke={resolveThemeFillColor(el.style.backgroundColor, palette) ?? palette.text}
                               strokeWidth={el.style.strokeWidthPx ?? 4}
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -1164,7 +1193,23 @@ export function ThemeCanvasPanel({
                           </svg>
                         )
                       )}
-                      {el.kind === 'TEXT' ? (
+                      {el.kind === 'ICON' ? (
+                        el.content.svg ? (
+                          <div
+                            dangerouslySetInnerHTML={{ __html: el.content.svg }}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              color: resolveThemeColor(el.style.color, palette) ?? palette.text,
+                              opacity: el.style.opacity,
+                            }}
+                          />
+                        ) : (
+                          <span style={{ fontSize: 9, color: '#fff', fontWeight: 600 }}>
+                            {el.label || t('elementKinds.ICON')}
+                          </span>
+                        )
+                      ) : el.kind === 'TEXT' ? (
                         el.content.assetId ? (
                           (() => {
                             const textAsset = assets.find((a) => a.id === el.content.assetId);
@@ -1304,18 +1349,22 @@ export function ThemeCanvasPanel({
                           </div>
                         )
                       ) : thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote asset URL, not a static/local image
-                        <img
-                          src={thumb}
-                          alt={el.label || el.kind}
-                          draggable={false}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: el.style.objectFit ?? (el.kind === 'IMAGE' ? 'fill' : 'contain'),
-                            ...mediaCropStyle(el.style),
-                          }}
-                        />
+                        <>
+                          {imageAdjustments && <ImageAdjustmentFilter id={imageFilterId} adjustments={imageAdjustments} />}
+                          {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary remote asset URL, not a static/local image */}
+                          <img
+                            src={thumb}
+                            alt={el.label || el.kind}
+                            draggable={false}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: el.style.objectFit ?? (el.kind === 'IMAGE' ? 'fill' : 'contain'),
+                              filter: imageFilter,
+                              ...mediaCropStyle(el.style),
+                            }}
+                          />
+                        </>
                       ) : !isCanvasOutlineShape && !isCanvasBrush ? (
                         <>
                           <span
@@ -1392,6 +1441,7 @@ export function ThemeCanvasPanel({
                         {tc('removingBackgroundHint')}
                       </div>
                     )}
+                  </div>
                   </div>
                 </Rnd>
               );

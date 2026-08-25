@@ -93,6 +93,29 @@
     "resetToFull": "إعادة تعيين للصورة الكاملة",
     "zoom": "التكبير"
   },
+  "adjustmentsEditor": {
+    "title": "تعديل الصورة",
+    "reset": "إعادة تعيين",
+    "duotone": "لونان",
+    "presets": {
+      "vivid": "زاهي",
+      "blackAndWhite": "أبيض وأسود",
+      "warm": "دافئ",
+      "cool": "بارد",
+      "vintage": "قديم",
+      "fade": "باهت"
+    },
+    "fields": {
+      "exposure": "التعريض الضوئي",
+      "brightness": "السطوع",
+      "contrast": "التباين",
+      "saturation": "التشبع",
+      "vibrance": "الحيوية",
+      "temperature": "درجة الحرارة اللونية",
+      "tint": "الصبغة",
+      "hue": "درجة اللون"
+    }
+  },
   "auth": {
     "login": {
       "title": "تسجيل الدخول إلى لومينا",
@@ -482,6 +505,14 @@
     "customLength": "مدة مخصصة",
     "videoDuration": "مدة الفيديو"
   },
+  "designer": {
+    "title": "المصمم",
+    "subtitle": "ابدأ تخطيطًا أو سمة جديدة. لتعديل عنصر موجود، افتحه من صفحة القوالب.",
+    "newLayout": "تخطيط جديد",
+    "newLayoutHint": "رتّب مناطق الشاشة وخصّص لكل منطقة قائمة تشغيل أو أداة.",
+    "newTheme": "سمة جديدة",
+    "newThemeHint": "صمّم النصوص والصور والألوان والأدوات المباشرة على لوحة واحدة."
+  },
   "layouts": {
     "title": "التخطيطات",
     "subtitle": "حدّد مناطق الشاشة وخصّص قوائم التشغيل أو الأدوات لكل منطقة",
@@ -612,7 +643,8 @@
       "qrForeground": "لون الرمز",
       "qrBackground": "لون الخلفية",
       "qrSize": "الحجم (% من المنطقة)"
-    }
+    },
+    "notFound": "التخطيط غير موجود."
   },
   "themes": {
     "title": "السمات",
@@ -727,6 +759,55 @@
     "stockNotConfigured": "لم يتم إعداد مكتبة الصور على هذا الخادم بعد.",
     "stockCredit": "الصور مقدمة من Pexels",
     "importStockFailed": "تعذّرت إضافة هذه الصورة",
+    "videoSourceExisting": "موجود",
+    "videoSourceUpload": "رفع",
+    "videoSourceStock": "مكتبة الفيديو",
+    "stockVideoSearchPlaceholder": "ابحث في مقاطع فيديو مجانية…",
+    "stockVideoEmpty": "لم يتم العثور على مقاطع فيديو",
+    "stockVideoNotConfigured": "لم يتم إعداد مكتبة الفيديو على هذا الخادم بعد.",
+    "stockVideoCredit": "مقاطع الفيديو مقدمة من Pexels",
+    "importStockVideoFailed": "تعذّرت إضافة مقطع الفيديو هذا",
+    "icon": "أيقونة",
+    "changeIcon": "تغيير الأيقونة",
+    "editAdjustments": "تعديل",
+    "animation": {
+      "title": "الحركة",
+      "preview": "معاينة",
+      "entrance": "الدخول",
+      "emphasis": "تأكيد (متكرر)",
+      "exit": "الخروج",
+      "textReveal": "إظهار النص",
+      "durationMs": "المدة (مللي ثانية)",
+      "delayMs": "التأخير (مللي ثانية)",
+      "intervalMs": "التكرار كل (مللي ثانية)",
+      "speedMsPerUnit": "السرعة (مللي ثانية/خطوة)",
+      "presets": {
+        "none": "بلا",
+        "fade": "تلاشي",
+        "slide": "انزلاق",
+        "zoom": "تكبير"
+      },
+      "directions": {
+        "up": "لأعلى",
+        "down": "لأسفل",
+        "left": "لليسار",
+        "right": "لليمين"
+      },
+      "emphasisPresets": {
+        "none": "بلا",
+        "pulse": "نبض",
+        "shake": "اهتزاز"
+      },
+      "textRevealPresets": {
+        "none": "بلا",
+        "typewriter": "آلة كاتبة",
+        "wordByWord": "كلمة بكلمة"
+      }
+    },
+    "iconSearchPlaceholder": "ابحث عن أيقونات…",
+    "iconEmpty": "لم يتم العثور على أيقونات",
+    "importIconFailed": "تعذّرت إضافة هذه الأيقونة",
+    "iconCredit": "الأيقونات مقدمة من Iconify",
     "noPlaylist": "— بدون قائمة تشغيل —",
     "widgetType": "الأداة",
     "color": "لون النص",
@@ -749,6 +830,8 @@
     "fillStyleSolid": "معبأ",
     "fillStyleOutline": "مفرغ (حدود فقط)",
     "outlineColor": "لون الحدود",
+    "fillModeSolid": "لون واحد",
+    "fillModeGradient": "تدرج لوني",
     "strokeWidth": "سماكة الحد",
     "quickAddShape": "إضافة شكل",
     "quickAdd": "إضافة",
@@ -798,7 +881,8 @@
       "PLAYLIST": "قائمة تشغيل",
       "SHAPE": "شكل / كتلة لونية",
       "BRUSH": "فرشاة (رسم حر)",
-      "WIDGET": "أداة حية"
+      "WIDGET": "أداة حية",
+      "ICON": "أيقونة"
     },
     "widgetTypes": {
       "PRAYER": "أوقات الصلاة",
@@ -817,7 +901,8 @@
       "text": "النص",
       "textMuted": "نص خافت",
       "accent": "لون مميز"
-    }
+    },
+    "notFound": "السمة غير موجودة."
   },
   "templates": {
     "title": "القوالب"

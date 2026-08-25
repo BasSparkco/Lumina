@@ -73,6 +73,7 @@ class UpdateTextAssetDto extends TextStyleDto {
 }
 
 class ImportStockPhotoDto { @IsInt() @Min(1) photoId!: number; }
+class ImportStockVideoDto { @IsInt() @Min(1) videoId!: number; }
 
 class CreateAppAssetDto {
   @IsString() providerId!: string;
@@ -243,6 +244,32 @@ export class AssetsController {
     return this.assets.importStockPhoto(user.orgId, dto.photoId, async (assetId, key, type, mimeType) => {
       await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
     });
+  }
+
+  @Get('stock-videos/search')
+  async searchStockVideos(@Query('query') query?: string, @Query('page') page?: string) {
+    const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    return {
+      configured: this.assets.stockPhotosConfigured(),
+      videos: await this.assets.searchStockVideos(query, pageNum),
+    };
+  }
+
+  @Post('stock-videos/import')
+  importStockVideo(@CurrentUser() user: JwtUser, @Body() dto: ImportStockVideoDto) {
+    return this.assets.importStockVideo(user.orgId, dto.videoId, async (assetId, key, type, mimeType) => {
+      await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
+    });
+  }
+
+  @Get('icons/search')
+  async searchIcons(@Query('query') query?: string, @Query('prefixes') prefixes?: string) {
+    return { icons: await this.assets.searchIcons(query ?? '', (prefixes ?? '').split(',').filter(Boolean)) };
+  }
+
+  @Get('icons/svg')
+  async fetchIconSvg(@Query('icon') icon?: string) {
+    return { svg: await this.assets.fetchIconSvg(icon ?? '') };
   }
 
   @Get(':id')

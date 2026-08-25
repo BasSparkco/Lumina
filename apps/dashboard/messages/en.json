@@ -93,6 +93,29 @@
     "resetToFull": "Reset to full image",
     "zoom": "Zoom"
   },
+  "adjustmentsEditor": {
+    "title": "Adjust image",
+    "reset": "Reset",
+    "duotone": "Duotone",
+    "presets": {
+      "vivid": "Vivid",
+      "blackAndWhite": "B&W",
+      "warm": "Warm",
+      "cool": "Cool",
+      "vintage": "Vintage",
+      "fade": "Fade"
+    },
+    "fields": {
+      "exposure": "Exposure",
+      "brightness": "Brightness",
+      "contrast": "Contrast",
+      "saturation": "Saturation",
+      "vibrance": "Vibrance",
+      "temperature": "Temperature",
+      "tint": "Tint",
+      "hue": "Hue"
+    }
+  },
   "auth": {
     "login": {
       "title": "Sign in to Lumina",
@@ -482,6 +505,14 @@
     "customLength": "Custom length",
     "videoDuration": "Video length"
   },
+  "designer": {
+    "title": "Designer",
+    "subtitle": "Start a new layout or theme. To edit an existing one, open it from Templates.",
+    "newLayout": "New layout",
+    "newLayoutHint": "Arrange screen zones and assign playlists or widgets to each area.",
+    "newTheme": "New theme",
+    "newThemeHint": "Design text, images, colors, and live widgets on one canvas."
+  },
   "layouts": {
     "title": "Layouts",
     "subtitle": "Define screen zones and assign playlists or widgets to each area",
@@ -612,7 +643,8 @@
       "qrForeground": "Foreground color",
       "qrBackground": "Background color",
       "qrSize": "Size (% of zone)"
-    }
+    },
+    "notFound": "Layout not found."
   },
   "themes": {
     "title": "Themes",
@@ -727,6 +759,55 @@
     "stockNotConfigured": "Stock photos aren't set up on this server yet.",
     "stockCredit": "Photos provided by Pexels",
     "importStockFailed": "Couldn't add that photo",
+    "videoSourceExisting": "Existing",
+    "videoSourceUpload": "Upload",
+    "videoSourceStock": "Stock",
+    "stockVideoSearchPlaceholder": "Search free stock videos…",
+    "stockVideoEmpty": "No videos found",
+    "stockVideoNotConfigured": "Stock videos aren't set up on this server yet.",
+    "stockVideoCredit": "Videos provided by Pexels",
+    "importStockVideoFailed": "Couldn't add that video",
+    "icon": "Icon",
+    "changeIcon": "Change icon",
+    "editAdjustments": "Adjust",
+    "animation": {
+      "title": "Animation",
+      "preview": "Preview",
+      "entrance": "Entrance",
+      "emphasis": "Emphasis (looping)",
+      "exit": "Exit",
+      "textReveal": "Text reveal",
+      "durationMs": "Duration (ms)",
+      "delayMs": "Delay (ms)",
+      "intervalMs": "Repeat every (ms)",
+      "speedMsPerUnit": "Speed (ms/step)",
+      "presets": {
+        "none": "None",
+        "fade": "Fade",
+        "slide": "Slide",
+        "zoom": "Zoom"
+      },
+      "directions": {
+        "up": "Up",
+        "down": "Down",
+        "left": "Left",
+        "right": "Right"
+      },
+      "emphasisPresets": {
+        "none": "None",
+        "pulse": "Pulse",
+        "shake": "Shake"
+      },
+      "textRevealPresets": {
+        "none": "None",
+        "typewriter": "Typewriter",
+        "wordByWord": "Word by word"
+      }
+    },
+    "iconSearchPlaceholder": "Search icons…",
+    "iconEmpty": "No icons found",
+    "importIconFailed": "Couldn't add that icon",
+    "iconCredit": "Icons provided by Iconify",
     "noPlaylist": "— No playlist —",
     "widgetType": "Widget",
     "color": "Text color",
@@ -749,6 +830,8 @@
     "fillStyleSolid": "Solid",
     "fillStyleOutline": "Outline",
     "outlineColor": "Outline color",
+    "fillModeSolid": "Solid",
+    "fillModeGradient": "Gradient",
     "strokeWidth": "Stroke width",
     "quickAddShape": "Add shape",
     "quickAdd": "Add",
@@ -798,7 +881,8 @@
       "PLAYLIST": "Playlist",
       "SHAPE": "Shape / color block",
       "BRUSH": "Brush (freehand)",
-      "WIDGET": "Live widget"
+      "WIDGET": "Live widget",
+      "ICON": "Icon"
     },
     "widgetTypes": {
       "PRAYER": "Prayer times",
@@ -817,7 +901,8 @@
       "text": "Text",
       "textMuted": "Muted text",
       "accent": "Accent"
-    }
+    },
+    "notFound": "Theme not found."
   },
   "templates": {
     "title": "Templates"

@@ -44,6 +44,7 @@
     "dotenv": "^17.4.2",
     "file-type": "^22.0.2",
     "ioredis": "^5.11.1",
+    "isomorphic-dompurify": "^3.23.0",
     "multer": "^2.2.0",
     "nestjs-pino": "^4.6.1",
     "passport": "^0.7.0",

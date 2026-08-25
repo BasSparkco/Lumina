@@ -165,9 +165,29 @@ export interface ThemeTypography {
   scale: number;
 }
 
+export interface ThemeGradientFill {
+  type: 'linear';
+  angle: number;
+  from: string;
+  to: string;
+}
+
+export interface ThemeImageAdjustments {
+  exposure: number;
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  vibrance: number;
+  temperature: number;
+  tint: number;
+  hue: number;
+  duotone: { color1: string; color2: string } | null;
+  preset?: string;
+}
+
 export interface ThemeElementStyle {
   color?: string;
-  backgroundColor?: string;
+  backgroundColor?: string | ThemeGradientFill;
   fontFamily?: string;
   fontSizePx?: number;
   fontWeight?: number | string;
@@ -185,6 +205,20 @@ export interface ThemeElementStyle {
   // for pure decoration (an emphasis ring, an arrow painted a color), no media/content of its own.
   shapeFill?: 'solid' | 'outline';
   strokeWidthPx?: number;
+  // IMAGE-kind only: non-destructive color grading — see buildImageFilterCss in @lumina/types.
+  imageAdjustments?: ThemeImageAdjustments;
+}
+
+export type ThemeAnimationEasing = 'linear' | 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out';
+export type ThemeEntranceExitPreset = 'none' | 'fade' | 'slide' | 'zoom';
+export type ThemeSlideDirection = 'up' | 'down' | 'left' | 'right';
+export type ThemeEmphasisPreset = 'none' | 'pulse' | 'shake';
+export type ThemeTextRevealPreset = 'none' | 'typewriter' | 'wordByWord';
+export interface ThemeElementAnimation {
+  entrance?: { preset: ThemeEntranceExitPreset; direction: ThemeSlideDirection; durationMs: number; delayMs: number; easing: ThemeAnimationEasing };
+  emphasis?: { preset: ThemeEmphasisPreset; intervalMs: number };
+  exit?: { preset: ThemeEntranceExitPreset; direction: ThemeSlideDirection; durationMs: number; easing: ThemeAnimationEasing };
+  textReveal?: { preset: ThemeTextRevealPreset; speedMsPerUnit: number };
 }
 
 interface ThemeElementBase {
@@ -200,6 +234,7 @@ interface ThemeElementBase {
   editable: boolean;
   label?: string;
   style: ThemeElementStyle;
+  animation?: ThemeElementAnimation;
 }
 
 // Content shapes as hydrated by the API — assetId/playlistId refs are resolved to a usable
@@ -220,7 +255,8 @@ export type HydratedThemeElement =
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null; playlist: Playlist | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
   | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[]; raster?: { dataUrl: string; width: number; height: number } } })
-  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE'; widgetConfig: Record<string, unknown> } });
+  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE'; widgetConfig: Record<string, unknown> } })
+  | (ThemeElementBase & { kind: 'ICON'; content: { iconId: string; svg: string } });
 
 export interface HydratedTheme {
   id: string;

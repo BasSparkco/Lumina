@@ -3,7 +3,7 @@ import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 
-// Layouts was renamed to Designer — this route only exists to keep old bookmarks/links working,
+// Layouts was renamed to Templates — this route only exists to keep old bookmarks/links working,
 // same pattern as the /themes redirect below it.
 function LayoutsRedirectPageInner() {
   const router = useRouter();
@@ -11,7 +11,7 @@ function LayoutsRedirectPageInner() {
   const searchParams = useSearchParams();
   useEffect(() => {
     const tab = searchParams.get('tab');
-    router.replace(`/${locale}/designer${tab ? `?tab=${tab}` : ''}`);
+    router.replace(`/${locale}/templates${tab ? `?tab=${tab}` : ''}`);
   }, [router, locale, searchParams]);
   return null;
 }

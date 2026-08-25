@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
   LayoutTemplate,
-  Palette,
   Plus,
   Trash2,
   Pencil,
@@ -156,7 +156,17 @@ function toZoneInputs(layout: Layout): ZoneInput[] {
   );
 }
 
-export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 'themes') => void }) {
+// `mode: 'list'` renders the browsable grid (used on the Templates page); `mode: 'edit'` renders
+// only the full-page canvas editor for one layout, addressed by `targetId` — either an existing
+// layout's id or the literal 'new' (used on the Designer page, e.g. /designer?type=layout&id=…).
+type LayoutsSectionProps = { mode: 'list' } | { mode: 'edit'; targetId: string };
+
+export function LayoutsSection(props: LayoutsSectionProps) {
+  const { mode } = props;
+  const targetId = mode === 'edit' ? props.targetId : null;
+  const router = useRouter();
+  const locale = useLocale();
+  const tn = useTranslations('nav');
   const qc = useQueryClient();
   const { user } = useAuth();
   const { canEditContent } = usePermissions();
@@ -167,7 +177,6 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
   const tc = useTranslations('common');
   const tCrop = useTranslations('cropEditor');
   const ta = useTranslations('auditLog');
-  const tNav = useTranslations('nav');
   const { data: layouts = [], isLoading } = useQuery({
     queryKey: ['layouts'],
     queryFn: layoutsApi.list,
@@ -205,11 +214,30 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
 
   // Lets the app shell warn before navigating away mid-edit — canUndo already tracks "at least
   // one change committed since this session opened" so it doubles as the dirty flag for free.
-  const { setDirty } = useEditorDirty();
+  const { setDirty, guardNavigation } = useEditorDirty();
   useEffect(() => {
     setDirty(editing !== null && canUndo);
   }, [editing, canUndo, setDirty]);
   useEffect(() => () => setDirty(false), [setDirty]);
+
+  // Drives `editing` from the URL in edit mode — the Designer page addresses a specific layout
+  // via ?id= (or the 'new' sentinel). Adjusted during render (like `prevEditing` below) rather
+  // than in an effect, so opening the editor doesn't cost an extra render pass, and so a
+  // background refetch of `layouts` (e.g. after a save elsewhere) can't clobber in-progress edits
+  // — `resolvedTargetId` only advances once a matching layout has actually been opened.
+  const [resolvedTargetId, setResolvedTargetId] = useState<string | null>(null);
+  if (mode === 'edit' && targetId && targetId !== resolvedTargetId) {
+    if (targetId === 'new') {
+      setResolvedTargetId(targetId);
+      openNew();
+    } else if (!isLoading) {
+      const found = layouts.find((l) => l.id === targetId);
+      if (found) {
+        setResolvedTargetId(targetId);
+        openEdit(found);
+      }
+    }
+  }
 
   // A zone must be selected (single click) before it can be dragged/resized/rotated — unless
   // requireSelectToEdit is off, or the zone is locked (editable: false), which always wins.
@@ -280,7 +308,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
         userEmail: user?.email ?? '',
       });
       void qc.invalidateQueries({ queryKey: ['layouts'] });
-      setEditing(null);
+      router.push(`/${locale}/templates`);
     },
   });
 
@@ -295,7 +323,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
         userEmail: user?.email ?? '',
       });
       void qc.invalidateQueries({ queryKey: ['layouts'] });
-      setEditing(null);
+      router.push(`/${locale}/templates`);
     },
   });
 
@@ -492,31 +520,40 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
     // editor panel below, and widening the page cap to match keeps the editing area at least as
     // big as its normal (no-sidebar) size instead of just eating into the original 1400px.
     <div className={`mx-auto max-w-[1400px] p-8 ${editing ? 'min-[1440px]:max-w-[2400px]' : ''}`}>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+      {mode === 'list' && (
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+          </div>
+          {canEditContent && (
+            <button
+              onClick={() => router.push(`/${locale}/designer?type=layout`)}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" /> {t('newLayout')}
+            </button>
+          )}
         </div>
-        {canEditContent && (
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            <Plus className="h-4 w-4" /> {t('newLayout')}
-          </button>
-        )}
-      </div>
+      )}
 
-      {!editing && (
-        <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
-          <button onClick={() => onSelectTab('layouts')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors border-indigo-600 text-indigo-600 dark:text-indigo-400">
-            <LayoutTemplate className="w-4 h-4" /> {tNav('layouts')}
-          </button>
-          <button onClick={() => onSelectTab('themes')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-            <Palette className="w-4 h-4" /> {tNav('themes')}
-          </button>
+      {mode === 'edit' && (
+        <button
+          onClick={() =>
+            guardNavigation(tn('unsavedChangesConfirm'), () => router.push(`/${locale}/templates`))
+          }
+          className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          &larr; {tn('templates')}
+        </button>
+      )}
+
+      {mode === 'edit' && isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+
+      {mode === 'edit' && !isLoading && !editing && targetId !== 'new' && (
+        <div className="py-16 text-center text-gray-400">
+          <LayoutTemplate className="mx-auto mb-3 h-10 w-10 opacity-30" />
+          <p className="text-sm">{t('notFound')}</p>
         </div>
       )}
 
@@ -586,7 +623,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
               {saveAsAssetMut.isPending ? t('savingAsset') : t('saveAsAsset')}
             </button>
             <button
-              onClick={() => setEditing(null)}
+              onClick={() => router.push(`/${locale}/templates`)}
               className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               {tc('cancel')}
@@ -1132,7 +1169,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
         </div>
       )}
 
-      {!editing && layouts.length > 0 && (
+      {mode === 'list' && !editing && layouts.length > 0 && (
         <div className="relative mb-5 max-w-sm">
           <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -1144,16 +1181,16 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {mode === 'list' && isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
 
-      {!isLoading && layouts.length === 0 && !editing && (
+      {mode === 'list' && !isLoading && layouts.length === 0 && !editing && (
         <div className="py-16 text-center text-gray-400">
           <LayoutTemplate className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
-      {!isLoading && !editing && layouts.length > 0 &&
+      {mode === 'list' && !isLoading && !editing && layouts.length > 0 &&
         layouts.filter((l) => l.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
         <div className="py-16 text-center text-gray-400">
           <Search className="mx-auto mb-3 h-10 w-10 opacity-30" />
@@ -1161,6 +1198,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
         </div>
       )}
 
+      {mode === 'list' && (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {layouts.filter((l) => l.name.toLowerCase().includes(search.toLowerCase())).map((layout: Layout) => {
           const isEditingThis = editing !== null && editing !== 'new' && editing.id === layout.id;
@@ -1221,7 +1259,9 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
 
               {/* Mini preview — click to edit */}
               <button
-                onClick={() => canEditContent && openEdit(layout)}
+                onClick={() =>
+                  canEditContent && router.push(`/${locale}/designer?type=layout&id=${layout.id}`)
+                }
                 disabled={!canEditContent}
                 title={canEditContent ? t('clickToEdit') : undefined}
                 className="group relative block w-full disabled:cursor-default"
@@ -1328,6 +1368,7 @@ export function LayoutsSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' |
           );
         })}
       </div>
+      )}
     </div>
   );
 }

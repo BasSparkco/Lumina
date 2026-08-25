@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { resolveThemeColor, fontStack, shapeClipStyle, brushPolylinePoints, mediaCropStyle } from '@lumina/types';
-import { ShapeOutline } from '@lumina/ui';
+import { resolveThemeColor, resolveThemeFill, resolveThemeFillColor, fontStack, shapeClipStyle, brushPolylinePoints, mediaCropStyle, buildImageFilterCss, needsSvgImageFilter, buildEntranceAnimationStyle, buildEmphasisAnimationStyle, combineAnimationStyles } from '@lumina/types';
+import { ShapeOutline, ImageAdjustmentFilter, ElementAnimationStyles, useTextReveal } from '@lumina/ui';
 import type { HydratedTheme, HydratedThemeElement, PlayerState } from '../lib/api';
 import ZonePlayer, { FONT_SIZE_CLAMPS } from './ZonePlayer';
 import LiveWidget from './LiveWidget';
@@ -26,7 +26,13 @@ export default function ThemeRenderer({ theme, state, onAssetChange }: Props) {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', background: palette.background, overflow: 'hidden' }}>
+      <ElementAnimationStyles />
       {sorted.map(el => (
+        // Two nested divs, not one: entrance/emphasis animate via `transform` (translate/scale)
+        // on the outer div, while rotation is its own static `transform: rotate()` on the inner
+        // one — on the same element, the animation's `transform` keyframes would overwrite (not
+        // compose with) the rotation for the animation's duration, and permanently wipe it once
+        // `animation-fill-mode: both` locks in the keyframe's final value.
         <div
           key={el.id}
           style={{
@@ -36,12 +42,23 @@ export default function ThemeRenderer({ theme, state, onAssetChange }: Props) {
             width: `${el.width}%`,
             height: `${el.height}%`,
             zIndex: el.zIndex,
-            overflow: 'hidden',
-            transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
-            ...shapeClipStyle(el.style.shape),
+            ...combineAnimationStyles(
+              buildEntranceAnimationStyle(el.animation?.entrance),
+              buildEmphasisAnimationStyle(el.animation?.emphasis),
+            ),
           }}
         >
-          <ThemeElementView element={el} theme={theme} state={state} onAssetChange={onAssetChange} />
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+              ...shapeClipStyle(el.style.shape),
+            }}
+          >
+            <ThemeElementView element={el} theme={theme} state={state} onAssetChange={onAssetChange} />
+          </div>
         </div>
       ))}
     </div>
@@ -57,7 +74,14 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
   const { palette, typography } = theme;
   const { style } = element;
   const color = resolveThemeColor(style.color, palette);
-  const backgroundColor = resolveThemeColor(style.backgroundColor, palette);
+  const backgroundFill = resolveThemeFill(style.backgroundColor, palette);
+  const backgroundColor = resolveThemeFillColor(style.backgroundColor, palette);
+  // Called unconditionally (rules of hooks) even for non-TEXT elements / asset-backed TEXT
+  // (which doesn't support reveal — see the TEXT case below), with inert '' / undefined inputs.
+  const revealedText = useTextReveal(
+    element.kind === 'TEXT' ? element.content.text : '',
+    element.kind === 'TEXT' ? element.animation?.textReveal : undefined,
+  );
 
   switch (element.kind) {
     case 'TEXT': {
@@ -108,7 +132,7 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
       }
       // translations are stored per-element for a future per-screen locale setting; today
       // the primary `text` is what renders, same as every other content field.
-      const text = element.content.text;
+      const text = revealedText;
       return (
         <div
           dir={style.direction ?? 'auto'}
@@ -130,16 +154,25 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
         </div>
       );
     }
-    case 'IMAGE':
+    case 'IMAGE': {
+      const svgFilterId = `img-adj-${element.id}`;
+      const filter = [
+        style.imageAdjustments && needsSvgImageFilter(style.imageAdjustments) ? `url(#${svgFilterId})` : null,
+        buildImageFilterCss(style.imageAdjustments),
+      ].filter(Boolean).join(' ') || undefined;
       return element.content.url ? (
-        <img
-          src={element.content.url}
-          alt={element.label ?? ''}
-          style={{ width: '100%', height: '100%', objectFit: style.objectFit ?? 'fill', borderRadius: style.borderRadius, opacity: style.opacity, ...mediaCropStyle(style) }}
-        />
+        <>
+          {style.imageAdjustments && <ImageAdjustmentFilter id={svgFilterId} adjustments={style.imageAdjustments} />}
+          <img
+            src={element.content.url}
+            alt={element.label ?? ''}
+            style={{ width: '100%', height: '100%', objectFit: style.objectFit ?? 'fill', borderRadius: style.borderRadius, opacity: style.opacity, filter, ...mediaCropStyle(style) }}
+          />
+        </>
       ) : (
         <ThemePlaceholder label={element.label ?? 'Image'} palette={palette} />
       );
+    }
     case 'VIDEO':
       return element.content.url ? (
         <video
@@ -175,7 +208,7 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
       if (style.shapeFill === 'outline') {
         return <ShapeOutline shape={style.shape} color={backgroundColor ?? palette.text} strokeWidthPx={style.strokeWidthPx} opacity={style.opacity} />;
       }
-      return <div style={{ width: '100%', height: '100%', backgroundColor: backgroundColor ?? 'transparent', borderRadius: style.borderRadius, opacity: style.opacity }} />;
+      return <div style={{ width: '100%', height: '100%', background: backgroundFill ?? 'transparent', borderRadius: style.borderRadius, opacity: style.opacity }} />;
     case 'BRUSH':
       // The paint layer's raster bitmap takes priority — every theme drawn with the current
       // editor has this. `points` only still renders for themes saved before the raster paint
@@ -201,6 +234,17 @@ function ThemeElementView({ element, theme, state, onAssetChange }: {
       );
     case 'WIDGET':
       return <LiveWidget widgetType={element.content.widgetType} widgetConfig={element.content.widgetConfig} state={state} />;
+    case 'ICON':
+      // Self-contained (sanitized SVG stored inline at pick time in the editor, see the ICON
+      // element kind in @lumina/types) — no assetId/hydration, so playback never depends on
+      // Iconify being reachable. Recolored via `color`, same as TEXT — the stored markup uses
+      // currentColor for its fill/stroke.
+      return (
+        <div
+          style={{ width: '100%', height: '100%', color: color ?? palette.text, opacity: style.opacity }}
+          dangerouslySetInnerHTML={{ __html: element.content.svg }}
+        />
+      );
     default:
       return null;
   }

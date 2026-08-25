@@ -37,3 +37,6 @@ coverage
 # Prisma
 apps/api/prisma/migrations/*.sql.bak
 packages/db/generated
+
+# Deploy backups
+backups/

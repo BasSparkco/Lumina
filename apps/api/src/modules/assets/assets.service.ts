@@ -1,10 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import DOMPurify from 'isomorphic-dompurify';
 import type { AssetCategory, AssetType, TextSize, TickerDirection } from '@lumina/db';
 import { DEFAULT_FONT_ID } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
+
+// The icon libraries the dashboard's icon picker offers — kept as an allow-list (rather than
+// letting a client request any of Iconify's 150+ collections) so results stay to the curated,
+// production-quality sets actually asked for: Material Design, Phosphor, Tabler, Heroicons,
+// brand logos (simple-icons, devicon), and an emoji set (twemoji).
+export const ICONIFY_ALLOWED_PREFIXES = new Set(['mdi', 'ph', 'tabler', 'heroicons', 'simple-icons', 'devicon', 'twemoji']);
 
 // Server-side defaults applied whenever a TEXT asset's style isn't specified — keeps the DB
 // column meaning "explicitly chosen" vs. "use the default," while callers (dashboard, player)
@@ -51,6 +58,21 @@ export const ALLOWED_MIME: Record<string, AssetType> = {
   'application/msword': 'DOCUMENT',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCUMENT',
 };
+
+// Picks one Pexels video_files entry to actually download — prefers the smallest 'hd' variant
+// (>=1280px wide) over 'sd' or the (often huge) original-quality file, to keep imports fast and
+// storage bounded while still looking good on a signage display. Falls back to whatever's
+// smallest by width if no 'hd' file is present.
+function pickVideoFile(
+  files: { link: string; quality: string | null; width: number | null; height: number | null }[],
+): string | undefined {
+  const byWidth = (a: typeof files[number], b: typeof files[number]) => (a.width ?? Infinity) - (b.width ?? Infinity);
+  const hd = files.filter(f => f.quality === 'hd' && (f.width ?? 0) >= 1280).sort(byWidth);
+  if (hd[0]) return hd[0].link;
+  const sd = files.filter(f => f.quality === 'sd').sort(byWidth);
+  if (sd[0]) return sd[0].link;
+  return [...files].sort(byWidth)[0]?.link;
+}
 
 @Injectable()
 export class AssetsService {
@@ -606,6 +628,149 @@ export class AssetsService {
 
     await queueThumbnail(asset.id, key, 'IMAGE', detected.mime);
     return this.toDto(asset, null);
+  }
+
+  /** Proxies Pexels' video search server-side — same PEXELS_API_KEY as stock photos, same
+   * "key never reaches the browser" reasoning as searchStockPhotos above. */
+  async searchStockVideos(query: string | undefined, page: number) {
+    const apiKey = this.config.get<string>('PEXELS_API_KEY');
+    if (!apiKey) return [];
+
+    const endpoint = query?.trim()
+      ? `https://api.pexels.com/videos/search?query=${encodeURIComponent(query.trim())}&per_page=24&page=${page}`
+      : `https://api.pexels.com/videos/popular?per_page=24&page=${page}`;
+
+    const res = await fetch(endpoint, { headers: { Authorization: apiKey } });
+    if (!res.ok) throw new BadRequestException('Stock video search is temporarily unavailable');
+    const data = (await res.json()) as {
+      videos: {
+        id: number; width: number; height: number; duration: number;
+        image: string;
+        user: { name: string; url: string };
+        video_files: { link: string; quality: string | null; width: number | null; height: number | null }[];
+      }[];
+    };
+
+    return data.videos.map(v => ({
+      id: v.id,
+      thumbnailUrl: v.image,
+      previewUrl: pickVideoFile(v.video_files),
+      width: v.width,
+      height: v.height,
+      duration: v.duration,
+      photographer: v.user.name,
+      photographerUrl: v.user.url,
+    }));
+  }
+
+  /**
+   * Imports one Pexels video into the org's own assets — mirrors importStockPhoto above,
+   * including re-looking up the video by id server-side rather than trusting a client-supplied
+   * URL, and capping the download size (larger than the photo cap: video files run bigger).
+   */
+  async importStockVideo(
+    orgId: string,
+    videoId: number,
+    queueThumbnail: (assetId: string, key: string, type: AssetType, mimeType: string) => Promise<void>,
+  ) {
+    const apiKey = this.config.get<string>('PEXELS_API_KEY');
+    if (!apiKey) throw new BadRequestException('Stock videos are not configured on this server');
+
+    const videoRes = await fetch(`https://api.pexels.com/videos/videos/${videoId}`, { headers: { Authorization: apiKey } });
+    if (!videoRes.ok) throw new BadRequestException("Couldn't find that stock video");
+    const video = (await videoRes.json()) as {
+      user: { name: string };
+      video_files: { link: string; quality: string | null; width: number | null; height: number | null }[];
+    };
+
+    const fileUrl = pickVideoFile(video.video_files);
+    if (!fileUrl) throw new BadRequestException("That stock video doesn't have a downloadable file");
+
+    const fileRes = await fetch(fileUrl);
+    if (!fileRes.ok) throw new BadRequestException("Couldn't download that stock video");
+    const contentLength = Number(fileRes.headers.get('content-length') ?? 0);
+    if (contentLength > 150 * 1024 * 1024) throw new BadRequestException('That stock video is too large to import');
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detected = await fileTypeFromBuffer(buffer);
+    const assetType = detected ? ALLOWED_MIME[detected.mime] : undefined;
+    if (!detected || assetType !== 'VIDEO') {
+      throw new BadRequestException("That stock video doesn't look like a valid video");
+    }
+
+    const key = `${orgId}/assets/${crypto.randomUUID()}.${detected.ext}`;
+    await this.storage.upload(key, buffer, detected.mime);
+
+    const asset = await this.prisma.asset.create({
+      data: {
+        name: `Stock video by ${video.user.name}`,
+        type: 'VIDEO',
+        mimeType: detected.mime,
+        storageKey: key,
+        sizeBytes: buffer.length,
+        category: 'VIDEO_LOOP',
+        tags: ['pexels'],
+        organizationId: orgId,
+        status: 'PROCESSING',
+      },
+    });
+
+    await queueThumbnail(asset.id, key, 'VIDEO', detected.mime);
+    return this.toDto(asset, null);
+  }
+
+  /**
+   * Searches Iconify's free public API (no key required — it's a keyless, rate-limited CDN) for
+   * icons across a curated set of libraries, so "search icons" doesn't surface Iconify's entire
+   * 200k+-icon catalog across hundreds of obscure collections. Only icon ids come back here (the
+   * dashboard renders search-result thumbnails directly from Iconify's CDN as plain <img>s,
+   * which is safe — a browser never executes script from an <img src> even if the response were
+   * SVG with embedded script); the actual SVG markup is only fetched, sanitized, and stored once
+   * the user picks one, via fetchIconSvg below.
+   */
+  async searchIcons(query: string, prefixes: string[]) {
+    const allowed = prefixes.filter(p => ICONIFY_ALLOWED_PREFIXES.has(p));
+    if (!query.trim() || allowed.length === 0) return [];
+
+    const res = await fetch(
+      `https://api.iconify.design/search?query=${encodeURIComponent(query.trim())}&prefixes=${allowed.join(',')}&limit=64`,
+    );
+    if (!res.ok) throw new BadRequestException('Icon search is temporarily unavailable');
+    const data = (await res.json()) as { icons: string[] };
+    return data.icons;
+  }
+
+  /**
+   * Fetches one icon's SVG from Iconify server-side and sanitizes it before it's ever stored on
+   * a theme element or rendered (via dangerouslySetInnerHTML) in the dashboard/player — Iconify's
+   * catalog is curated and generally trustworthy, but this endpoint accepts a client-supplied
+   * icon id, so the response is treated as untrusted input regardless of the source. Storing the
+   * sanitized markup directly on the element (rather than as an Asset row) means kiosk playback
+   * never depends on Iconify's availability again after the icon is picked.
+   */
+  async fetchIconSvg(iconId: string): Promise<string> {
+    const match = /^([a-z0-9-]+):([a-z0-9-]+)$/.exec(iconId);
+    if (!match || !ICONIFY_ALLOWED_PREFIXES.has(match[1]!)) {
+      throw new BadRequestException('Unknown icon');
+    }
+    const [, prefix, name] = match;
+
+    const res = await fetch(`https://api.iconify.design/${prefix}/${name}.svg`);
+    if (!res.ok) throw new BadRequestException("Couldn't find that icon");
+    const raw = await res.text();
+    if (!raw.trimStart().startsWith('<svg')) throw new BadRequestException("That doesn't look like an icon");
+
+    const sanitized = DOMPurify.sanitize(raw, { USE_PROFILES: { svg: true, svgFilters: true } });
+    if (!sanitized) throw new BadRequestException("That icon couldn't be imported");
+
+    // Iconify's raw SVGs are sized in `em` units (e.g. width="1em" height="1em"), meant for
+    // inline text use — replaced with 100%/100% so the icon fills whatever box the theme element
+    // gives it (same box model as every other element kind) instead of rendering at ~1 line-height.
+    return sanitized.replace(/^<svg([^>]*)>/, (_full, attrs: string) => {
+      const stripped = attrs.replace(/\s(width|height)="[^"]*"/gi, '');
+      return `<svg${stripped} width="100%" height="100%">`;
+    });
   }
 
   async findOne(orgId: string, id: string) {

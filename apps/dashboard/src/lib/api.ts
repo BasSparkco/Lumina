@@ -277,6 +277,19 @@ export const assetsApi = {
   },
   importStockPhoto: (photoId: number) =>
     req<Asset>('/assets/stock/import', { method: 'POST', body: JSON.stringify({ photoId }) }),
+  searchStockVideos: (params?: { query?: string; page?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.query) qs.set('query', params.query);
+    if (params?.page) qs.set('page', String(params.page));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<{ configured: boolean; videos: StockVideo[] }>(`/assets/stock-videos/search${suffix}`);
+  },
+  importStockVideo: (videoId: number) =>
+    req<Asset>('/assets/stock-videos/import', { method: 'POST', body: JSON.stringify({ videoId }) }),
+  searchIcons: (query: string, prefixes: string[]) =>
+    req<{ icons: string[] }>(`/assets/icons/search?query=${encodeURIComponent(query)}&prefixes=${prefixes.join(',')}`),
+  fetchIconSvg: (iconId: string) =>
+    req<{ svg: string }>(`/assets/icons/svg?icon=${encodeURIComponent(iconId)}`),
   createApp: (providerId: string, sourceUrl: string, name?: string) =>
     req<Asset>('/assets/apps', { method: 'POST', body: JSON.stringify({ providerId, sourceUrl, name }) }),
   createAppPlaylist: (providerId: string, name: string, playbackOrder: AppPlaybackOrder, sourceUrls: string[]) =>
@@ -532,6 +545,17 @@ export interface StockPhoto {
   photographerUrl: string;
   alt: string | null;
 }
+// A Pexels video search result — same "not yet an Asset" model as StockPhoto above.
+export interface StockVideo {
+  id: number;
+  thumbnailUrl: string;
+  previewUrl: string;
+  width: number;
+  height: number;
+  duration: number;
+  photographer: string;
+  photographerUrl: string;
+}
 export interface Asset {
   id: string; name: string; type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT' | 'APP'; mimeType: string;
   sizeBytes: number; status: string; url: string | null; thumbnailUrl: string | null;
@@ -579,7 +603,7 @@ export interface Playlist extends PlaylistSummary {
 
 // ── Themes ──────────────────────────────────────────────────────────────────
 export type ThemeCategory = 'RESTAURANT_MENU' | 'RETAIL_PROMO' | 'HOTEL_LOBBY' | 'CLINIC_WAITING' | 'MOSQUE' | 'GENERIC';
-export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'PLAYLIST' | 'SHAPE' | 'BRUSH' | 'WIDGET';
+export type ThemeElementKind = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'PLAYLIST' | 'SHAPE' | 'BRUSH' | 'WIDGET' | 'ICON';
 export interface ThemeBrushPoint { x: number; y: number; }
 export type ThemeWidgetType = 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 
@@ -589,8 +613,15 @@ export interface ThemePalette {
 }
 export interface ThemeTypography { headingFont: string; bodyFont: string; baseSizePx: number; scale: number; }
 
+export interface ThemeGradientFill { type: 'linear'; angle: number; from: string; to: string; }
+export interface ThemeImageAdjustments {
+  exposure: number; brightness: number; contrast: number; saturation: number; vibrance: number;
+  temperature: number; tint: number; hue: number;
+  duotone: { color1: string; color2: string } | null;
+  preset?: string;
+}
 export interface ThemeElementStyle {
-  color?: string; backgroundColor?: string; fontFamily?: string;
+  color?: string; backgroundColor?: string | ThemeGradientFill; fontFamily?: string;
   fontSizePx?: number; fontWeight?: number | string; textAlign?: 'left' | 'center' | 'right';
   direction?: 'ltr' | 'rtl' | 'auto'; borderRadius?: number; opacity?: number;
   objectFit?: 'contain' | 'cover' | 'fill';
@@ -603,12 +634,26 @@ export interface ThemeElementStyle {
   // for pure decoration (an emphasis ring, an arrow painted a color), no media/content of its own.
   shapeFill?: 'solid' | 'outline';
   strokeWidthPx?: number;
+  // IMAGE-kind only: non-destructive color grading — see buildImageFilterCss in @lumina/types.
+  imageAdjustments?: ThemeImageAdjustments;
+}
+export type ThemeAnimationEasing = 'linear' | 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out';
+export type ThemeEntranceExitPreset = 'none' | 'fade' | 'slide' | 'zoom';
+export type ThemeSlideDirection = 'up' | 'down' | 'left' | 'right';
+export type ThemeEmphasisPreset = 'none' | 'pulse' | 'shake';
+export type ThemeTextRevealPreset = 'none' | 'typewriter' | 'wordByWord';
+export interface ThemeElementAnimation {
+  entrance?: { preset: ThemeEntranceExitPreset; direction: ThemeSlideDirection; durationMs: number; delayMs: number; easing: ThemeAnimationEasing };
+  emphasis?: { preset: ThemeEmphasisPreset; intervalMs: number };
+  exit?: { preset: ThemeEntranceExitPreset; direction: ThemeSlideDirection; durationMs: number; easing: ThemeAnimationEasing };
+  textReveal?: { preset: ThemeTextRevealPreset; speedMsPerUnit: number };
 }
 interface ThemeElementBase {
   id: string; x: number; y: number; width: number; height: number; zIndex: number;
   // Degrees, clockwise, about the element's own center.
   rotation: number;
   editable: boolean; label?: string; style: ThemeElementStyle;
+  animation?: ThemeElementAnimation;
 }
 export type ThemeElement =
   | (ThemeElementBase & { kind: 'TEXT'; content: { text: string; translations?: Record<string, string>; assetId?: string | null } })
@@ -618,7 +663,8 @@ export type ThemeElement =
   | (ThemeElementBase & { kind: 'PLAYLIST'; content: { playlistId: string | null } })
   | (ThemeElementBase & { kind: 'SHAPE'; content: Record<string, never> })
   | (ThemeElementBase & { kind: 'BRUSH'; content: { points: ThemeBrushPoint[]; raster?: { dataUrl: string; width: number; height: number } } })
-  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: ThemeWidgetType; widgetConfig: Record<string, unknown> } });
+  | (ThemeElementBase & { kind: 'WIDGET'; content: { widgetType: ThemeWidgetType; widgetConfig: Record<string, unknown> } })
+  | (ThemeElementBase & { kind: 'ICON'; content: { iconId: string; svg: string } });
 
 export interface ThemeInput {
   name: string; category: ThemeCategory; aspectRatio?: string;

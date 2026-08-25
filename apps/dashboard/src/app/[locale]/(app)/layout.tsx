@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -61,13 +61,23 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // and auto-collapse the sidebar on entering the canvas-heavy Designer so it has more room.
   // Adjusting state during render (rather than in an effect) avoids an extra post-navigation
   // render pass. Collapsing only fires on the transition into /designer, not on every render
-  // while there, so it doesn't fight a user who manually re-expands mid-session.
+  // while there, so it doesn't fight a user who manually re-expands mid-session. If it was open
+  // when they entered, restoreOnExitRef remembers to reopen it on the way out; a manual toggle
+  // while inside the Designer cancels that so leaving doesn't override the user's own choice.
+  const restoreOnExitRef = useRef(false);
   const [prevPath, setPrevPath] = useState(path);
   if (path !== prevPath) {
-    const enteringDesigner = path.includes('/designer') && !prevPath.includes('/designer');
+    const wasInDesigner = prevPath.includes('/designer');
+    const isInDesigner = path.includes('/designer');
     setPrevPath(path);
     setMobileOpen(false);
-    if (enteringDesigner) setCollapsed(true);
+    if (isInDesigner && !wasInDesigner) {
+      restoreOnExitRef.current = !collapsed;
+      if (!collapsed) setCollapsed(true);
+    } else if (wasInDesigner && !isInDesigner) {
+      if (restoreOnExitRef.current) setCollapsed(false);
+      restoreOnExitRef.current = false;
+    }
   }
 
   // Shares its query keys with the Playlists page's own fetches, so this doesn't add an extra
@@ -110,7 +120,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2 px-5 py-5 border-b border-gray-100 dark:border-gray-800">
           <Tv className="w-5 h-5 text-indigo-600 shrink-0" />
           {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Lumina</span>}
-          <button onClick={() => setCollapsed(!collapsed)} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
+          <button onClick={() => { restoreOnExitRef.current = false; setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
             className="ms-auto hidden md:block text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
             {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
           </button>

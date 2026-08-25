@@ -2,11 +2,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
   Palette,
-  LayoutTemplate,
   Plus,
   Trash2,
   Pencil,
@@ -40,6 +40,9 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Layers,
+  Sticker,
+  SlidersHorizontal,
+  Play,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -56,6 +59,13 @@ import {
   type ThemeTypography,
   type ThemeWidgetType,
   type ElementShape,
+  type ThemeGradientFill,
+  type ThemeElementAnimation,
+  type ThemeEntranceExitPreset,
+  type ThemeSlideDirection,
+  type ThemeEmphasisPreset,
+  type ThemeTextRevealPreset,
+  type ThemeAnimationEasing,
 } from '@/lib/api';
 import { EditorAddSidebar } from '@/components/EditorAddSidebar';
 import { LayersPanel } from '@/components/LayersPanel';
@@ -70,11 +80,14 @@ import { useAuditLog } from '@/hooks/useAuditLog';
 import { useEditorHistory } from '@/hooks/useEditorHistory';
 import { AssetPicker } from '@/components/AssetPicker';
 import { ImagePicker } from '@/components/ImagePicker';
+import { VideoPicker } from '@/components/VideoPicker';
+import { IconPicker } from '@/components/IconPicker';
 import { CropEditor } from '@/components/CropEditor';
+import { AdjustmentsEditor } from '@/components/AdjustmentsEditor';
 import { FontPicker, fontStack } from '@/components/FontPicker';
 import { WidgetConfigFields } from '@/components/WidgetConfigFields';
 import '@/lib/fontImports';
-import { DEFAULT_FONT_ID, shapeClipStyle, brushPolylinePoints, resolveThemeColor } from '@lumina/types';
+import { DEFAULT_FONT_ID, shapeClipStyle, brushPolylinePoints, resolveThemeColor, resolveThemeFill, resolveThemeFillColor } from '@lumina/types';
 import { ShapeOutline } from '@lumina/ui';
 import { clampPct } from '@/lib/editorZoom';
 
@@ -100,8 +113,18 @@ const ELEMENT_KIND_VALUES: ThemeElementKind[] = [
   'SHAPE',
   'BRUSH',
   'WIDGET',
+  'ICON',
 ];
 const ELEMENT_SHAPES: ElementShape[] = ['rectangle', 'rounded', 'circle', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arrow'];
+const ENTRANCE_EXIT_PRESETS: ThemeEntranceExitPreset[] = ['none', 'fade', 'slide', 'zoom'];
+const SLIDE_DIRECTIONS: ThemeSlideDirection[] = ['up', 'down', 'left', 'right'];
+const EMPHASIS_PRESETS: ThemeEmphasisPreset[] = ['none', 'pulse', 'shake'];
+const TEXT_REVEAL_PRESETS: ThemeTextRevealPreset[] = ['none', 'typewriter', 'wordByWord'];
+const ANIMATION_EASINGS: ThemeAnimationEasing[] = ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out'];
+const DEFAULT_ENTRANCE: NonNullable<ThemeElementAnimation['entrance']> = { preset: 'none', direction: 'up', durationMs: 600, delayMs: 0, easing: 'ease-out' };
+const DEFAULT_EMPHASIS: NonNullable<ThemeElementAnimation['emphasis']> = { preset: 'none', intervalMs: 4000 };
+const DEFAULT_EXIT: NonNullable<ThemeElementAnimation['exit']> = { preset: 'none', direction: 'up', durationMs: 600, easing: 'ease-in' };
+const DEFAULT_TEXT_REVEAL: NonNullable<ThemeElementAnimation['textReveal']> = { preset: 'none', speedMsPerUnit: 60 };
 const WIDGET_TYPE_VALUES: ThemeWidgetType[] = [
   'PRAYER',
   'WEATHER',
@@ -128,6 +151,7 @@ const ELEMENT_KIND_ICONS: Record<Exclude<ThemeElementKind, 'WIDGET'>, LucideIcon
   PLAYLIST: ListVideo,
   SHAPE: Shapes,
   BRUSH: Brush,
+  ICON: Sticker,
 };
 const WIDGET_TYPE_ICONS: Record<ThemeWidgetType, LucideIcon> = {
   PRAYER: MoonStar,
@@ -148,6 +172,7 @@ export const KIND_COLORS: Record<ThemeElementKind, string> = {
   SHAPE: '#64748b',
   BRUSH: '#14b8a6',
   WIDGET: '#f59e0b',
+  ICON: '#ec4899',
 };
 
 // `aspectRatio` is stored as e.g. "16:9" — parsed to a ratio so the responsive canvas below can
@@ -189,6 +214,8 @@ function defaultContentForKind(kind: ThemeElementKind): ThemeElement['content'] 
       return { points: [] };
     case 'WIDGET':
       return { widgetType: 'PRAYER', widgetConfig: {} };
+    case 'ICON':
+      return { iconId: '', svg: '' };
   }
 }
 export function newElementId() {
@@ -424,8 +451,55 @@ function ImageQuickAddPanel({ onAdd }: { onAdd: (assetId: string) => void }) {
   );
 }
 
-// Quick-add panel for Video/Document — same plain asset dropdown as those elements' cards use
-// (neither offers upload/paste there, so the quick panel doesn't invent options the card lacks).
+// Quick-add panel for the Icon item — searches Iconify and creates the element the moment an
+// icon is picked, same auto-confirm behavior as the other quick-add panels.
+function IconQuickAddPanel({ onAdd }: { onAdd: (iconId: string, svg: string) => void }) {
+  const t = useTranslations('themes');
+  return (
+    <IconPicker
+      onPick={onAdd}
+      labels={{
+        searchPlaceholder: t('iconSearchPlaceholder'),
+        empty: t('iconEmpty'),
+        importFailed: t('importIconFailed'),
+        credit: t('iconCredit'),
+      }}
+    />
+  );
+}
+
+// Quick-add panel for the Video item — same existing/upload/stock picker as the element card
+// uses (see ImageQuickAddPanel above for the same pattern on IMAGE).
+function VideoQuickAddPanel({ onAdd }: { onAdd: (assetId: string) => void }) {
+  const t = useTranslations('themes');
+  const [assetId, setAssetId] = useState<string | null>(null);
+
+  return (
+    <VideoPicker
+      value={assetId}
+      placeholder={t('noAsset')}
+      onChange={(id) => {
+        setAssetId(id);
+        if (id) onAdd(id);
+      }}
+      labels={{
+        existing: t('videoSourceExisting'),
+        upload: t('videoSourceUpload'),
+        stock: t('videoSourceStock'),
+        uploading: t('uploadingImage'),
+        uploadFailed: t('uploadImageFailed'),
+        stockSearchPlaceholder: t('stockVideoSearchPlaceholder'),
+        stockEmpty: t('stockVideoEmpty'),
+        stockNotConfigured: t('stockVideoNotConfigured'),
+        stockCredit: t('stockVideoCredit'),
+        importStockFailed: t('importStockVideoFailed'),
+      }}
+    />
+  );
+}
+
+// Quick-add panel for Document — same plain asset dropdown as that element's card uses (no
+// upload/paste there, so the quick panel doesn't invent options the card lacks).
 // Picking an asset creates the element immediately, same auto-confirm behavior as the image panel.
 function AssetQuickAddPanel({
   types,
@@ -538,7 +612,7 @@ function CopyHexButton({ value }: { value: string }) {
 }
 
 interface ColorFieldProps {
-  label: string;
+  label?: string;
   value: string | undefined;
   onChange: (v: string | undefined) => void;
   // Brackets the raw color-picker drag into a single undo step (like every other continuous
@@ -551,7 +625,7 @@ function ColorField({ label, value, onChange, onFocusField, onBlurField }: Color
   const isPaletteRef = value?.startsWith('palette.') ?? false;
   return (
     <div>
-      <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">{label}</label>
+      {label && <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">{label}</label>}
       <div className="flex items-center gap-1">
         <select
           value={isPaletteRef ? value!.slice(8) : value ? 'custom' : ''}
@@ -592,7 +666,113 @@ function ColorField({ label, value, onChange, onFocusField, onBlurField }: Color
   );
 }
 
-export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 'themes') => void }) {
+interface FillFieldProps {
+  label: string;
+  value: string | ThemeGradientFill | undefined;
+  onChange: (v: string | ThemeGradientFill | undefined) => void;
+  onFocusField?: () => void;
+  onBlurField?: () => void;
+}
+// Solid-or-gradient fill editor for backgroundColor — the one style field that accepts a
+// two-stop gradient (see ThemeGradientFill in @lumina/types). Everything else stays solid-only
+// via plain ColorField (stroke/text colors can't render a gradient without an SVG def, out of
+// scope for now — see resolveThemeFillColor's "use the first stop" fallback for those contexts).
+function FillField({ label, value, onChange, onFocusField, onBlurField }: FillFieldProps) {
+  const t = useTranslations('themes');
+  const isGradient = typeof value === 'object' && value !== null;
+  return (
+    <div>
+      <div className="mb-0.5 flex items-center justify-between gap-1">
+        <label className="block text-[10px] text-gray-400 dark:text-gray-500">{label}</label>
+        <div className="flex overflow-hidden rounded border border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            onClick={() => isGradient && onChange(value.from)}
+            className={`px-1.5 py-0.5 text-[9px] ${!isGradient ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500'}`}
+          >
+            {t('fillModeSolid')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              !isGradient &&
+              onChange({
+                type: 'linear',
+                angle: 90,
+                from: typeof value === 'string' && value && !value.startsWith('palette.') ? value : '#6366f1',
+                to: '#a855f7',
+              })
+            }
+            className={`px-1.5 py-0.5 text-[9px] ${isGradient ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500'}`}
+          >
+            {t('fillModeGradient')}
+          </button>
+        </div>
+      </div>
+      {isGradient ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1">
+            <input
+              type="range"
+              min={0}
+              max={360}
+              value={value.angle}
+              onFocus={onFocusField}
+              onBlur={onBlurField}
+              onChange={(e) => onChange({ ...value, angle: parseInt(e.target.value, 10) })}
+              className="min-w-0 flex-1"
+            />
+            <span className="w-8 shrink-0 text-right font-mono text-[9px] text-gray-400 dark:text-gray-500">
+              {value.angle}°
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <input
+              type="color"
+              value={value.from}
+              onFocus={onFocusField}
+              onBlur={onBlurField}
+              onChange={(e) => onChange({ ...value, from: e.target.value })}
+              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+            />
+            <input
+              type="color"
+              value={value.to}
+              onFocus={onFocusField}
+              onBlur={onBlurField}
+              onChange={(e) => onChange({ ...value, to: e.target.value })}
+              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+            />
+          </div>
+        </div>
+      ) : (
+        <ColorField
+          value={value}
+          onFocusField={onFocusField}
+          onBlurField={onBlurField}
+          onChange={onChange}
+        />
+      )}
+    </div>
+  );
+}
+
+// `mode: 'list'` renders the browsable grid (used on the Templates page); `mode: 'edit'` renders
+// only the full-page canvas editor for one theme, addressed by `targetId` — either an existing
+// theme's id or the literal 'new' (used on the Designer page, e.g. /designer?type=theme&id=…).
+// `presetId` (only meaningful alongside targetId 'new') pre-fills the new theme from that preset,
+// mirroring what the "Customize & edit" button on a preset card used to do inline.
+type ThemesSectionProps =
+  | { mode: 'list' }
+  | { mode: 'edit'; targetId: string; presetId?: string };
+
+export function ThemesSection(props: ThemesSectionProps) {
+  const { mode } = props;
+  const targetId = mode === 'edit' ? props.targetId : null;
+  const presetId = mode === 'edit' ? props.presetId : undefined;
+  const router = useRouter();
+  const locale = useLocale();
+  const tn = useTranslations('nav');
   const qc = useQueryClient();
   const { user } = useAuth();
   const { canEditContent } = usePermissions();
@@ -602,7 +782,6 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   const tc = useTranslations('common');
   const ta = useTranslations('auditLog');
   const tCrop = useTranslations('cropEditor');
-  const tNav = useTranslations('nav');
 
   const { data: themes = [], isLoading } = useQuery({
     queryKey: ['themes'],
@@ -633,6 +812,14 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   // rasterizes — a plain ref (not state) since it never needs to trigger a re-render.
   const canvasElRef = useRef<HTMLDivElement | null>(null);
   const [croppingElementId, setCroppingElementId] = useState<string | null>(null);
+  const [pickingIconElementId, setPickingIconElementId] = useState<string | null>(null);
+  const [adjustingElementId, setAdjustingElementId] = useState<string | null>(null);
+  // Lifted here (not local to ThemeCanvasPanel) for the same cross-component reason brushArmed
+  // etc. are — the properties panel's "Preview" button lives in this component, not the canvas.
+  const [animationReplayKey, setAnimationReplayKey] = useState<Record<string, number>>({});
+  function replayAnimation(id: string) {
+    setAnimationReplayKey((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+  }
   const [deleteError, setDeleteError] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -701,7 +888,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
 
   // Lets the app shell warn before navigating away mid-edit — canUndo already tracks "at least
   // one change committed since this session opened" so it doubles as the dirty flag for free.
-  const { setDirty } = useEditorDirty();
+  const { setDirty, guardNavigation } = useEditorDirty();
   useEffect(() => {
     setDirty(editing !== null && canUndo);
   }, [editing, canUndo, setDirty]);
@@ -759,7 +946,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
         userEmail: user?.email ?? '',
       });
       void qc.invalidateQueries({ queryKey: ['themes'] });
-      setEditing(null);
+      router.push(`/${locale}/templates`);
     },
   });
   const updateMut = useMutation({
@@ -781,7 +968,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
         userEmail: user?.email ?? '',
       });
       void qc.invalidateQueries({ queryKey: ['themes'] });
-      setEditing(null);
+      router.push(`/${locale}/templates`);
     },
   });
 
@@ -866,6 +1053,36 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
     setSelectedElementId(null);
   }
 
+  // Drives `editing` from the URL in edit mode — the Designer page addresses a specific theme via
+  // ?id= (or the 'new' sentinel, optionally with ?preset= to pre-fill from a starter template).
+  // Adjusted during render (like `prevEditing` further down) rather than in an effect, so opening
+  // the editor doesn't cost an extra render pass, and so a background refetch of `themes` (e.g.
+  // after a save elsewhere) can't clobber in-progress edits — `resolvedTargetKey` only advances
+  // once a matching theme has actually been opened.
+  const [resolvedTargetKey, setResolvedTargetKey] = useState<string | null>(null);
+  const targetKey = targetId ? `${targetId}:${presetId ?? ''}` : null;
+  if (mode === 'edit' && targetKey && targetKey !== resolvedTargetKey) {
+    if (targetId === 'new') {
+      if (presetId) {
+        if (!isLoading) {
+          const preset = themes.find((th) => th.id === presetId);
+          setResolvedTargetKey(targetKey);
+          if (preset) applyPreset(preset);
+          else openNew();
+        }
+      } else {
+        setResolvedTargetKey(targetKey);
+        openNew();
+      }
+    } else if (!isLoading) {
+      const found = themes.find((th) => th.id === targetId);
+      if (found) {
+        setResolvedTargetKey(targetKey);
+        openEdit(found);
+      }
+    }
+  }
+
   function startRename(theme: Theme) {
     if (!canEditContent) return;
     setRenamingId(theme.id);
@@ -908,6 +1125,31 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
   function updateElementStyle(id: string, patch: ThemeElementStyle) {
     setElements((prev) =>
       prev.map((el) => (el.id === id ? { ...el, style: { ...el.style, ...patch } } : el)),
+    );
+  }
+
+  // Each animation sub-section (entrance/emphasis/exit/textReveal) is its own always-fully-
+  // populated object rather than a bag of optional fields, so a fresh DEFAULT_* is merged in the
+  // first time a kind is touched — a shallow `{...el.animation, entrance: patch}` would instead
+  // silently drop whichever entrance fields the patch didn't happen to include.
+  function updateEntrance(id: string, patch: Partial<ThemeElementAnimation['entrance']>) {
+    setElements((prev) =>
+      prev.map((el) => (el.id === id ? { ...el, animation: { ...el.animation, entrance: { ...DEFAULT_ENTRANCE, ...el.animation?.entrance, ...patch } } } : el)),
+    );
+  }
+  function updateEmphasis(id: string, patch: Partial<ThemeElementAnimation['emphasis']>) {
+    setElements((prev) =>
+      prev.map((el) => (el.id === id ? { ...el, animation: { ...el.animation, emphasis: { ...DEFAULT_EMPHASIS, ...el.animation?.emphasis, ...patch } } } : el)),
+    );
+  }
+  function updateExit(id: string, patch: Partial<ThemeElementAnimation['exit']>) {
+    setElements((prev) =>
+      prev.map((el) => (el.id === id ? { ...el, animation: { ...el.animation, exit: { ...DEFAULT_EXIT, ...el.animation?.exit, ...patch } } } : el)),
+    );
+  }
+  function updateTextReveal(id: string, patch: Partial<ThemeElementAnimation['textReveal']>) {
+    setElements((prev) =>
+      prev.map((el) => (el.id === id ? { ...el, animation: { ...el.animation, textReveal: { ...DEFAULT_TEXT_REVEAL, ...el.animation?.textReveal, ...patch } } } : el)),
     );
   }
 
@@ -989,7 +1231,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
         const isBrush = el.kind === 'BRUSH';
         const bg =
           el.kind === 'SHAPE'
-            ? (isOutlineShape ? 'transparent' : (resolveThemeColor(el.style.backgroundColor, pal) ?? KIND_COLORS.SHAPE + '55'))
+            ? (isOutlineShape ? 'transparent' : (resolveThemeFill(el.style.backgroundColor, pal) ?? KIND_COLORS.SHAPE + '55'))
             : isBrush
               ? 'transparent'
               : KIND_COLORS[el.kind] + '33';
@@ -1019,7 +1261,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
               <div style={{ position: 'absolute', inset: 0 }}>
                 <ShapeOutline
                   shape={el.style.shape}
-                  color={resolveThemeColor(el.style.backgroundColor, pal) ?? pal.text}
+                  color={resolveThemeFillColor(el.style.backgroundColor, pal) ?? pal.text}
                   strokeWidthPx={el.style.strokeWidthPx}
                 />
               </div>
@@ -1038,7 +1280,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                     <polyline
                       points={brushPolylinePoints(el.content.points)}
                       fill="none"
-                      stroke={resolveThemeColor(el.style.backgroundColor, pal) ?? pal.text}
+                      stroke={resolveThemeFillColor(el.style.backgroundColor, pal) ?? pal.text}
                       strokeWidth={el.style.strokeWidthPx ?? 4}
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -1111,31 +1353,40 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
     // editor panel below, and widening the page cap to match keeps the editing area at least as
     // big as its normal (no-sidebar) size instead of just eating into the original max-w-7xl.
     <div className={`mx-auto max-w-7xl p-8 ${editing ? 'min-[1440px]:max-w-[2200px]' : ''}`}>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+      {mode === 'list' && (
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+          </div>
+          {canEditContent && (
+            <button
+              onClick={() => router.push(`/${locale}/designer?type=theme`)}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              <Plus className="h-4 w-4" /> {t('newTheme')}
+            </button>
+          )}
         </div>
-        {canEditContent && !editing && (
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            <Plus className="h-4 w-4" /> {t('newTheme')}
-          </button>
-        )}
-      </div>
+      )}
 
-      {!editing && (
-        <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
-          <button onClick={() => onSelectTab('layouts')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-            <LayoutTemplate className="w-4 h-4" /> {tNav('layouts')}
-          </button>
-          <button onClick={() => onSelectTab('themes')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors border-indigo-600 text-indigo-600 dark:text-indigo-400">
-            <Palette className="w-4 h-4" /> {tNav('themes')}
-          </button>
+      {mode === 'edit' && (
+        <button
+          onClick={() =>
+            guardNavigation(tn('unsavedChangesConfirm'), () => router.push(`/${locale}/templates`))
+          }
+          className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          &larr; {tn('templates')}
+        </button>
+      )}
+
+      {mode === 'edit' && isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+
+      {mode === 'edit' && !isLoading && !editing && targetId !== 'new' && (
+        <div className="py-16 text-center text-gray-400">
+          <Palette className="mx-auto mb-3 h-10 w-10 opacity-30" />
+          <p className="text-sm">{t('notFound')}</p>
         </div>
       )}
 
@@ -1218,7 +1469,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
               {saveAsAssetMut.isPending ? t('savingAsset') : t('saveAsAsset')}
             </button>
             <button
-              onClick={() => setEditing(null)}
+              onClick={() => router.push(`/${locale}/templates`)}
               className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               {tc('cancel')}
@@ -1268,6 +1519,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
               setBrushSize={setBrushSize}
               setBgRemoveError={setBgRemoveError}
               exportRef={(el) => { canvasElRef.current = el; }}
+              animationReplayKey={animationReplayKey}
             />
 
             {/* Palette + typography — theme-only settings that sit between the preview and the
@@ -1747,13 +1999,24 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                                 <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
                                   {t('video')}
                                 </label>
-                                <AssetPicker
-                                  types={['VIDEO']}
+                                <VideoPicker
                                   value={el.content.assetId}
                                   placeholder={t('noAsset')}
                                   onChange={(assetId) =>
                                     commit(() => updateElementContent(el.id, { assetId }))
                                   }
+                                  labels={{
+                                    existing: t('videoSourceExisting'),
+                                    upload: t('videoSourceUpload'),
+                                    stock: t('videoSourceStock'),
+                                    uploading: t('uploadingImage'),
+                                    uploadFailed: t('uploadImageFailed'),
+                                    stockSearchPlaceholder: t('stockVideoSearchPlaceholder'),
+                                    stockEmpty: t('stockVideoEmpty'),
+                                    stockNotConfigured: t('stockVideoNotConfigured'),
+                                    stockCredit: t('stockVideoCredit'),
+                                    importStockFailed: t('importStockVideoFailed'),
+                                  }}
                                 />
                               </div>
                             )}
@@ -1850,7 +2113,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                                   onClick={() => {
                                     setSelectedElementId(el.id);
                                     setBrushRedrawId(el.id);
-                                    setBrushColor(el.style.backgroundColor);
+                                    setBrushColor(typeof el.style.backgroundColor === 'string' ? el.style.backgroundColor : undefined);
                                     setBrushSize(el.style.strokeWidthPx ?? 4);
                                     setBrushArmed(true);
                                   }}
@@ -1897,6 +2160,29 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                                   onFocusField={captureForHistory}
                                   onBlurField={commitCaptured}
                                 />
+                              </div>
+                            )}
+                            {el.kind === 'ICON' && (
+                              <div>
+                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  {t('icon')}
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => setPickingIconElementId(el.id)}
+                                  className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-gray-300 px-2 py-1.5 text-[11px] text-gray-600 hover:border-indigo-400 hover:text-indigo-600 dark:border-gray-700 dark:text-gray-300"
+                                >
+                                  {el.content.svg ? (
+                                    <span
+                                      className="h-4 w-4 shrink-0 [&_svg]:h-full [&_svg]:w-full"
+                                      style={{ color: resolveThemeColor(el.style.color, palette) ?? palette.text }}
+                                      dangerouslySetInnerHTML={{ __html: el.content.svg }}
+                                    />
+                                  ) : (
+                                    <Sticker className="h-3 w-3" />
+                                  )}
+                                  {el.content.iconId || t('changeIcon')}
+                                </button>
                               </div>
                             )}
                           </div>
@@ -2033,6 +2319,35 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                               </div>
                             </div>
                           )}
+                          {el.kind === 'ICON' && (
+                            <div className="grid grid-cols-3 gap-2">
+                              <ColorField
+                                label={t('color')}
+                                value={el.style.color}
+                                onFocusField={captureForHistory}
+                                onBlurField={commitCaptured}
+                                onChange={(v) => updateElementStyle(el.id, { color: v })}
+                              />
+                              <div>
+                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  {t('opacity')}
+                                </label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={el.style.opacity ?? 1}
+                                  onFocus={captureForHistory}
+                                  onBlur={commitCaptured}
+                                  onChange={(e) =>
+                                    updateElementStyle(el.id, { opacity: parseFloat(e.target.value) })
+                                  }
+                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                />
+                              </div>
+                            </div>
+                          )}
                           {(el.kind === 'IMAGE' || el.kind === 'VIDEO' || el.kind === 'DOCUMENT') && (
                             <div className="grid grid-cols-3 gap-2">
                               <div>
@@ -2097,12 +2412,22 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                             </div>
                           )}
                           {(el.kind === 'IMAGE' || el.kind === 'VIDEO') && el.content.assetId && (
-                            <button
-                              onClick={() => setCroppingElementId(el.id)}
-                              className="flex w-full items-center justify-center gap-1.5 rounded border border-gray-200 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                            >
-                              <Crop className="h-3 w-3" /> {tCrop('editCrop')}
-                            </button>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => setCroppingElementId(el.id)}
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded border border-gray-200 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                              >
+                                <Crop className="h-3 w-3" /> {tCrop('editCrop')}
+                              </button>
+                              {el.kind === 'IMAGE' && (
+                                <button
+                                  onClick={() => setAdjustingElementId(el.id)}
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-gray-200 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                >
+                                  <SlidersHorizontal className="h-3 w-3" /> {t('editAdjustments')}
+                                </button>
+                              )}
+                            </div>
                           )}
                           {el.kind === 'PLAYLIST' && (
                             <div className="w-1/3">
@@ -2147,13 +2472,23 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                                 </select>
                               </div>
                               <div className="grid grid-cols-3 gap-2">
-                              <ColorField
-                                label={el.style.shapeFill === 'outline' ? t('outlineColor') : t('backgroundColor')}
-                                value={el.style.backgroundColor}
-                                onFocusField={captureForHistory}
-                                onBlurField={commitCaptured}
-                                onChange={(v) => updateElementStyle(el.id, { backgroundColor: v })}
-                              />
+                              {el.style.shapeFill === 'outline' ? (
+                                <ColorField
+                                  label={t('outlineColor')}
+                                  value={typeof el.style.backgroundColor === 'string' ? el.style.backgroundColor : undefined}
+                                  onFocusField={captureForHistory}
+                                  onBlurField={commitCaptured}
+                                  onChange={(v) => updateElementStyle(el.id, { backgroundColor: v })}
+                                />
+                              ) : (
+                                <FillField
+                                  label={t('backgroundColor')}
+                                  value={el.style.backgroundColor}
+                                  onFocusField={captureForHistory}
+                                  onBlurField={commitCaptured}
+                                  onChange={(v) => updateElementStyle(el.id, { backgroundColor: v })}
+                                />
+                              )}
                               {el.style.shapeFill === 'outline' ? (
                                 <div>
                                   <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
@@ -2222,7 +2557,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                             <div className="grid grid-cols-3 gap-2">
                               <ColorField
                                 label={t('strokeColor')}
-                                value={el.style.backgroundColor}
+                                value={typeof el.style.backgroundColor === 'string' ? el.style.backgroundColor : undefined}
                                 onFocusField={captureForHistory}
                                 onBlurField={commitCaptured}
                                 onChange={(v) => updateElementStyle(el.id, { backgroundColor: v })}
@@ -2268,6 +2603,183 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                               </div>
                             </div>
                           )}
+                          <div className="space-y-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                                {t('animation.title')}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => replayAnimation(el.id)}
+                                className="flex items-center gap-1 text-[10px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                              >
+                                <Play className="h-3 w-3" /> {t('animation.preview')}
+                              </button>
+                            </div>
+
+                            <div>
+                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                {t('animation.entrance')}
+                              </label>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                <select
+                                  value={el.animation?.entrance?.preset ?? 'none'}
+                                  onChange={(e) => commit(() => updateEntrance(el.id, { preset: e.target.value as ThemeEntranceExitPreset }))}
+                                  className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                >
+                                  {ENTRANCE_EXIT_PRESETS.map((p) => (
+                                    <option key={p} value={p}>{t(`animation.presets.${p}`)}</option>
+                                  ))}
+                                </select>
+                                {el.animation?.entrance?.preset === 'slide' && (
+                                  <select
+                                    value={el.animation.entrance.direction}
+                                    onChange={(e) => commit(() => updateEntrance(el.id, { direction: e.target.value as ThemeSlideDirection }))}
+                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  >
+                                    {SLIDE_DIRECTIONS.map((d) => (
+                                      <option key={d} value={d}>{t(`animation.directions.${d}`)}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                {!!el.animation?.entrance && el.animation.entrance.preset !== 'none' && (
+                                  <select
+                                    value={el.animation.entrance.easing}
+                                    onChange={(e) => commit(() => updateEntrance(el.id, { easing: e.target.value as ThemeAnimationEasing }))}
+                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  >
+                                    {ANIMATION_EASINGS.map((ea) => (
+                                      <option key={ea} value={ea}>{ea}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                              {!!el.animation?.entrance && el.animation.entrance.preset !== 'none' && (
+                                <div className="mt-1 grid grid-cols-2 gap-1.5">
+                                  <div>
+                                    <label className="text-[9px] text-gray-400 dark:text-gray-500">{t('animation.durationMs')}</label>
+                                    <input
+                                      type="number"
+                                      min={100}
+                                      max={5000}
+                                      step={50}
+                                      value={el.animation.entrance.durationMs}
+                                      onFocus={captureForHistory}
+                                      onBlur={commitCaptured}
+                                      onChange={(e) => updateEntrance(el.id, { durationMs: parseInt(e.target.value, 10) || 1 })}
+                                      className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[9px] text-gray-400 dark:text-gray-500">{t('animation.delayMs')}</label>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={5000}
+                                      step={50}
+                                      value={el.animation.entrance.delayMs}
+                                      onFocus={captureForHistory}
+                                      onBlur={commitCaptured}
+                                      onChange={(e) => updateEntrance(el.id, { delayMs: parseInt(e.target.value, 10) || 0 })}
+                                      className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                {t('animation.emphasis')}
+                              </label>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <select
+                                  value={el.animation?.emphasis?.preset ?? 'none'}
+                                  onChange={(e) => commit(() => updateEmphasis(el.id, { preset: e.target.value as ThemeEmphasisPreset }))}
+                                  className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                >
+                                  {EMPHASIS_PRESETS.map((p) => (
+                                    <option key={p} value={p}>{t(`animation.emphasisPresets.${p}`)}</option>
+                                  ))}
+                                </select>
+                                {!!el.animation?.emphasis && el.animation.emphasis.preset !== 'none' && (
+                                  <input
+                                    type="number"
+                                    min={500}
+                                    max={30000}
+                                    step={100}
+                                    title={t('animation.intervalMs')}
+                                    value={el.animation.emphasis.intervalMs}
+                                    onFocus={captureForHistory}
+                                    onBlur={commitCaptured}
+                                    onChange={(e) => updateEmphasis(el.id, { intervalMs: parseInt(e.target.value, 10) || 1 })}
+                                    className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  />
+                                )}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                {t('animation.exit')}
+                              </label>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <select
+                                  value={el.animation?.exit?.preset ?? 'none'}
+                                  onChange={(e) => commit(() => updateExit(el.id, { preset: e.target.value as ThemeEntranceExitPreset }))}
+                                  className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                >
+                                  {ENTRANCE_EXIT_PRESETS.map((p) => (
+                                    <option key={p} value={p}>{t(`animation.presets.${p}`)}</option>
+                                  ))}
+                                </select>
+                                {el.animation?.exit?.preset === 'slide' && (
+                                  <select
+                                    value={el.animation.exit.direction}
+                                    onChange={(e) => commit(() => updateExit(el.id, { direction: e.target.value as ThemeSlideDirection }))}
+                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  >
+                                    {SLIDE_DIRECTIONS.map((d) => (
+                                      <option key={d} value={d}>{t(`animation.directions.${d}`)}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            </div>
+
+                            {el.kind === 'TEXT' && (
+                              <div>
+                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  {t('animation.textReveal')}
+                                </label>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <select
+                                    value={el.animation?.textReveal?.preset ?? 'none'}
+                                    onChange={(e) => commit(() => updateTextReveal(el.id, { preset: e.target.value as ThemeTextRevealPreset }))}
+                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  >
+                                    {TEXT_REVEAL_PRESETS.map((p) => (
+                                      <option key={p} value={p}>{t(`animation.textRevealPresets.${p}`)}</option>
+                                    ))}
+                                  </select>
+                                  {!!el.animation?.textReveal && el.animation.textReveal.preset !== 'none' && (
+                                    <input
+                                      type="number"
+                                      min={10}
+                                      max={500}
+                                      step={10}
+                                      title={t('animation.speedMsPerUnit')}
+                                      value={el.animation.textReveal.speedMsPerUnit}
+                                      onFocus={captureForHistory}
+                                      onBlur={commitCaptured}
+                                      onChange={(e) => updateTextReveal(el.id, { speedMsPerUnit: parseInt(e.target.value, 10) || 1 })}
+                                      className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
@@ -2325,6 +2837,19 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                       setBrushArmed((armed) => !armed);
                     },
                   },
+                  {
+                    key: 'ICON',
+                    label: t('elementKinds.ICON'),
+                    icon: ELEMENT_KIND_ICONS.ICON,
+                    panel: (close) => (
+                      <IconQuickAddPanel
+                        onAdd={(iconId, svg) => {
+                          addElementOfKind('ICON', undefined, undefined, { iconId, svg });
+                          close();
+                        }}
+                      />
+                    ),
+                  },
                 ],
               },
               {
@@ -2348,9 +2873,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                     label: t('elementKinds.VIDEO'),
                     icon: ELEMENT_KIND_ICONS.VIDEO,
                     panel: (close) => (
-                      <AssetQuickAddPanel
-                        types={['VIDEO']}
-                        placeholder={t('noAsset')}
+                      <VideoQuickAddPanel
                         onAdd={(assetId) => {
                           addElementOfKind('VIDEO', undefined, undefined, { assetId });
                           close();
@@ -2517,6 +3040,55 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
         );
       })()}
 
+      {editing && pickingIconElementId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl dark:bg-gray-900">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('changeIcon')}</h3>
+              <button
+                type="button"
+                onClick={() => setPickingIconElementId(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <IconPicker
+              onPick={(iconId, svg) => {
+                commit(() => updateElementContent(pickingIconElementId, { iconId, svg }));
+                setPickingIconElementId(null);
+              }}
+              labels={{
+                searchPlaceholder: t('iconSearchPlaceholder'),
+                empty: t('iconEmpty'),
+                importFailed: t('importIconFailed'),
+                credit: t('iconCredit'),
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {editing && adjustingElementId && (() => {
+        const el = elements.find((e) => e.id === adjustingElementId);
+        if (!el || el.kind !== 'IMAGE') return null;
+        const asset = el.content.assetId ? assets.find((a) => a.id === el.content.assetId) : undefined;
+        const mediaUrl = asset?.url;
+        if (!mediaUrl) return null;
+        return (
+          <AdjustmentsEditor
+            mediaUrl={mediaUrl}
+            name={el.label || el.kind}
+            initial={el.style.imageAdjustments}
+            onClose={() => setAdjustingElementId(null)}
+            onSave={(adjustments) => {
+              commit(() => updateElementStyle(el.id, { imageAdjustments: adjustments }));
+              setAdjustingElementId(null);
+            }}
+          />
+        );
+      })()}
+
       {deleteError && (
         <div className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-400">
           {deleteError}
@@ -2529,6 +3101,8 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
         </div>
       )}
 
+      {mode === 'list' && (
+      <>
       {!editing && themes.length > 0 && (
         <div className="relative mb-5 max-w-sm">
           <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -2590,7 +3164,7 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                 </div>
                 {canEditContent && (
                   <button
-                    onClick={() => applyPreset(theme)}
+                    onClick={() => router.push(`/${locale}/designer?type=theme&id=new&preset=${theme.id}`)}
                     disabled={duplicateMut.isPending}
                     title={t('customizeHint')}
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-50 py-1.5 text-xs text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900"
@@ -2661,7 +3235,9 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
                 </div>
 
                 <button
-                  onClick={() => canEditContent && openEdit(theme)}
+                  onClick={() =>
+                    canEditContent && router.push(`/${locale}/designer?type=theme&id=${theme.id}`)
+                  }
                   disabled={!canEditContent}
                   title={canEditContent ? t('clickToEdit') : undefined}
                   className="group relative block w-full disabled:cursor-default"
@@ -2697,6 +3273,8 @@ export function ThemesSection({ onSelectTab }: { onSelectTab: (tab: 'layouts' | 
             ))}
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

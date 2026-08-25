@@ -846,8 +846,8 @@ export default function AssetsPage() {
   const newMenuActions: ContextMenuAction[] = [
     { key: 'upload', label: t('upload'), icon: Upload, disabled: uploading, onClick: () => inputRef.current?.click() },
     { key: 'newText', label: t('newText'), icon: Type, onClick: () => setTextModal('new') },
-    { key: 'layout', label: t('newMenu.layout'), icon: LayoutTemplate, separator: true, onClick: () => router.push(`/${locale}/designer`) },
-    { key: 'theme', label: t('newMenu.theme'), icon: Palette, onClick: () => router.push(`/${locale}/designer?tab=themes`) },
+    { key: 'layout', label: t('newMenu.layout'), icon: LayoutTemplate, separator: true, onClick: () => router.push(`/${locale}/designer?type=layout`) },
+    { key: 'theme', label: t('newMenu.theme'), icon: Palette, onClick: () => router.push(`/${locale}/designer?type=theme`) },
     { key: 'wayfinding', label: t('newMenu.wayfinding'), icon: MapPin, onClick: () => router.push(`/${locale}/wayfinding`) },
   ];
 
