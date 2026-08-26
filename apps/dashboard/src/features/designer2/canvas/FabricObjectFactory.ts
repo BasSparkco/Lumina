@@ -129,7 +129,11 @@ function buildPreviewFilters(adjustments: ImageElement['adjustments']): filters.
 // cropZoom/cropOffsetX/cropOffsetY (designer.md §9 amendment — same flat MediaCrop shape
 // CropEditor.tsx already produces) as an additional scale + percentage-of-box pan on top, mirroring
 // how @lumina/types' mediaCropStyle composes `object-fit: cover` with a CSS translate/scale.
-function positionImageInBox(img: FabricImage, element: ImageElement): void {
+//
+// Returns the crop pan in box-pixel units so the caller can build the *group's* clipPath from it.
+// The image itself is intentionally left unclipped here — see buildImageClipPath's comment for why
+// clipping `img` directly is wrong once it's wrapped in createImageObject's fixed-size Group.
+function positionImageInBox(img: FabricImage, element: ImageElement): { offsetX: number; offsetY: number } {
   const naturalW = img.width || element.width;
   const naturalH = img.height || element.height;
   const { width, height, fit, cropZoom, cropOffsetX, cropOffsetY } = element;
@@ -158,15 +162,28 @@ function positionImageInBox(img: FabricImage, element: ImageElement): void {
     top: height / 2 + offsetY,
   });
 
-  img.clipPath = new Rect({
-    width,
-    height,
+  return { offsetX, offsetY };
+}
+
+// A clipPath assigned directly to `img` is drawn in *img's own* rendering context, which by the
+// time `_drawClipPath` runs has already been scaled by img.scaleX/scaleY (Fabric applies an
+// object's full local matrix before painting its clip). A Rect sized/positioned in box-pixel units
+// (e.g. `width`/`height`/`width/2`) therefore gets silently multiplied by the image's cover/contain
+// scale too — for a photo scaled down to ~30% to fit its box, that shrinks and mis-centers the clip
+// window into a small corner of the box, which is exactly the "only ~25% of the image visible, rest
+// blank" bug. Attaching the clipPath to the *Group* instead avoids this: the group is never scaled
+// (only positioned), so a Rect in plain box-pixel units clips correctly regardless of how much the
+// inner image had to be scaled to satisfy contain/cover/fill.
+function buildImageClipPath(element: ImageElement, offsetX: number, offsetY: number): Rect {
+  return new Rect({
+    width: element.width,
+    height: element.height,
     rx: element.borderRadius ?? 0,
     ry: element.borderRadius ?? 0,
     originX: 'center',
     originY: 'center',
-    left: width / 2 + offsetX,
-    top: height / 2 + offsetY,
+    left: offsetX,
+    top: offsetY,
   });
 }
 
@@ -181,7 +198,7 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
     return placeholderGroup(element.width, element.height, 'Image', PLACEHOLDER_FILL, '#9ca3af');
   }
 
-  positionImageInBox(img, element);
+  const { offsetX, offsetY } = positionImageInBox(img, element);
   img.filters = buildPreviewFilters(element.adjustments);
   img.applyFilters();
   if (element.flipX) img.flipX = true;
@@ -191,7 +208,7 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
   // transform handles reflect the element's own width/height regardless of the photo's aspect
   // ratio or the cover/contain scale applied above. Must use a fixed-size layout manager — see
   // fixedSizeLayoutManager's comment for why the default one breaks this.
-  return new Group([img], {
+  const group = new Group([img], {
     left: 0,
     top: 0,
     width: element.width,
@@ -199,6 +216,10 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
     subTargetCheck: false,
     layoutManager: fixedSizeLayoutManager(),
   });
+  // See buildImageClipPath's comment — the crop/cover window is a Group-level clipPath, not an
+  // img-level one, so it isn't affected by the image's own contain/cover scale.
+  group.clipPath = buildImageClipPath(element, offsetX, offsetY);
+  return group;
 }
 
 // designer.md §17.1/Phase 8 — `element.value` here is already resolved (CanvasViewport applies
