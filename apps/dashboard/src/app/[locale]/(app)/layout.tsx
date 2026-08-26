@@ -24,9 +24,11 @@ const navSections: NavSection[] = [
     { href: '/assets', key: 'assets', icon: ImageIcon },
     { href: '/playlists', key: 'playlists', icon: List },
     { href: '/screens', key: 'screens', icon: Monitor },
-    { href: '/designer', key: 'designer', icon: LayoutTemplate, children: [
-      { href: '/designer2', key: 'designer2', icon: PenTool },
-    ] },
+    { href: '/designer', key: 'designer', icon: LayoutTemplate },
+    // Deliberately a sibling item, not a `designer` submenu — designer2 is being tested as
+    // designer's eventual replacement, not a feature nested under it, and `designer` will be
+    // deleted once that testing wraps up.
+    { href: '/designer2', key: 'designer2', icon: PenTool },
     { href: '/templates', key: 'templates', icon: Layers },
   ] },
   { titleKey: 'operations', items: [
@@ -137,7 +139,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       } md:static md:translate-x-0 md:rtl:translate-x-0 ${effectiveCollapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-900 border-e border-gray-200 dark:border-gray-800 flex flex-col shrink-0`}>
         <div className="flex items-center gap-2 px-5 py-5 border-b border-gray-100 dark:border-gray-800">
           <Tv className="w-5 h-5 text-indigo-600 shrink-0" />
-          {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Lumina</span>}
+          {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Novacore Signage</span>}
           <button onClick={() => { restoreOnExitRef.current = false; setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
             className="ms-auto hidden md:block text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
             {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
