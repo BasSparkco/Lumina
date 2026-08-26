@@ -91,3 +91,22 @@ export function createQrPlaceholderElement(
     errorCorrection: 'M',
   };
 }
+
+// designer.md Phase 9 — mirrors createImagePlaceholderElement: no assetId yet (the real picker is
+// VideoPicker in PropertiesPanel), defaults matching VideoElementSchema's own field defaults.
+export function createVideoPlaceholderElement(
+  canvas: { width: number; height: number },
+  elements: DesignElement[],
+): DesignElement {
+  return {
+    ...baseFields(canvas, elements, 640, 360),
+    name: 'Video',
+    type: 'video',
+    startOffsetMs: 0,
+    muted: true,
+    volume: 1,
+    loop: true,
+    fit: 'cover',
+    autoplay: true,
+  };
+}

@@ -3,6 +3,7 @@ import { fontStack, mediaCropStyle, shapeClipStyle } from '@lumina/types';
 import type { Playlist, PlaylistItem, PlayerState } from '../lib/api';
 import TextAssetTicker from './TextAssetTicker';
 import ThemeRenderer from './ThemeRenderer';
+import DesignRenderer from './DesignRenderer';
 import AppPlayer from './AppPlayer';
 import ZoneRenderer from './ZoneRenderer';
 import { onAudioUnlock } from '../lib/audioUnlock';
@@ -204,6 +205,10 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
     <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative' }}>
       {item.kind === 'THEME' && item.theme && state && (
         <ThemeRenderer theme={item.theme} state={state} onAssetChange={onAssetChange ?? (() => {})} />
+      )}
+
+      {item.kind === 'DESIGN' && item.design && (
+        <DesignRenderer design={item.design} />
       )}
 
       {item.kind === 'LAYOUT' && item.layout && state && (() => {

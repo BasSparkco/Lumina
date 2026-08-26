@@ -7,7 +7,13 @@
     "declaration": false,
     "declarationMap": false,
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    // errors.md — plain `tsc --noEmit` couldn't see ambient jest globals (describe/it/expect) in
+    // *.spec.ts files without this; explicit rather than relying on @types/* auto-inclusion, whose
+    // pnpm-hoisting order was non-deterministic across installs. ts-jest's own transform (see
+    // jest.config.ts) already worked fine either way — this only fixes this file's own type-check
+    // pass, which is what `pnpm run typecheck` actually runs.
+    "types": ["jest", "node"]
   },
   "include": ["src/**/*", "prisma/**/*"],
   "exclude": ["node_modules", "dist", "test"],

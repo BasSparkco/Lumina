@@ -23,8 +23,12 @@ export interface ResolvedScene {
 }
 
 // DesignElement with dynamicBindings already substituted into the underlying property and
-// assetId already resolved to a signed/CDN URL.
-export type ResolvedElement = DesignElement & { resolvedSrc?: string };
+// assetId already resolved to a signed/CDN URL. `resolvedSrc` covers every element's primary
+// media (Image's assetId, Video's assetId, a QR's server-rendered data URL); `posterResolvedSrc`
+// is Video-only (its separate posterAssetId, a distinct image from the video itself) — added by
+// designer.md Phase 11's actual resolver implementation (player.service.ts's hydrateDesign),
+// which is what this contract was originally left for another phase to fill in.
+export type ResolvedElement = DesignElement & { resolvedSrc?: string; posterResolvedSrc?: string };
 
 export interface ResolvedBackground {
   type: 'color' | 'image' | 'video';

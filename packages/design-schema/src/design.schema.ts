@@ -25,3 +25,33 @@ export const DesignDocumentSchema = z.object({
   scenes: z.array(DesignSceneSchema).min(1),
 });
 export type DesignDocument = z.infer<typeof DesignDocumentSchema>;
+
+// This package has no DOM or @types/node dependency (it's meant to be portable to both the
+// browser and Node), so the ambient `crypto` global (available in both — Node 20+, which every
+// runtime in this monorepo already targets — and every browser) needs a minimal local type
+// rather than pulling in either lib.
+declare const crypto: { randomUUID(): string };
+
+// designer.md Phase 10 — a fresh, valid single-scene document, shared by every place that needs
+// to bootstrap one from nothing: designer2/page.tsx's blank-editor mode, TemplatesService's
+// admin-create-with-no-designJson, and DesignsService's POST /designs. Previously duplicated
+// (near-identically) in the first two; a third copy for designs.service.ts was the trigger to
+// unify them.
+export function buildBlankDesignDocument(name: string): DesignDocument {
+  return {
+    schemaVersion: 1,
+    id: `design_${crypto.randomUUID()}`,
+    name,
+    canvas: { width: 1920, height: 1080, backgroundColor: '#000000' },
+    settings: { defaultSceneDurationMs: 10000 },
+    scenes: [
+      {
+        id: `scene_${crypto.randomUUID()}`,
+        name: 'Scene 1',
+        durationMs: 10000,
+        background: { type: 'color', color: '#000000' },
+        elements: [],
+      },
+    ],
+  };
+}

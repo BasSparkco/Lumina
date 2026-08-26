@@ -106,9 +106,15 @@ export const ShapeElementSchema = BaseElementSchema.extend({
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
 
 // designer.md §6 — Video
+//
+// Amendment (2026-08-26, Phase 9): `assetId` was originally required, but the "Add X" sidebar
+// flow every other element type uses (Text/Shape/Image/QR) always inserts an empty placeholder
+// first, then the author picks media via the element's own Properties panel — matching
+// ImageElementSchema's own optional `assetId` for the same reason. Nothing depended on `assetId`
+// being required (Phase 9 hadn't shipped), so this is a clean change, not a migration.
 export const VideoElementSchema = BaseElementSchema.extend({
   type: z.literal('video'),
-  assetId: z.string(),
+  assetId: z.string().optional(),
   startOffsetMs: z.number().nonnegative().default(0),
   endOffsetMs: z.number().nonnegative().optional(),
   muted: z.boolean().default(true),
@@ -121,10 +127,15 @@ export const VideoElementSchema = BaseElementSchema.extend({
 export type VideoElement = z.infer<typeof VideoElementSchema>;
 
 // designer.md §6 — QR
+//
+// Amendment (2026-08-26, Phase 8): the Phase 0 draft's separate `dynamicValue` field is dropped.
+// designer.md §17.1's "static/dynamic mode" is expressed through the generic `dynamicBindings`
+// mechanism every element already has (§6/§17.2) — `{property: 'value', variable, fallback}` —
+// rather than a second, QR-only binding mechanism. Nothing persisted real data through the old
+// field yet (Phase 0 scaffolding only), so this is a clean removal, not a migration.
 export const QrElementSchema = BaseElementSchema.extend({
   type: z.literal('qr'),
   value: z.string().optional(),
-  dynamicValue: z.string().optional(),
   foregroundColor: z.string().default('#000000'),
   backgroundColor: z.string().default('#ffffff'),
   errorCorrection: z.enum(['L', 'M', 'Q', 'H']).default('M'),

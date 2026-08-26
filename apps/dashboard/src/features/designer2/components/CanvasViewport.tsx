@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { assetsApi } from '@/lib/api';
+import { assetsApi, orgApi } from '@/lib/api';
 import {
   ArrowUpToLine,
   ArrowDownToLine,
@@ -19,6 +19,7 @@ import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
 import type { ElementGeometryPatch, Guides } from '../canvas/FabricEventBridge';
 import { useDesignerStore } from '../state/designer.store';
+import { resolveElementBindings, type VariableMap } from '@lumina/design-schema';
 
 interface CanvasViewportProps {
   // Commit-wrapped by the caller (DesignerShell owns useDesignerHistory) so finishing a
@@ -36,6 +37,8 @@ interface CanvasViewportProps {
 export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
+  const textOverlayContainerRef = useRef<HTMLDivElement>(null);
+  const videoOverlayContainerRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<FabricCanvasAdapter | null>(null);
   const [guides, setGuides] = useState<Guides>({ v: [], h: [] });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -46,6 +49,10 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
   // it to a real URL for Fabric to render is this component's job, not the canvas adapter's
   // (designer.md §4.1 keeps data/auth concerns out of the Fabric layer).
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+  // designer.md §17.2 — `{{business.name}}`'s real backing. Same `['orgSettings']` query key
+  // screens/page.tsx and settings/page.tsx already use, so React Query dedupes this rather than
+  // firing a second request.
+  const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
 
   const document = useDesignerStore((s) => s.document);
   const activeSceneId = useDesignerStore((s) => s.activeSceneId);
@@ -139,10 +146,12 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
   // one's DOM node.
   useEffect(() => {
     const host = canvasHostRef.current;
-    if (!host) return;
+    const overlayContainer = textOverlayContainerRef.current;
+    const videoOverlayContainer = videoOverlayContainerRef.current;
+    if (!host || !overlayContainer || !videoOverlayContainer) return;
     const canvasEl = window.document.createElement('canvas');
     host.appendChild(canvasEl);
-    const adapter = new FabricCanvasAdapter(canvasEl, {
+    const adapter = new FabricCanvasAdapter(canvasEl, overlayContainer, videoOverlayContainer, {
       onSelectionChange: (ids) => latest.current.setSelection(ids),
       onElementModified: (id, patch: ElementGeometryPatch) =>
         latest.current.commit(() => latest.current.updateElement(id, patch)),
@@ -165,6 +174,10 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally initialized once; see `latest` ref above
   }, []);
 
+  // Tracks the previous activeSceneId so the effect below can tell "the scene actually changed"
+  // apart from "the same scene's content was edited" — see the animation-trigger comment there.
+  const prevSceneIdRef = useRef<string | null>(null);
+
   // Load the active scene whenever the document or active scene changes, then restore selection
   // (loadScene fully rebuilds every fabric object, so the previous selection is gone otherwise —
   // that would visually deselect an element the instant you finish dragging/resizing it, since
@@ -174,15 +187,30 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
     if (!adapter || !document || !activeSceneId) return;
     const scene = document.scenes.find((s) => s.id === activeSceneId);
     if (!scene) return;
+    // designer.md §17.2 — V1 variable sources: the org's own name (real, if the only field that
+    // exists for it), overridable by/merged with this document's own instance variables (the
+    // VariablesPanel). CanvasViewport resolves bindings before the adapter ever sees an element —
+    // per §4.1, Fabric/the adapter must never know about variables at all.
+    const variables: VariableMap = { ...(orgSettings ? { 'business.name': orgSettings.name } : {}), ...document.variables };
+    const resolvedScene = { ...scene, elements: scene.elements.map((el) => resolveElementBindings(el, variables)) };
+    // designer.md Phase 7 — this effect re-runs on *every* document mutation (Phase 2's documented
+    // always-rebuild strategy), not just real scene switches, so enter/emphasis animations can't
+    // be triggered unconditionally here or editing one element would replay every other element's
+    // enter animation on every unrelated edit. Only fire them on a genuine scene change — which
+    // also means the Phase 6 preview loop's scene-to-scene stepping gets animation playback for
+    // free, since it changes activeSceneId per scene.
+    const sceneChanged = prevSceneIdRef.current !== activeSceneId;
+    prevSceneIdRef.current = activeSceneId;
     adapter.setDesignSize(document.canvas.width, document.canvas.height);
-    void adapter.loadScene(scene).then(() => {
+    void adapter.loadScene(resolvedScene).then(() => {
       adapter.fitToViewport(containerRef.current?.clientWidth, containerRef.current?.clientHeight);
       adapter.selectElements(useDesignerStore.getState().selectedElementIds);
+      if (sceneChanged) adapter.playSceneEnterAnimations(resolvedScene);
     });
     // `assets` is included so that an image element added just before its own asset finishes
     // uploading (still resolving to a placeholder at that instant) re-resolves to the real photo
     // the moment the assets list query refetches, without requiring another unrelated edit.
-  }, [document, activeSceneId, assets]);
+  }, [document, activeSceneId, assets, orgSettings]);
 
   // Store -> fabric selection sync (e.g. clicking a row in the Layers panel). Safe to fire
   // during an in-flight loadScene rebuild above — selectElements no-ops harmlessly if the
@@ -218,11 +246,28 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
 
   const canvasPxWidth = (document?.canvas.width ?? 0) * zoom;
   const canvasPxHeight = (document?.canvas.height ?? 0) * zoom;
+  const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
+  // designer.md Phase 9 — a color scene background is now a DOM layer, not `canvas.backgroundColor`
+  // (see FabricCanvasAdapter's Phase 9 comments for why: an opaque Fabric-painted background would
+  // sit on top of a video element positioned behind the canvas and hide it completely). Image/video
+  // background types stay a documented no-op, unchanged from before this phase.
+  const backgroundColor = activeScene?.background.type === 'color' ? activeScene.background.color : undefined;
 
   return (
     <div ref={containerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden bg-gray-100 dark:bg-gray-950">
       <div className="relative" style={{ width: canvasPxWidth, height: canvasPxHeight }}>
+        <div className="absolute inset-0" style={{ backgroundColor }} />
+        {/* designer.md Phase 9 — video elements' actual playback (FabricCanvasAdapter
+            populates/positions these; the Fabric hit-box underneath is fully transparent). Sits
+            below the canvas so canvas-drawn Shape/Image/QR content can layer on top of video —
+            see designer.md's Phase 9 amendment for the three-band stacking model and its limits. */}
+        <div ref={videoOverlayContainerRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
         <div ref={canvasHostRef} />
+        {/* designer.md Phase 8 — text elements' actual visible glyphs (FabricCanvasAdapter
+            populates/positions these; the Fabric Textbox underneath paints transparent). Sits
+            above the canvas but below guides/context-menu, and doesn't itself intercept pointer
+            events — selection/hit-testing stays on the canvas. */}
+        <div ref={textOverlayContainerRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
         <div className="pointer-events-none absolute inset-0">
           {guides.v.map((x) => (
             <div key={`v-${x}`} className="absolute top-0 bottom-0 w-px bg-pink-500" style={{ left: x * zoom }} />

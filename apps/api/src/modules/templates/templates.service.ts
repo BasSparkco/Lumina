@@ -1,33 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import type { Prisma } from '@lumina/db';
-import { DesignDocumentSchema } from '@lumina/design-schema';
+import { buildBlankDesignDocument, DesignDocumentSchema } from '@lumina/design-schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import { DesignsService } from '../designs/designs.service';
 import type { TemplateDto, TenantAccessDto } from './dto/template.dto';
-
-// Matches the blank document designer2's own defaultElements.ts builds client-side — a Template
-// with no designJson supplied at creation time opens to the same empty single-scene canvas a
-// from-scratch customer design would, ready for Super Admin to build out in the editor.
-function buildBlankDesignDocument(name: string) {
-  return {
-    schemaVersion: 1 as const,
-    id: `design_${randomUUID()}`,
-    name,
-    canvas: { width: 1920, height: 1080, backgroundColor: '#000000' },
-    settings: { defaultSceneDurationMs: 10000 },
-    scenes: [
-      {
-        id: `scene_${randomUUID()}`,
-        name: 'Scene 1',
-        durationMs: 10000,
-        background: { type: 'color' as const, color: '#000000' },
-        elements: [],
-      },
-    ],
-  };
-}
 
 @Injectable()
 export class TemplatesService {

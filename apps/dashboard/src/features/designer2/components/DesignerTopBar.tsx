@@ -1,6 +1,7 @@
 'use client';
-import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, Eye, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2 } from 'lucide-react';
 import { SaveStatus } from './SaveStatus';
+import type { AutosaveStatus } from '../hooks/useAutosave';
 
 interface DesignerTopBarProps {
   name: string;
@@ -13,11 +14,18 @@ interface DesignerTopBarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onToggleLayers: () => void;
-  // designer.md Phase 5 — only set when authoring a Template (designer2's only persistence so
-  // far); undefined keeps Save a disabled placeholder, same as before, for plain designer2.
+  onToggleVersions: () => void;
+  // designer.md Phase 6 — a Designer-only scene-sequencing playback loop, not the full Player-
+  // parity preview (dynamic variables/animation/video, designer.md Phase 11's design-runtime).
+  previewing: boolean;
+  onTogglePreview: () => void;
+  // designer.md Phase 10 — Manual Save is real for both plain designer2 and Template-authoring
+  // mode now; `onSave` stays optional only because DesignerShell hasn't finished loading a
+  // document (or its id) yet, not because of which mode this is.
   onSave?: () => void;
   saving?: boolean;
   saveError?: string | null;
+  saveStatus: AutosaveStatus;
 }
 
 const btn =
@@ -34,9 +42,13 @@ export function DesignerTopBar({
   onZoomIn,
   onZoomOut,
   onToggleLayers,
+  onToggleVersions,
+  previewing,
+  onTogglePreview,
   onSave,
   saving,
   saveError,
+  saveStatus,
 }: DesignerTopBarProps) {
   return (
     <div className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
@@ -70,15 +82,22 @@ export function DesignerTopBar({
         <Layers className="h-4 w-4" />
       </button>
 
+      <button className={btn} onClick={onToggleVersions} aria-label="Version history">
+        <History className="h-4 w-4" />
+      </button>
+
       <div className="ml-auto flex items-center gap-3">
         {saveError && <span className="text-xs text-red-500 dark:text-red-400">{saveError}</span>}
-        <SaveStatus />
-        {/* Preview has nothing to act on yet — no preview runtime exists (designer.md Phase 11).
-            Disabled placeholder reserves its toolbar position. Save is real only in Template-
-            authoring mode (onSave set) — plain designer2 still has nowhere to save to
-            (designer.md Phase 10), so it stays disabled there too. */}
-        <button className={btn} disabled aria-label="Preview">
-          <Eye className="h-4 w-4" />
+        <SaveStatus status={saveStatus} />
+        {/* Preview plays a scene-sequencing loop (designer.md Phase 6) — real, but Designer-only:
+            no dynamic variables/animation/video/Player-runtime parity yet (designer.md Phase 11). */}
+        <button
+          className={btn}
+          onClick={onTogglePreview}
+          aria-label={previewing ? 'Stop preview' : 'Preview'}
+          aria-pressed={previewing}
+        >
+          {previewing ? <Square className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
         <button className={btn} disabled={!onSave || saving} onClick={onSave} aria-label="Save">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

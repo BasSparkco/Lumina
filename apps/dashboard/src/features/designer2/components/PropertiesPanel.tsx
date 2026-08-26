@@ -12,12 +12,14 @@ import {
   Crop as CropIcon,
   FlipHorizontal,
   FlipVertical,
+  Play,
   SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
-import type { DesignElement } from '@lumina/design-schema';
+import { ANIMATION_MOTION, type DesignElement, type DynamicBinding, type EasingName, type ElementAnimation } from '@lumina/design-schema';
 import { FontPicker } from '@/components/FontPicker';
 import { ImagePicker } from '@/components/ImagePicker';
+import { VideoPicker } from '@/components/VideoPicker';
 import { CropEditor } from '@/components/CropEditor';
 import { AdjustmentsEditor } from '@/components/AdjustmentsEditor';
 import { assetsApi } from '@/lib/api';
@@ -25,6 +27,184 @@ import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import type { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
 import { useLiveField } from '../hooks/useLiveField';
 import { useDesignerStore } from '../state/designer.store';
+
+type AnimationStep = NonNullable<ElementAnimation['enter']>;
+type EmphasisStep = NonNullable<ElementAnimation['emphasis']>;
+
+const ANIMATION_PRESET_OPTIONS = Object.keys(ANIMATION_MOTION) as (keyof typeof ANIMATION_MOTION)[];
+const EASING_OPTIONS: EasingName[] = ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out'];
+
+// designer.md §17.2/Phase 8 — binds one element property to a `{{variable}}` token. Only one
+// binding per property is meaningful, so this replaces (rather than appends to) any existing
+// entry for the same `property`; clearing the variable key removes that property's binding
+// entirely instead of persisting an empty one.
+function withDynamicBinding(
+  current: DynamicBinding[] | undefined,
+  property: string,
+  binding: { variable: string; fallback?: string } | undefined,
+): DynamicBinding[] | undefined {
+  const rest = (current ?? []).filter((b) => b.property !== property);
+  if (!binding) return rest.length > 0 ? rest : undefined;
+  return [...rest, { property, variable: binding.variable, fallback: binding.fallback || undefined }];
+}
+
+function DynamicBindingField({
+  property,
+  bindings,
+  onCommit,
+}: {
+  property: string;
+  bindings: DynamicBinding[] | undefined;
+  onCommit: (next: DynamicBinding[] | undefined) => void;
+}) {
+  const current = bindings?.find((b) => b.property === property);
+  return (
+    <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Dynamic value</span>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Variable">
+          <input
+            type="text"
+            className={inputClass}
+            placeholder="offer.price"
+            defaultValue={current?.variable ?? ''}
+            onBlur={(e) => {
+              const variable = e.target.value.trim();
+              onCommit(withDynamicBinding(bindings, property, variable ? { variable, fallback: current?.fallback } : undefined));
+            }}
+          />
+        </Field>
+        <Field label="Fallback">
+          <input
+            type="text"
+            className={inputClass}
+            disabled={!current?.variable}
+            defaultValue={current?.fallback ?? ''}
+            onBlur={(e) => {
+              if (!current?.variable) return;
+              onCommit(withDynamicBinding(bindings, property, { variable: current.variable, fallback: e.target.value }));
+            }}
+          />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+function withAnimationPhase<P extends keyof ElementAnimation>(
+  current: ElementAnimation | undefined,
+  phase: P,
+  step: ElementAnimation[P],
+): ElementAnimation | undefined {
+  const next: ElementAnimation = { ...current, [phase]: step };
+  if (!step) delete next[phase];
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+// One preset/duration/delay/easing(/repeat for emphasis) block, shared by the Enter/Emphasis/Exit
+// sections below — designer.md Phase 7. Preset 'none' (the default when the phase is unset)
+// hides the rest of the fields and, on commit, removes this phase from element.animation
+// entirely rather than persisting a no-op step.
+function AnimationPhaseFields({
+  title,
+  step,
+  isEmphasis,
+  onCommit,
+  onPreview,
+}: {
+  title: string;
+  step: AnimationStep | EmphasisStep | undefined;
+  isEmphasis?: boolean;
+  onCommit: (step: AnimationStep | EmphasisStep | undefined) => void;
+  onPreview?: () => void;
+}) {
+  const preset = step?.preset ?? 'none';
+
+  function setPreset(next: string) {
+    if (next === 'none') {
+      onCommit(undefined);
+      return;
+    }
+    onCommit({
+      preset: next as AnimationStep['preset'],
+      durationMs: step?.durationMs ?? 600,
+      delayMs: step?.delayMs ?? 0,
+      easing: step?.easing ?? 'ease-out',
+      ...(isEmphasis ? { repeat: (step as EmphasisStep | undefined)?.repeat } : {}),
+    } as AnimationStep | EmphasisStep);
+  }
+
+  return (
+    <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{title}</span>
+        {step && onPreview && (
+          <button
+            title={`Preview ${title.toLowerCase()}`}
+            onClick={onPreview}
+            className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-indigo-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-indigo-400"
+          >
+            <Play className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <select className={inputClass} value={preset} onChange={(e) => setPreset(e.target.value)}>
+        {ANIMATION_PRESET_OPTIONS.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
+      {step && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Duration (ms)">
+              <input
+                type="number"
+                className={inputClass}
+                defaultValue={step.durationMs}
+                onBlur={(e) => onCommit({ ...step, durationMs: Math.max(0, Number(e.target.value)) })}
+              />
+            </Field>
+            <Field label="Delay (ms)">
+              <input
+                type="number"
+                className={inputClass}
+                defaultValue={step.delayMs}
+                onBlur={(e) => onCommit({ ...step, delayMs: Math.max(0, Number(e.target.value)) })}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Easing">
+              <select className={inputClass} value={step.easing ?? 'ease-out'} onChange={(e) => onCommit({ ...step, easing: e.target.value })}>
+                {EASING_OPTIONS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {isEmphasis && (
+              <Field label="Repeat (blank = loop)">
+                <input
+                  type="number"
+                  min={1}
+                  className={inputClass}
+                  defaultValue={(step as EmphasisStep).repeat ?? ''}
+                  onBlur={(e) => {
+                    const v = e.target.value === '' ? undefined : Math.max(1, Math.round(Number(e.target.value)));
+                    onCommit({ ...step, repeat: v } as EmphasisStep);
+                  }}
+                />
+              </Field>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // designer2 hasn't adopted next-intl yet (see PropertiesPanel's other hardcoded strings below) —
 // ImagePicker's `labels` prop is required, so English literals stand in until the rest of the
@@ -46,6 +226,21 @@ const IMAGE_PICKER_LABELS = {
   stockNotConfigured: 'Stock photos are not configured',
   stockCredit: 'Photos provided by Pexels',
   importStockFailed: 'Could not import photo',
+};
+
+// designer.md Phase 9 — VideoPicker's own labels prop (apps/dashboard/src/components/VideoPicker.tsx),
+// same hardcoded-English rationale as IMAGE_PICKER_LABELS above.
+const VIDEO_PICKER_LABELS = {
+  existing: 'Existing',
+  upload: 'Upload',
+  stock: 'Stock',
+  uploading: 'Uploading',
+  uploadFailed: 'Upload failed',
+  stockSearchPlaceholder: 'Search stock videos',
+  stockEmpty: 'No results',
+  stockNotConfigured: 'Stock videos are not configured',
+  stockCredit: 'Videos provided by Pexels',
+  importStockFailed: 'Could not import video',
 };
 
 interface PropertiesPanelProps {
@@ -263,6 +458,33 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
         <ToggleField label="Deletable" checked={element.deletable} onCommit={(v) => commitUpdate({ deletable: v })} />
       </div>
 
+      {/* designer.md Phase 7 — common to every element type (§8's Common Properties lists
+          "Animation"). Exit has no automatic trigger anywhere in designer2 yet (same as the
+          legacy Theme/Player's own exit animation — see ThemeElementAnimationSchema's comment on
+          why: no "this element goes away while its siblings stay" moment in a hard scene cut), so
+          its only way to see it is the Preview button here. */}
+      <AnimationPhaseFields
+        title="Enter"
+        step={element.animation?.enter}
+        onCommit={(step) => commitUpdate({ animation: withAnimationPhase(element.animation, 'enter', step) })}
+        onPreview={element.animation?.enter ? () => adapter?.playEnter(element.id, element.animation!.enter!, element) : undefined}
+      />
+      <AnimationPhaseFields
+        title="Emphasis"
+        isEmphasis
+        step={element.animation?.emphasis}
+        onCommit={(step) => commitUpdate({ animation: withAnimationPhase(element.animation, 'emphasis', step) })}
+        onPreview={
+          element.animation?.emphasis ? () => adapter?.playEmphasisOnce(element.id, element.animation!.emphasis!, element) : undefined
+        }
+      />
+      <AnimationPhaseFields
+        title="Exit"
+        step={element.animation?.exit}
+        onCommit={(step) => commitUpdate({ animation: withAnimationPhase(element.animation, 'exit', step) })}
+        onPreview={element.animation?.exit ? () => adapter?.playExit(element.id, element.animation!.exit!, element) : undefined}
+      />
+
       {isTemplateMode && (
         <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
           <p className="text-[11px] font-medium text-gray-400 dark:text-gray-600">Template customization (designer.md §7)</p>
@@ -309,6 +531,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
               <option value="rtl">RTL</option>
             </select>
           </Field>
+          <DynamicBindingField property="text" bindings={element.dynamicBindings} onCommit={(next) => commitUpdate({ dynamicBindings: next })} />
         </div>
       )}
 
@@ -424,7 +647,69 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
             <ColorField label="Foreground" value={element.foregroundColor} onCommit={(v) => commitUpdate({ foregroundColor: v })} />
             <ColorField label="Background" value={element.backgroundColor} onCommit={(v) => commitUpdate({ backgroundColor: v })} />
           </div>
-          <p className="text-[11px] text-gray-400 dark:text-gray-600">Dynamic binding — designer.md Phase 8</p>
+          <DynamicBindingField property="value" bindings={element.dynamicBindings} onCommit={(next) => commitUpdate({ dynamicBindings: next })} />
+        </div>
+      )}
+
+      {element.type === 'video' && (
+        <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+          <Field label="Video">
+            <VideoPicker
+              value={element.assetId ?? null}
+              onChange={(assetId) => commitUpdate({ assetId: assetId ?? undefined })}
+              placeholder="No video selected"
+              labels={VIDEO_PICKER_LABELS}
+            />
+          </Field>
+          <Field label="Poster (optional)">
+            <ImagePicker
+              value={element.posterAssetId ?? null}
+              onChange={(assetId) => commitUpdate({ posterAssetId: assetId ?? undefined })}
+              placeholder="No poster selected"
+              labels={IMAGE_PICKER_LABELS}
+            />
+          </Field>
+          <Field label="Fit">
+            <select className={inputClass} value={element.fit} onChange={(e) => commitUpdate({ fit: e.target.value as 'contain' | 'cover' | 'fill' })}>
+              <option value="contain">Contain</option>
+              <option value="cover">Cover</option>
+              <option value="fill">Fill</option>
+            </select>
+          </Field>
+          <div className="space-y-1.5">
+            <ToggleField label="Autoplay" checked={element.autoplay} onCommit={(v) => commitUpdate({ autoplay: v })} />
+            <ToggleField label="Loop" checked={element.loop} onCommit={(v) => commitUpdate({ loop: v })} />
+            <ToggleField label="Muted" checked={element.muted} onCommit={(v) => commitUpdate({ muted: v })} />
+          </div>
+          <NumberField
+            label="Volume"
+            value={element.volume}
+            onLive={(v) => liveUpdate({ volume: Math.min(1, Math.max(0, v)) })}
+            onCommit={(v) => commitUpdate({ volume: Math.min(1, Math.max(0, v)) })}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Start (sec)">
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                defaultValue={element.startOffsetMs / 1000}
+                onBlur={(e) => commitUpdate({ startOffsetMs: Math.max(0, Math.round(Number(e.target.value) * 1000)) })}
+              />
+            </Field>
+            <Field label="End (sec, blank = full)">
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                defaultValue={element.endOffsetMs !== undefined ? element.endOffsetMs / 1000 : ''}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  commitUpdate({ endOffsetMs: e.target.value !== '' && v > 0 ? Math.round(v * 1000) : undefined });
+                }}
+              />
+            </Field>
+          </div>
         </div>
       )}
 

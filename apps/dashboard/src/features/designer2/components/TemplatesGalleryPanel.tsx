@@ -20,9 +20,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 // designer.md §11's customer-facing half of the Template -> Asset workflow: browse authorized
 // Templates (backend already filters to PUBLISHED + GLOBAL/authorized-tenant — see
 // TemplatesService.customerList), "Use" one to clone it into a new tenant-owned DesignAsset (the
-// Critical Backend Rule — never an update to the Template itself). designer2 has no way to load/
-// continue editing a saved DesignAsset yet (designer.md Phase 10's job), so this stops at a
-// confirmation rather than pretending to open the clone in this same editor.
+// Critical Backend Rule — never an update to the Template itself). Still stops at a confirmation
+// rather than opening the clone in this editor — designer2 can load `?designId=` now (designer.md
+// Phase 10), but there's no "My Designs" browse page yet to navigate to it from (still deferred).
 export function TemplatesGalleryPanel({ onClose }: TemplatesGalleryPanelProps) {
   const { data: templates = [], isLoading } = useQuery({ queryKey: ['templates'], queryFn: templatesApi.list });
   const [createdName, setCreatedName] = useState<string | null>(null);

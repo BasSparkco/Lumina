@@ -2104,7 +2104,7 @@ Phase 11  Player Runtime Integration
 Phase 12  Hardening, Testing & V1 Release
 ```
 
----
+--- 
 
 # 31. Developer Tasks per Phase
 
@@ -2453,6 +2453,34 @@ Support multi-scene signage designs.
 - Preserve inactive Scene state in Design store.
 - Full-design preview loop.
 
+> **Amendment (2026-08-26, implementation):**
+>
+> - **Per-element timeline (start/end delay, enter/exit animation, §12.4's `ElementTiming`) is
+>   deferred to Phase 7.** It's inert without animation presets to actually delay/trigger — Phase
+>   6's own task list already separates it out as its own concept ("Scene strip/timeline UI" is one
+>   bullet; this phase's Acceptance criteria only ever test scene add/reorder/duration/preview,
+>   never element timing). `TimelinePanel.tsx` (the Phase 1 placeholder file for this) is deleted
+>   rather than extended; a future Phase 7 can reintroduce it alongside `SceneStrip.tsx`.
+> - **`SceneStrip.tsx`** (`apps/dashboard/src/features/designer2/components/SceneStrip.tsx`) is the
+>   real scene-management UI: add/duplicate/rename (double-click)/delete/reorder (drag, dnd-kit —
+>   same library `@/components/LayersPanel.tsx` already uses, just horizontal) scenes, plus a
+>   click-to-edit duration badge. Duplicate names follow the existing `${name} (copy)` convention
+>   (`playlists/page.tsx`, `ThemesSection.tsx`, `LayoutsSection.tsx`). Delete is a no-op below one
+>   scene, matching `DesignDocumentSchema.scenes.min(1)`.
+> - **Scene thumbnails are best-effort and session-only, not persisted.** Per §29, only the active
+>   scene is ever loaded into Fabric, so only a visited scene can have a real captured thumbnail —
+>   unvisited scenes fall back to a background-color swatch. `FabricCanvasAdapter.exportSceneSnapshot()`
+>   (declared in §4.2, previously an unimplemented throw) now captures the currently-rendered
+>   `<canvas>` via native `toBlob()`; this serves the thumbnail need only, not §28's still-deferred
+>   full export.
+> - **The preview loop is Designer-only, not the Player runtime.** It sequences `document.scenes` via
+>   the same `FabricCanvasAdapter.loadScene` already used for editing, timed by each scene's
+>   `durationMs`, looping back to scene 1 — no dynamic-variable resolution, animation, or video
+>   (those remain Phases 7–9, and the shared DOM/CSS `design-runtime` stays Phase 11's job per
+>   §23.2). Wired to the topbar's Preview button (previously a disabled placeholder); while playing,
+>   the Sidebar/PropertiesPanel/SceneStrip hide and a transparent layer blocks canvas pointer
+>   interaction so playback can't be accidentally mutated mid-loop.
+
 ### Acceptance
 
 - Single Scene works.
@@ -2479,6 +2507,41 @@ Add safe preset-based motion.
 - Build preview runtime.
 - Ensure editor and player runtime use shared definitions.
 - Prevent invalid animation values at API schema level.
+
+> **Amendment (2026-08-26, implementation):**
+>
+> - **Tween mechanism is Fabric-native, not CSS.** The legacy Theme editor/Player's own element
+>   animation (`packages/types/src/theme.ts`'s `ThemeElementAnimationSchema` +
+>   `ELEMENT_ANIMATION_KEYFRAMES_CSS`) uses CSS `animation-*` because Theme elements render as real
+>   DOM nodes. designer2's canvas elements are Fabric objects with no DOM node to attach CSS to —
+>   and won't get one even after Phase 8's RTL work, which only gives *text* a DOM overlay
+>   (Shape/Image/QR stay pure canvas). So `FabricCanvasAdapter` (the one place allowed to import
+>   `fabric`, per §4.2) drives enter/exit/emphasis via fabric v7's own `object.animate()`.
+> - **One shared preset→motion table** (`designer2/runtime/animations.ts`'s `ANIMATION_MOTION`,
+>   framework-agnostic, no fabric import) is the "shared definitions" this section's task list
+>   asks for: enter/exit/emphasis are all just this same table played forward, backward, or
+>   forward-then-backward. A future Phase 11 Player CSS runtime should consume this same table
+>   rather than redefining what "fade-up" means a second time.
+> - **`exit` has no automatic trigger**, matching the exact precedent (and reasoning) of
+>   `ThemeElementAnimationSchema.exit`'s own comment: no "this element goes away while its
+>   siblings stay" moment exists in a hard scene cut (designer2's Phase 6 preview loop swaps
+>   scenes wholesale via `loadScene`, same as Theme's kiosk playback). Full authoring (schema,
+>   `PropertiesPanel` controls) and a manual Preview button exist; only the automatic per-scene
+>   trigger is deferred, for the same "no natural moment" reason, not forgotten.
+> - **Enter/emphasis auto-play only on a genuine scene change**, not on every document mutation —
+>   `CanvasViewport`'s scene-load effect already re-runs on every store change (Phase 2's
+>   documented always-rebuild strategy), so triggering animation there unconditionally would
+>   replay every element's enter animation on every unrelated edit. A `prevSceneIdRef` comparison
+>   gates it to real `activeSceneId` transitions — which means the Phase 6 preview loop's
+>   scene-to-scene stepping gets working animation playback for free, with no changes to
+>   `DesignerShell.tsx` itself.
+> - **"Animation preview is repeatable"** (this phase's own Acceptance criterion) is satisfied by
+>   a manual "▶ Preview" button per phase in `PropertiesPanel`, not by wiring exit into the
+>   automatic scene-preview loop — see the `exit` point above for why that stays manual.
+> - **emphasis's `repeat`** (§13's schema field, already present pre-Phase-7): unset = loops
+>   indefinitely while the scene is active; the loop stops with no abort bookkeeping — each
+>   iteration re-checks that its target id still maps to the exact Fabric object instance it
+>   started with, which becomes false the instant a scene rebuild replaces it.
 
 ### Acceptance
 
@@ -2534,6 +2597,77 @@ RTL:
 > matrix → CSS transform, or simpler position/rotation mirroring) before Phase 8 implementation
 > starts, not during it.
 
+> **Amendment (2026-08-26, implementation):**
+>
+> - **Sync mechanism decided: position mirroring, not a full transform-matrix conversion.**
+>   `CanvasViewport.tsx` already had exact prior art — its snap-guides overlay is already a DOM
+>   sibling of the canvas, positioned via `x * zoom`/`y * zoom` inside the same CSS-sized wrapper.
+>   The text overlay works identically: `left/top/width/height` = the Fabric object's design-space
+>   values × the canvas's current zoom (`canvas.getZoom()`), `transform: rotate(angle) scale(scaleX,
+>   scaleY)` for rotation and (Phase 7 animation) scale, with the CSS default center transform-
+>   origin — which matches Fabric's own center-pivoted rotation/scaling, since every element here
+>   uses `originX/originY: 'left'/'top'` only for where `left/top` are numerically anchored, not
+>   for the transform pivot. One `canvas.on('after:render', ...)` hook (`FabricCanvasAdapter`)
+>   recomputes every overlay's position/size/rotation/scale/opacity/font-size on every actual
+>   paint — covering drag, resize, rotate, zoom/pan, and Phase 7 animation ticks uniformly, with
+>   no React state round-trip and no per-cause special-casing. Static content (text string, font
+>   family, color, alignment, `dir`) is set once at overlay-creation time (`addElement`) — it never
+>   changes without a full `loadScene` rebuild, which recreates the overlay fresh anyway, so
+>   re-writing it every render would be wasted work.
+> - The Fabric `Textbox` itself paints with `fill: 'transparent'` (not object opacity — the
+>   element's own authored opacity still animates/applies normally) and exists on canvas purely
+>   for hit-testing/selection/transform handles. `object.fontSize` is a real live property on it,
+>   so the same sync hook incidentally fixes a pre-existing gap: `PropertiesPanel`'s font-size
+>   slider's "live" path called `FabricCanvasAdapter.updateElement`, but that method never mapped
+>   `patch.fontSize` to anything — font size only ever visually updated after the next full
+>   commit-triggered rebuild. Now mapped for real.
+> - **Known regression, accepted**: Phase 6's `exportSceneSnapshot()` (`canvas.getElement().toBlob()`)
+>   only captures the raw canvas bitmap, which no longer includes visible text now that the
+>   Textbox paints transparent — the real glyphs live in the DOM overlay, outside the canvas
+>   entirely. `SceneStrip` thumbnails will show blank text after this phase. Fixing it means
+>   compositing canvas + overlay (e.g. a DOM-to-image capture of the whole viewport, not just
+>   `toBlob()`), which is real work — deferred to whenever §28's full export/thumbnail pipeline is
+>   actually built, not silently broken.
+> - **Sizing is a known approximation, not pixel-perfect.** Fabric's Textbox computes its own
+>   `height` (and line-wrap count) using its own non-bidi-aware layout engine, which won't always
+>   exactly match how the browser's own `white-space: pre-wrap` wrapping sizes the same text at
+>   the same width/font for genuinely complex RTL content. The overlay uses `overflow: visible`
+>   (not `hidden`) specifically so a mismatch shows as slightly-oversized-but-fully-readable text
+>   rather than silently clipped content — an accepted V1 approximation given the amendment's own
+>   framing ("Fabric still owns... size").
+>
+> **Dynamic variables**: resolution is a pure function (`designer2/runtime/variables.ts`,
+> `resolveElementBindings`), applied by `CanvasViewport` to every element *before* calling
+> `adapter.loadScene()` — the adapter/Fabric layer never sees a `{{token}}` or a variables map at
+> all, per §4.1. V1 sources, matching this section's own three: Design instance variables
+> (`DesignDocument.variables`, already schema-present since Phase 0 — new `VariablesPanel.tsx`,
+> a Sidebar-toggled drawer, authors it directly) and tenant/business profile — but real backing
+> exists only for `{{business.name}}` (`Organization.name`; the model has no phone/logo/website
+> fields at all, confirmed against the Prisma schema). `OrgService.getSettings` now selects `name`
+> too (one-line addition to an already tenant-scoped/authenticated endpoint) and it's auto-seeded
+> into the resolved map, overridable by `document.variables`. **Super Admin variable-definition
+> authoring UI and the customer-facing "fill in these fields" form during Template clone are
+> deferred** — a genuinely separate, sizable UX flow; `DynamicFieldDefinitionSchema` stays
+> untouched and ready for it. Image `assetId` binding ("where supported") is schema-ready
+> (`dynamicBindings` is generic) but not wired into `PropertiesPanel`'s Image section this pass.
+>
+> **QR**: real rendering via the `qrcode` package (added to `apps/dashboard`; already a vetted
+> dependency of `apps/player`'s `QrCodeWidget.tsx` for the identical purpose) — `FabricObjectFactory`
+> generates a data URL and loads it as a `FabricImage`, falling back to the placeholder box when
+> there's no resolved value to encode. `QrElementSchema.dynamicValue` (a separate, never-consumed
+> field from the Phase 0 draft) is removed in favor of the same generic `dynamicBindings`
+> mechanism every element already has (`{property: 'value', variable, fallback}`) — one binding
+> mechanism, not two. Safe: nothing persisted real data through the old field yet.
+>
+> **Hebrew fonts**: `@lumina/types`' `FONT_LIBRARY` had 7 Arabic fonts and zero Hebrew ones —
+> this section's own Acceptance ("Arabic/Hebrew survive... render") was unsatisfiable for Hebrew
+> regardless of RTL overlay quality, text would render as tofu. Added a `'HEBREW'` `FontCategory`
+> and `@fontsource/noto-sans-hebrew` (same Noto family already used for Arabic/Serif), installed
+> in both `apps/dashboard` and `apps/player` matching every other font's footprint.
+>
+> **Not attempted this pass**: Player-side rendering of RTL/variables/QR — Phase 11's DOM/CSS
+> runtime doesn't exist yet; this phase is Designer-only, same scoping pattern as Phases 6–7.
+
 ### Acceptance
 
 - `{{business.name}}` resolves.
@@ -2566,6 +2700,59 @@ Render real video within scene composition.
 - Player video component.
 - Preload strategy.
 
+> **Amendment (2026-08-26, implementation):**
+>
+> - **Same hybrid pattern as Phase 8 text, applied to video**: Fabric can't play video into its
+>   canvas bitmap natively, so the Fabric-side `VideoElement` object is a fully transparent `Rect`
+>   hit-box (`FabricObjectFactory.ts`), and the real playback is a synced DOM `<video>` (muted/
+>   loop/autoplay/poster/`object-fit`/volume from the schema fields, `currentTime` seeking for
+>   start/end offset), positioned by extending `FabricCanvasAdapter`'s Phase 8 `after:render`
+>   overlay-sync machinery (now generalized — `applyOverlayGeometry` is shared by both the text
+>   and video overlay maps) rather than duplicating it.
+> - **This surfaced a real problem needing a real fix, not scoped away**: this section's own
+>   Acceptance requires "video may sit behind text/logo/QR," but Phase 8's text overlay sits in a
+>   DOM layer *above* the entire canvas, and the canvas's own `backgroundColor` (how scene
+>   background color was rendered, `FabricObjectFactory.applySceneBackground`) paints an opaque
+>   fill across the whole canvas beneath its objects — every scene defaults to a solid color
+>   background (`createScene()`), so a video positioned in a DOM layer below the canvas would be
+>   completely hidden by the canvas's own paint in the common case, not just by other objects.
+>   **Fix**: scene background color rendering moved out of Fabric entirely, to a DOM div in
+>   `CanvasViewport.tsx` at the very bottom of the stack. The Fabric canvas itself no longer paints
+>   *anything* except its own objects — `applySceneBackground` (the function) is deleted, not just
+>   emptied. Scene backgrounds of type `image`/`video` remain a documented no-op, unchanged from
+>   before this phase — implementing those is related but separate scope (a scene-level background
+>   video, not this section's `VideoElement`) that this section's own Acceptance doesn't require;
+>   noted as a natural follow-up now that the DOM-video-layer machinery exists.
+> - **Resulting stacking model, bottom to top: scene background (DOM) → video elements (DOM) →
+>   Fabric canvas (Shape/Image/QR, correctly ordered among themselves) → text elements (DOM,
+>   Phase 8).** This is a deliberate three-band simplification, not fully arbitrary z-index
+>   interleaving: within a band, elements order correctly against each other (Shape-vs-Shape via
+>   Fabric's own zIndex, Video-vs-Video in DOM paint order), but *across* bands the order is fixed
+>   — video is always back-most, text is always front-most, canvas content always sits between
+>   them. A video element can't be authored to sit above one Shape but below another. This
+>   satisfies the literal Acceptance criterion (video behind text/logo/QR) and matches this
+>   section's own canonical composition example (§15: Background → Video → Logo → Text → QR), but
+>   is a real V1 limitation worth stating plainly rather than leaving implicit: true arbitrary
+>   cross-technology interleaving would need either multi-canvas splitting or converting every
+>   element to DOM — which is exactly what Phase 11's Player does (§23.2, no canvas bitmap layer
+>   at all there), so this gap is Designer-editing-only and disappears in the Player.
+> - **`VideoElementSchema.assetId` changed from required to optional**, matching
+>   `ImageElementSchema`'s existing pattern — the established "Add X" sidebar flow (Text/Shape/
+>   Image/QR, now Video too) always inserts an empty placeholder first, then the author picks
+>   media via the element's own Properties panel picker (`VideoPicker.tsx`, already existed,
+>   confirmed generic/reusable back in the Phase 4 amendment). Safe: nothing depended on `assetId`
+>   being required, since Phase 9 hadn't shipped yet.
+> - **"Play/pause selection behavior"** is interpreted as: playback follows the authored
+>   `autoplay`/`visible` fields directly (paused when hidden, matching §15's "pause hidden/
+>   off-scene videos" — off-scene videos never exist in the first place, since only the active
+>   scene is ever loaded, §29). No additional click-to-play/pause interaction is wired — not
+>   required by this section's Acceptance criteria, and PropertiesPanel's Autoplay toggle is the
+>   author-facing control for this.
+> - **Not attempted this pass**: "Player video component" / "Normalized video validation" —
+>   Phase 11's Player runtime doesn't exist yet (same Designer-only scoping as every prior phase);
+>   video normalization would live in the existing worker transcode pipeline (§15's own diagram),
+>   untouched here.
+
 ### Acceptance
 
 - Video may sit behind text/logo/QR.
@@ -2594,6 +2781,54 @@ Make editing reliable.
 - Save status indicator.
 - Handle offline save error.
 - Handle stale revision conflict.
+
+> **Amendment (2026-08-26, implementation):**
+>
+> - **Scope trimmed hard to exactly this section's own Acceptance criteria.** `DELETE /designs/:id`
+>   and `POST /designs/:id/duplicate` (§21) are not built — both are cheap to add (they'd mirror
+>   `TemplatesService`'s existing archive/clone patterns closely) but have no UI trigger point
+>   without a "My Designs" browse page, which doesn't exist yet and isn't required by this
+>   section's Acceptance either. `GET /designs`/`GET /designs/:id` (already built, Phase 5) are
+>   ready for whenever that page is. Audit logging for design saves was also skipped — checked,
+>   and `AuditLogService` isn't consumed by *any* module yet, not even Templates despite §24
+>   asking for it there too — a pre-existing gap, not newly introduced here.
+> - **`DesignAssetVersion`/`DesignDraft` (new Prisma models) + `DesignAsset.revision`** implement
+>   §19.2/§19.6/§26 directly. `DesignDraft` is keyed by the client-generated `DesignDocument.id`
+>   (`documentId`), not a `DesignAsset` foreign key — deliberately, so a brand-new unsaved design
+>   can autosave a recoverable draft before it has ever been persisted as a real row at all.
+> - **Two independent autosave cadences** (`useAutosave.ts`), matching §26 exactly and neither
+>   ever touching `DesignAsset`/`revision`/version history: a `localStorage` snapshot (~500ms
+>   debounce, first line of defense, no network) and a backend `DesignDraft` PUT (~3s debounce).
+>   Manual Save is the only path that creates a `DesignAssetVersion` — "do not create a version
+>   row for every mouse movement" holds because autosave literally cannot reach that code path.
+> - **Optimistic concurrency**: `PATCH /designs/:id` requires the client's last-known `revision`;
+>   a mismatch is a 409 (`ApiError` in `apps/dashboard/src/lib/api.ts` — a small, purely additive
+>   change to the shared `req()` helper so callers can distinguish a conflict from any other
+>   failure without matching on message text). The frontend response to a 409 is a refusal with a
+>   message, not a merge UI — conflict *resolution* is out of scope, only conflict *detection*.
+> - **Restore** (`POST /designs/:id/restore/:versionId`) loads the target version's json as
+>   current and bumps `revision`, but also snapshots *another* new `DesignAssetVersion` (reason:
+>   `'restore'`) rather than rewriting/deleting anything — §26 "Restored version becomes a new
+>   current version rather than destroying history," literally.
+> - **Asset-reference validation on save** — every `assetId`/`posterAssetId` a submitted
+>   `designJson` references (Image/Video elements, Video posters, image/video scene backgrounds)
+>   is batch-checked against tenant-owned-or-shared-library assets (`assets.service.ts`'s own
+>   `organizationId: null` shared-library convention), rejecting the save if any doesn't resolve.
+>   This is the endpoint the Phase 4 amendment's own "Cross-tenant asset injection" note pointed
+>   at ("belongs in that endpoint when it's built") — it's built now.
+> - **`buildBlankDesignDocument` deduplicated.** It existed almost identically in two places
+>   already (`designer2/page.tsx`'s blank-editor mode, `TemplatesService`'s admin-create-with-no-
+>   designJson) before this phase added a third need (`DesignsService`'s `POST /designs`) — moved
+>   into `packages/design-schema` as one shared, exported function.
+> - **Crash recovery on load**: opening `?designId=` checks for a newer draft (local first, no
+>   network round-trip needed to know it exists; backend as a fallback for "crashed on a different
+>   device/browser") and silently prefers it over the saved content if genuinely newer — satisfies
+>   "browser crash/reload can recover recent work" without a confirmation-dialog UI.
+> - **First save creates the row**, not opening the editor — a blank `/designer2` visit stays
+>   purely in-memory (no eager `POST /designs` on mount) until the *first* real save, auto or
+>   manual, actually happens; only then does `page.tsx` learn the new id and `router.replace` the
+>   `?designId=` URL in (not `push` — turning a blank editor into a saved one isn't a navigation a
+>   user would expect Back to undo).
 
 ### Acceptance
 
@@ -2635,6 +2870,54 @@ Play Design Assets on actual screens.
 - Arabic/Hebrew works.
 - Internet loss after cache does not produce blank screen.
 - Updated published revision replaces old cache correctly.
+
+> **Amendment (2026-08-26, implementation).** Implemented as specified, with these scope notes:
+>
+> - **Shared `design-runtime`**: rather than a new package, the two files Phase 7/8 already built
+>   as framework-agnostic (`ANIMATION_MOTION`/`resolveEasing` and `resolveElementBindings`) were
+>   moved from `apps/dashboard/src/features/designer2/runtime/` into
+>   `packages/design-schema/src/runtime/` — both the Designer's `FabricCanvasAdapter` and the new
+>   Player's `DesignRenderer`/`player.service.ts` now import the same table/function, so a preset's
+>   or a variable binding's meaning can never silently drift between the two renderers.
+> - **DOM/CSS rendering**: `apps/player/src/components/DesignRenderer.tsx` (new) — a scene
+>   timeline (`setTimeout`, local `useState`, looping — same shape as Phase 6's Designer preview
+>   loop), a JS-measured (`ResizeObserver`) letterboxed scale factor (same convention
+>   `CanvasViewport.tsx` uses for the Designer's own zoom, not CSS container queries), and one
+>   nested-div structure per element (position wrapper, then WAAPI transform/opacity, then static
+>   rotation) that
+>   mirrors ThemeRenderer's own documented reason for keeping rotation out of the animated
+>   transform. Scene backgrounds now render for real in the Player — `color`/`image`/`video` all
+>   work, which Phase 9 explicitly deferred for the *Designer's* canvas (a Fabric-vs-DOM stacking
+>   constraint that simply doesn't exist for a pure-DOM player).
+> - **Animation runtime**: Web Animations API, driven by the shared `ANIMATION_MOTION` table and
+>   `EasingName` strings (which are already valid CSS/WAAPI easing keywords, so no JS tween
+>   function is needed on this side, unlike Fabric's own per-frame `animate()`). Enter and looping
+>   emphasis are implemented; exit-on-scene-transition auto-trigger is not (see below).
+> - **Manifest integration**: `PlaylistItemKind` gains `DESIGN` (Prisma enum + migration + CHECK
+>   constraint, split across two migrations — Postgres forbids referencing a freshly-added enum
+>   value inside the transaction that added it). `player.service.ts`'s `hydratePlaylist` gains a
+>   `DESIGN` branch calling a new `hydrateDesign()`, which batch-resolves every scene's
+>   `assetId`/`posterAssetId` to a signed/CDN URL in one query, resolves `{{business.name}}` +
+>   `document.variables` via the shared `resolveElementBindings` (same precedence Phase 8 already
+>   established client-side), and renders QR elements server-side to a data URL (`qrcode` package,
+>   added to `apps/api`) so the Player never needs its own QR library — QR gets `resolvedSrc` just
+>   like Image/Video.
+> - **Offline cache / revision invalidation**: no new infrastructure needed. The whole
+>   `PlayerState` (including any hydrated `design` payload) is already cached as one IDB blob and
+>   restored on a failed fetch; Design has no separate publish/draft split (same as Theme/Layout),
+>   so hydration always reads the current `DesignAsset.designJson` — no new invalidation logic.
+> - **Deferred, not silently dropped**: (1) exit-animation auto-trigger on scene transition — same
+>   scope cut every prior animation phase has made. (2) Proof-of-play linkage — the backend
+>   endpoint exists but *no* playlist item kind calls it today (confirmed pre-existing gap, not
+>   Design-specific); wiring only Design into a client that doesn't exist yet for anything else
+>   doesn't make sense. (3) A dedicated error boundary around `DesignRenderer` — no other item kind
+>   (`ThemeRenderer`, `ZoneRenderer`, asset playback) has one either; adding one only for Design
+>   would be inconsistent rather than a real fix for the Acceptance criterion, which is already
+>   satisfied at the state-fetch level (cached-state fallback covers a hydration failure the same
+>   way it covers any other kind).
+> - **Dashboard reachability**: the playlists "Add item" picker gained a fourth `DESIGN` tab
+>   (`apps/dashboard/src/app/[locale]/(app)/playlists/page.tsx`), mirroring the existing THEME/
+>   LAYOUT tabs exactly — without this, nothing built in this phase would be reachable from the UI.
 
 ---
 

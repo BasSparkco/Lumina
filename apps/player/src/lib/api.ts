@@ -1,3 +1,5 @@
+import type { ResolvedDesignPayload } from '@lumina/design-schema';
+
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
 // Carries the HTTP status so callers can tell "screen was deleted" (404 — a definitive,
@@ -35,7 +37,7 @@ export type CheckResponse = { paired: false } | { paired: true; token: string };
 
 export type TickerDirection = 'LEFT_TO_RIGHT' | 'RIGHT_TO_LEFT' | 'TOP_TO_BOTTOM' | 'BOTTOM_TO_TOP';
 
-export type PlaylistItemKind = 'ASSET' | 'THEME' | 'LAYOUT';
+export type PlaylistItemKind = 'ASSET' | 'THEME' | 'LAYOUT' | 'DESIGN';
 
 export interface PlaylistItem {
   id: string;
@@ -50,8 +52,9 @@ export interface PlaylistItem {
   cropOffsetX: number | null;
   cropOffsetY: number | null;
   kind: PlaylistItemKind;
-  // Exactly one of asset/theme/layout is set, matching `kind` — a playlist item can be a plain
-  // asset (an APP-type asset included — see AppAsset below), a whole Theme, or a whole Layout.
+  // Exactly one of asset/theme/layout/design is set, matching `kind` — a playlist item can be a
+  // plain asset (an APP-type asset included — see AppAsset below), a whole Theme, a whole
+  // Layout, or a designer2 Design (fully resolved: variables substituted, assetIds → URLs).
   asset: {
     id: string;
     name: string;
@@ -77,6 +80,7 @@ export interface PlaylistItem {
   } | null;
   theme: HydratedTheme | null;
   layout: { id: string; name: string; zones: Zone[] } | null;
+  design: ResolvedDesignPayload | null;
 }
 
 export interface Playlist {

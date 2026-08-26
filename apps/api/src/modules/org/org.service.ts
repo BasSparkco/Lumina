@@ -109,8 +109,10 @@ export class OrgService {
     await this.prisma.user.delete({ where: { id: memberId } });
   }
 
+  // `name` added for designer.md Phase 8 — the only field on Organization that can back the
+  // `{{business.name}}` dynamic variable (no phone/logo/website fields exist on this model).
   async getSettings(orgId: string) {
-    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { autoPublish: true } });
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { autoPublish: true, name: true } });
     if (!org) throw new NotFoundException('Organization not found');
     return org;
   }

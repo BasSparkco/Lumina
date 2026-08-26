@@ -7,7 +7,7 @@
 // `id` doubles as the `@fontsource/<id>` package name and the value stored on
 // Asset.textFontFamily / ThemeElementStyle.fontFamily — keep it stable; renaming one breaks
 // every asset/theme already saved with it.
-export type FontCategory = 'SANS' | 'SERIF' | 'DISPLAY' | 'HANDWRITTEN' | 'MONOSPACE' | 'ARABIC';
+export type FontCategory = 'SANS' | 'SERIF' | 'DISPLAY' | 'HANDWRITTEN' | 'MONOSPACE' | 'ARABIC' | 'HEBREW';
 
 export interface FontDefinition {
   id: string;
@@ -73,6 +73,9 @@ export const FONT_LIBRARY: FontDefinition[] = [
   { id: 'noto-kufi-arabic', label: 'Noto Kufi Arabic', category: 'ARABIC', stack: '"Noto Kufi Arabic", sans-serif' },
   { id: 'amiri', label: 'Amiri', category: 'ARABIC', stack: '"Amiri", serif' },
   { id: 'reem-kufi', label: 'Reem Kufi', category: 'ARABIC', stack: '"Reem Kufi", sans-serif' },
+
+  // Hebrew — designer.md §16 requires it as a first-class V1 script alongside Arabic/English.
+  { id: 'noto-sans-hebrew', label: 'Noto Sans Hebrew', category: 'HEBREW', stack: '"Noto Sans Hebrew", sans-serif' },
 ];
 
 export const FONT_IDS = FONT_LIBRARY.map(f => f.id) as [string, ...string[]];

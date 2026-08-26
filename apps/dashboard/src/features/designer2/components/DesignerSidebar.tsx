@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import {
+  Braces,
   LayoutTemplate,
   Type,
   Image as ImageIcon,
@@ -25,6 +26,8 @@ interface DesignerSidebarProps {
   onAddShape: (shape: ShapeKind) => void;
   onAddImagePlaceholder: () => void;
   onAddQrPlaceholder: () => void;
+  onAddVideoPlaceholder: () => void;
+  onToggleVariables: () => void;
 }
 
 const tabBtn =
@@ -40,7 +43,14 @@ const SHAPE_OPTIONS: { kind: ShapeKind; label: string; icon: typeof Square }[] =
   { kind: 'line', label: 'Line', icon: Minus },
 ];
 
-export function DesignerSidebar({ onAddText, onAddShape, onAddImagePlaceholder, onAddQrPlaceholder }: DesignerSidebarProps) {
+export function DesignerSidebar({
+  onAddText,
+  onAddShape,
+  onAddImagePlaceholder,
+  onAddQrPlaceholder,
+  onAddVideoPlaceholder,
+  onToggleVariables,
+}: DesignerSidebarProps) {
   const [shapesOpen, setShapesOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
@@ -62,7 +72,7 @@ export function DesignerSidebar({ onAddText, onAddShape, onAddImagePlaceholder, 
         Images
       </button>
 
-      <button disabled title="Video — coming soon (designer.md Phase 9)" className={disabledTabBtn}>
+      <button className={tabBtn} onClick={onAddVideoPlaceholder}>
         <Video className="h-4 w-4" />
         Video
       </button>
@@ -97,6 +107,11 @@ export function DesignerSidebar({ onAddText, onAddShape, onAddImagePlaceholder, 
       <button className={tabBtn} onClick={onAddQrPlaceholder}>
         <QrCode className="h-4 w-4" />
         QR
+      </button>
+
+      <button className={tabBtn} onClick={onToggleVariables} title="Design variables (designer.md §17.2)">
+        <Braces className="h-4 w-4" />
+        Variables
       </button>
 
       {/* Phase 4 wired media browse/upload/replace into the Image element's own Properties panel

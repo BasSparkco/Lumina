@@ -2,8 +2,8 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, Smartphone, Volume2, VolumeX } from 'lucide-react';
-import { playlistsApi, assetsApi, themesApi, layoutsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, LayoutTemplate, Smartphone, Volume2, VolumeX } from 'lucide-react';
+import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
@@ -100,6 +100,7 @@ function PlaylistDetail({ id }: { id: string }) {
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list, enabled: showAssetPicker });
   const { data: themesList = [] } = useQuery({ queryKey: ['themes'], queryFn: themesApi.list, enabled: showAssetPicker });
   const { data: layoutsList = [] } = useQuery({ queryKey: ['layouts'], queryFn: layoutsApi.list, enabled: showAssetPicker });
+  const { data: designsList = [] } = useQuery({ queryKey: ['designs'], queryFn: designsApi.list, enabled: showAssetPicker });
   const readyAssets = useMemo(() => assets.filter((a: Asset) => a.status === 'READY'), [assets]);
   const availableAssetTypes = useMemo(() => distinctAssetTypes(readyAssets), [readyAssets]);
   const pickableAssets = useMemo(() => {
@@ -118,12 +119,13 @@ function PlaylistDetail({ id }: { id: string }) {
   }
 
   const addMut = useMutation({
-    mutationFn: ({ kind, assetId, themeId, layoutId, dur }: { kind: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string; dur: number }) =>
-      playlistsApi.addItem(id, { kind, assetId, themeId, layoutId }, dur),
-    onSuccess: (created, { kind, assetId, themeId, layoutId }) => {
+    mutationFn: ({ kind, assetId, themeId, layoutId, designAssetId, dur }: { kind: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string; designAssetId?: string; dur: number }) =>
+      playlistsApi.addItem(id, { kind, assetId, themeId, layoutId, designAssetId }, dur),
+    onSuccess: (created, { kind, assetId, themeId, layoutId, designAssetId }) => {
       const name = kind === 'ASSET' ? assets.find((a: Asset) => a.id === assetId)?.name
         : kind === 'THEME' ? themesList.find((th: Theme) => th.id === themeId)?.name
-        : layoutsList.find((l: Layout) => l.id === layoutId)?.name;
+        : kind === 'LAYOUT' ? layoutsList.find((l: Layout) => l.id === layoutId)?.name
+        : designsList.find((d: DesignAsset) => d.id === designAssetId)?.name;
       logAction({
         resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: 'ADD_ITEM',
         userName: user?.name ?? '', userEmail: user?.email ?? '', detail: name ?? '',
@@ -147,7 +149,7 @@ function PlaylistDetail({ id }: { id: string }) {
       logAction({
         resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: 'REMOVE_ITEM',
         userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: item.asset?.name ?? item.theme?.name ?? item.layout?.name ?? '',
+        detail: item.asset?.name ?? item.theme?.name ?? item.layout?.name ?? item.design?.name ?? '',
       });
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: old.items.filter(i => i.id !== item.id) });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
@@ -266,11 +268,12 @@ function PlaylistDetail({ id }: { id: string }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}>
           <div className="bg-white dark:bg-gray-900 rounded-xl p-5 w-full max-w-lg shadow-xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
             <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('pickAsset')}</h2>
-            <div className="grid grid-cols-3 gap-1 mb-3">
+            <div className="grid grid-cols-4 gap-1 mb-3">
               {([
                 { kind: 'ASSET' as const, label: t('itemKind.asset'), Icon: ImageIcon },
                 { kind: 'THEME' as const, label: t('itemKind.theme'), Icon: Palette },
                 { kind: 'LAYOUT' as const, label: t('itemKind.layout'), Icon: LayoutGrid },
+                { kind: 'DESIGN' as const, label: t('itemKind.design'), Icon: LayoutTemplate },
               ]).map(({ kind, label, Icon }) => (
                 <button key={kind} type="button" onClick={() => setItemKindTab(kind)}
                   className={`flex items-center justify-center gap-1 text-xs py-1.5 rounded-lg border font-medium ${
@@ -395,6 +398,26 @@ function PlaylistDetail({ id }: { id: string }) {
               </div>
             )}
 
+            {itemKindTab === 'DESIGN' && (
+              <div className="overflow-y-auto flex-1 space-y-1">
+                {designsList.map((d: DesignAsset) => (
+                  <button key={d.id} onClick={() => addMut.mutate({ kind: 'DESIGN', designAssetId: d.id, dur: defaultDuration })}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
+                    <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                      <LayoutTemplate className="w-3.5 h-3.5 text-indigo-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{d.name}</p>
+                    </div>
+                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                  </button>
+                ))}
+                {designsList.length === 0 && (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noDesigns')}</p>
+                )}
+              </div>
+            )}
+
             <button onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}
               className="mt-3 w-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
           </div>
@@ -436,7 +459,9 @@ function PlaylistDetail({ id }: { id: string }) {
               )
             ) : (
               <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-indigo-500" /> : <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />}
+                {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-indigo-500" />
+                  : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />
+                  : <LayoutTemplate className="w-3.5 h-3.5 text-indigo-500" />}
               </div>
             )}
 
@@ -449,11 +474,13 @@ function PlaylistDetail({ id }: { id: string }) {
               ) : (
                 <>
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {item.kind === 'THEME' ? item.theme?.name : item.layout?.name}
+                    {item.kind === 'THEME' ? item.theme?.name : item.kind === 'LAYOUT' ? item.layout?.name : item.design?.name}
                   </p>
                   <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                    {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
-                    {item.kind === 'THEME' ? t('itemKind.theme') : t('itemKind.layout')}
+                    {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5" />
+                      : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5" />
+                      : <LayoutTemplate className="w-3.5 h-3.5" />}
+                    {item.kind === 'THEME' ? t('itemKind.theme') : item.kind === 'LAYOUT' ? t('itemKind.layout') : t('itemKind.design')}
                   </p>
                 </>
               )}

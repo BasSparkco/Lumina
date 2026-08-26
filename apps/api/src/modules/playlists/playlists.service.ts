@@ -43,7 +43,7 @@ export class PlaylistsService {
         include: {
           items: {
             orderBy: { position: 'asc' },
-            include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+            include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
           },
         },
       }),
@@ -124,8 +124,8 @@ export class PlaylistsService {
   }
 
   async addItem(
-    orgId: string, playlistId: string, kind: 'ASSET' | 'THEME' | 'LAYOUT', durationSecs: number,
-    refs: { assetId?: string; themeId?: string; layoutId?: string },
+    orgId: string, playlistId: string, kind: 'ASSET' | 'THEME' | 'LAYOUT' | 'DESIGN', durationSecs: number,
+    refs: { assetId?: string; themeId?: string; layoutId?: string; designAssetId?: string },
     muted?: boolean, playFullVideo?: boolean,
     cropZoom?: number, cropOffsetX?: number, cropOffsetY?: number,
   ) {
@@ -147,7 +147,7 @@ export class PlaylistsService {
       );
       const created = await this.prisma.playlistItem.create({
         data: { playlistId, position, durationSecs, kind: 'THEME', themeId: refs.themeId },
-        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
       });
       return this.shapeItem(created);
     }
@@ -160,7 +160,22 @@ export class PlaylistsService {
       );
       const created = await this.prisma.playlistItem.create({
         data: { playlistId, position, durationSecs, kind: 'LAYOUT', layoutId: refs.layoutId },
-        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
+      });
+      return this.shapeItem(created);
+    }
+
+    // designer.md Phase 11 — a DESIGN item references a customer DesignAsset the same way a
+    // THEME item references a Theme; soft-deleted designs (deletedAt) don't count as owned.
+    if (kind === 'DESIGN') {
+      if (!refs.designAssetId) throw new BadRequestException('designAssetId is required for a DESIGN item');
+      await this.orgScoped.assertOwns(
+        () => this.prisma.designAsset.findFirst({ where: { id: refs.designAssetId, organizationId: orgId, deletedAt: null } }),
+        'Design not found',
+      );
+      const created = await this.prisma.playlistItem.create({
+        data: { playlistId, position, durationSecs, kind: 'DESIGN', designAssetId: refs.designAssetId },
+        include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
       });
       return this.shapeItem(created);
     }
@@ -178,9 +193,7 @@ export class PlaylistsService {
     // once a track's actually been detected on it; every other audio-capable type (currently
     // just APP/YouTube, which has no hasAudioTrack probe of its own) just follows the asset's
     // own audio toggle, defaulting to unmuted.
-    const initialMuted = muted !== undefined ? muted
-      : asset.type === 'VIDEO' ? (asset.hasAudioTrack ? !asset.audioEnabled : true)
-      : !asset.audioEnabled;
+    const initialMuted = muted ?? (asset.type === 'VIDEO' ? (asset.hasAudioTrack ? !asset.audioEnabled : true) : !asset.audioEnabled);
     const created = await this.prisma.playlistItem.create({
       data: {
         playlistId, position, durationSecs, kind: 'ASSET', assetId: refs.assetId,
@@ -188,7 +201,7 @@ export class PlaylistsService {
         ...(playFullVideo !== undefined && { playFullVideo }),
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
       },
-      include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+      include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
     });
     return this.shapeItem(created);
   }
@@ -210,7 +223,7 @@ export class PlaylistsService {
         // truthiness — same reasoning as muted/playFullVideo above, but null-inclusive.
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
       },
-      include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } } },
+      include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
     });
     return this.shapeItem(updated);
   }

@@ -484,11 +484,13 @@
     "itemKind": {
       "asset": "Asset",
       "theme": "Theme",
-      "layout": "Layout"
+      "layout": "Layout",
+      "design": "Design"
     },
     "noReadyAssets": "No ready assets. Upload some first.",
     "noThemes": "No themes yet.",
     "noLayouts": "No layouts yet.",
+    "noDesigns": "No designs yet.",
     "empty": "No items in this playlist. Add some assets, themes, layouts, or apps above.",
     "clickToView": "Click to view full size",
     "seconds": "s",

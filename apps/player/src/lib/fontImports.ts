@@ -47,3 +47,4 @@ import '@fontsource/noto-sans-arabic/index.css';
 import '@fontsource/noto-kufi-arabic/index.css';
 import '@fontsource/amiri/index.css';
 import '@fontsource/reem-kufi/index.css';
+import '@fontsource/noto-sans-hebrew/index.css';

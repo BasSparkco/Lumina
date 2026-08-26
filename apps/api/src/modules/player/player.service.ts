@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import QRCode from 'qrcode';
+import { DesignDocumentSchema, resolveElementBindings, type DesignElement, type ResolvedDesignPayload, type ResolvedElement, type ResolvedScene, type VariableMap } from '@lumina/design-schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
@@ -31,6 +33,9 @@ interface HydratedPlaylistItem {
   id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
   cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null; kind: string;
   asset: HydratedPlaylistItemAsset | null; theme: HydratedTheme | null; layout: HydratedLayout | null;
+  // designer.md Phase 11 — a DESIGN-kind item's fully resolved payload (§23.1's contract:
+  // dynamic variables already substituted, every assetId already a signed/CDN URL).
+  design: ResolvedDesignPayload | null;
 }
 interface HydratedPlaylist {
   id: string; name: string; transitionStyle: string; transitionDurationMs: number; playbackOrder: string;
@@ -90,7 +95,7 @@ export class PlayerService {
     if (!screen) throw new NotFoundException('Screen not found');
     if (!screen.playlist) return null;
 
-    return this.hydratePlaylist(screen.playlist);
+    return this.hydratePlaylist(screen.organizationId, screen.playlist);
   }
 
   /**
@@ -202,9 +207,9 @@ export class PlayerService {
       orientation: screen.orientation,
       emergencyActive: screen.emergencyActive,
       emergencyPlaylist: screen.emergencyPlaylist
-        ? await this.hydratePlaylist(screen.emergencyPlaylist)
+        ? await this.hydratePlaylist(screen.organizationId, screen.emergencyPlaylist)
         : null,
-      asset: screen.streamingType === 'ASSET' && screen.asset ? await this.hydrateAssetAsPlaylist(screen.asset) : null,
+      asset: screen.streamingType === 'ASSET' && screen.asset ? await this.hydrateAssetAsPlaylist(screen.organizationId, screen.asset) : null,
       wayfinding: screen.streamingType === 'WAYFINDING' && screen.kioskLocation
         ? {
             kiosk: {
@@ -263,7 +268,7 @@ export class PlayerService {
             // (ScreensService.setKioskAttractPlaylist/setKioskAttractTheme each clear the
             // other), the player just shows whichever is non-null after its idle timeout.
             attractPlaylist: screen.kioskLocation.attractPlaylist
-              ? await this.hydratePlaylist(screen.kioskLocation.attractPlaylist)
+              ? await this.hydratePlaylist(screen.organizationId, screen.kioskLocation.attractPlaylist)
               : null,
             attractTheme: screen.kioskLocation.attractTheme
               ? {
@@ -273,7 +278,7 @@ export class PlayerService {
                   aspectRatio: screen.kioskLocation.attractTheme.aspectRatio,
                   palette: screen.kioskLocation.attractTheme.palette,
                   typography: screen.kioskLocation.attractTheme.typography,
-                  elements: await this.hydrateThemeElements(screen.kioskLocation.attractTheme.elements),
+                  elements: await this.hydrateThemeElements(screen.organizationId, screen.kioskLocation.attractTheme.elements),
                 }
               : null,
           }
@@ -289,11 +294,11 @@ export class PlayerService {
         endDate: r.endDate?.toISOString() ?? null,
         playlistId: r.playlistId,
         playlist: rulePlaylistMap[r.playlistId]
-          ? await this.hydratePlaylist(rulePlaylistMap[r.playlistId]!)
+          ? await this.hydratePlaylist(screen.organizationId, rulePlaylistMap[r.playlistId]!)
           : null,
       }))),
       resolvedPlaylistId,
-      defaultPlaylist: screen.streamingType === 'PLAYLIST' && screen.playlist ? await this.hydratePlaylist(screen.playlist) : null,
+      defaultPlaylist: screen.streamingType === 'PLAYLIST' && screen.playlist ? await this.hydratePlaylist(screen.organizationId, screen.playlist) : null,
       poweredOn: power.poweredOn,
       powerScheduleRules: power.rules.map(r => ({
         id: r.id,
@@ -311,13 +316,13 @@ export class PlayerService {
   // letting the player's existing single-item-playlist looping render it with no new code path.
   // durationSecs mirrors the PlaylistItem schema default; muted follows the asset's own audio
   // choice, since that's the only place such a choice can be recorded for a non-playlist placement.
-  private hydrateAssetAsPlaylist(asset: {
+  private hydrateAssetAsPlaylist(orgId: string | null, asset: {
     id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null;
     textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null;
     textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null;
     hasAudioTrack: boolean; audioEnabled: boolean; appProviderId: string | null; appConfig: unknown;
   }, crop?: { cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null }): Promise<HydratedPlaylist> {
-    return this.hydratePlaylist({
+    return this.hydratePlaylist(orgId, {
       id: `asset:${asset.id}`,
       name: asset.name,
       transitionStyle: 'NONE',
@@ -339,6 +344,7 @@ export class PlayerService {
         assetId: asset.id,
         themeId: null,
         layoutId: null,
+        designAssetId: null,
         asset,
       }],
     });
@@ -390,7 +396,7 @@ export class PlayerService {
    * content/styling/ticker fields — everything else (SHAPE/WIDGET/BRUSH, and TEXT with no
    * assetId) passes through untouched.
    */
-  private async hydrateThemeElements(elements: unknown, depth = 0): Promise<unknown> {
+  private async hydrateThemeElements(orgId: string | null, elements: unknown, depth = 0): Promise<unknown> {
     if (!Array.isArray(elements)) return [];
     const els = elements as { kind: string; content: Record<string, unknown> }[];
 
@@ -435,7 +441,7 @@ export class PlayerService {
         })
       : [];
     const playlistMap = new Map(
-      await Promise.all(playlists.map(async p => [p.id, await this.hydratePlaylist(p, depth + 1)] as const)),
+      await Promise.all(playlists.map(async p => [p.id, await this.hydratePlaylist(orgId, p, depth + 1)] as const)),
     );
 
     return els.map(e => {
@@ -487,7 +493,7 @@ export class PlayerService {
     });
   }
 
-  private async hydratePlaylist(playlist: {
+  private async hydratePlaylist(orgId: string | null, playlist: {
     id: string;
     name: string;
     transitionStyle: string;
@@ -496,7 +502,7 @@ export class PlayerService {
     items: {
       id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
       cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null;
-      kind: string; assetId?: string | null; themeId?: string | null; layoutId?: string | null;
+      kind: string; assetId?: string | null; themeId?: string | null; layoutId?: string | null; designAssetId?: string | null;
       asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null; appProviderId: string | null; appConfig: unknown } | null;
     }[];
   }, depth = 0): Promise<HydratedPlaylist> {
@@ -520,6 +526,7 @@ export class PlayerService {
           ...base,
           asset: null,
           layout: null,
+          design: null,
           theme: theme
             ? {
                 id: theme.id,
@@ -528,7 +535,7 @@ export class PlayerService {
                 aspectRatio: theme.aspectRatio,
                 palette: theme.palette,
                 typography: theme.typography,
-                elements: await this.hydrateThemeElements(theme.elements, depth + 1),
+                elements: await this.hydrateThemeElements(orgId, theme.elements, depth + 1),
               }
             : null,
         };
@@ -551,14 +558,29 @@ export class PlayerService {
           ...base,
           asset: null,
           theme: null,
-          layout: layout ? { id: layout.id, name: layout.name, zones: await this.hydrateZones(layout.zones, depth + 1) } : null,
+          design: null,
+          layout: layout ? { id: layout.id, name: layout.name, zones: await this.hydrateZones(orgId, layout.zones, depth + 1) } : null,
+        };
+      }
+
+      // designer.md Phase 11 — no depth-cap concern here the way THEME/LAYOUT have: a Design
+      // can't reference a playlist (no PLAYLIST-kind element in DesignElement at all), so there's
+      // no cycle to bound.
+      if (item.kind === 'DESIGN' && item.designAssetId) {
+        const designAsset = await this.prisma.designAsset.findFirst({ where: { id: item.designAssetId, deletedAt: null } });
+        return {
+          ...base,
+          asset: null,
+          theme: null,
+          layout: null,
+          design: designAsset ? await this.hydrateDesign(orgId, designAsset) : null,
         };
       }
 
       // ASSET kind (the common case), or a THEME/LAYOUT item past the depth cap — either way,
       // nothing further to expand, and an ASSET item always carries its asset per the CHECK
       // constraint enforced at the DB level.
-      if (!item.asset) return { ...base, asset: null, theme: null, layout: null };
+      if (!item.asset) return { ...base, asset: null, theme: null, layout: null, design: null };
 
       // TEXT assets have no real object behind storageKey (see AssetsService.createText) —
       // the player renders textContent directly instead of loading a url.
@@ -567,6 +589,7 @@ export class PlayerService {
         ...base,
         theme: null,
         layout: null,
+        design: null,
         asset: {
           id: item.asset.id,
           name: item.asset.name,
@@ -605,15 +628,92 @@ export class PlayerService {
     };
   }
 
+  // designer.md §23.1/Phase 11 — turns a stored DesignAsset (raw designJson, possibly with
+  // unresolved {{variable}} tokens and bare assetIds) into a ResolvedDesignPayload (§23.1's
+  // Player contract: variables substituted, every media reference a real URL). Mirrors
+  // hydrateThemeElements's batch-asset-resolution shape, plus the variable-resolution step Theme
+  // has no equivalent of.
+  private async hydrateDesign(orgId: string | null, designAsset: { designJson: unknown }): Promise<ResolvedDesignPayload | null> {
+    const parsed = DesignDocumentSchema.safeParse(designAsset.designJson);
+    if (!parsed.success) return null;
+    const document = parsed.data;
+
+    // designer.md §17.2 — same source/precedence CanvasViewport.tsx already uses client-side for
+    // the Designer's own live preview: {{business.name}} auto-seeded from Organization.name
+    // (the only field that exists for it — see designer.md Phase 8's amendment), overridable by
+    // this document's own instance variables.
+    const org = orgId ? await this.prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } }) : null;
+    const variables: VariableMap = { ...(org ? { 'business.name': org.name } : {}), ...document.variables };
+
+    const assetIds = new Set<string>();
+    for (const scene of document.scenes) {
+      if (scene.background.type !== 'color') assetIds.add(scene.background.assetId);
+      for (const element of scene.elements) {
+        if (element.type === 'image' && element.assetId) assetIds.add(element.assetId);
+        if (element.type === 'video') {
+          if (element.assetId) assetIds.add(element.assetId);
+          if (element.posterAssetId) assetIds.add(element.posterAssetId);
+        }
+      }
+    }
+    const assets = assetIds.size ? await this.prisma.asset.findMany({ where: { id: { in: [...assetIds] } } }) : [];
+    const urlMap = new Map(assets.map(a => [a.id, this.storage.publicUrl(a.storageKey)]));
+
+    const scenes: ResolvedScene[] = await Promise.all(document.scenes.map(async scene => ({
+      id: scene.id,
+      durationMs: scene.durationMs,
+      background:
+        scene.background.type === 'color'
+          ? { type: 'color' as const, color: scene.background.color }
+          : { type: scene.background.type, resolvedSrc: urlMap.get(scene.background.assetId) },
+      elements: await Promise.all(
+        scene.elements.map(element => this.resolveDesignElement(resolveElementBindings(element, variables), urlMap)),
+      ),
+    })));
+
+    return { schemaVersion: 1, id: document.id, canvas: document.canvas, scenes };
+  }
+
+  // QR elements are rendered to a data URL here (server-side, same `qrcode` package the Designer
+  // and Player-adjacent apps already use) rather than shipping a QR library to the player at
+  // all — resolvedSrc already means "a ready-to-render image" for Image/Video, so QR just reuses
+  // that same field instead of inventing a second resolved-content shape.
+  private async resolveDesignElement(element: DesignElement, urlMap: Map<string, string>): Promise<ResolvedElement> {
+    if (element.type === 'image') {
+      return { ...element, resolvedSrc: element.assetId ? urlMap.get(element.assetId) : undefined };
+    }
+    if (element.type === 'video') {
+      return {
+        ...element,
+        resolvedSrc: element.assetId ? urlMap.get(element.assetId) : undefined,
+        posterResolvedSrc: element.posterAssetId ? urlMap.get(element.posterAssetId) : undefined,
+      };
+    }
+    if (element.type === 'qr' && element.value?.trim()) {
+      try {
+        const resolvedSrc = await QRCode.toDataURL(element.value, {
+          margin: 1,
+          color: { dark: element.foregroundColor, light: element.backgroundColor },
+          errorCorrectionLevel: element.errorCorrection,
+        });
+        return { ...element, resolvedSrc };
+      } catch {
+        return element;
+      }
+    }
+    return element;
+  }
+
   // Shared by a LAYOUT-kind playlist item (via hydratePlaylist above) — Screen-level LAYOUT
   // streaming mode is gone, so this is its only caller now.
   private async hydrateZones(
+    orgId: string | null,
     zones: {
       id: string; name: string; x: number; y: number; width: number; height: number; zIndex: number; rotation: number;
       zoneType: string; shape: string; widgetConfig: unknown; audioPriority: boolean; audioVolume: number | null;
       cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null;
-      playlist: Parameters<PlayerService['hydratePlaylist']>[0] | null;
-      asset: Parameters<PlayerService['hydrateAssetAsPlaylist']>[0] | null;
+      playlist: Parameters<PlayerService['hydratePlaylist']>[1] | null;
+      asset: Parameters<PlayerService['hydrateAssetAsPlaylist']>[1] | null;
     }[],
     depth = 0,
   ): Promise<HydratedZone[]> {
@@ -635,9 +735,9 @@ export class PlayerService {
       // in LayoutsService) — asset wins the null-coalesce below only because at most one of
       // the two is ever actually set.
       playlist: z.playlist
-        ? await this.hydratePlaylist(z.playlist, depth)
+        ? await this.hydratePlaylist(orgId, z.playlist, depth)
         : z.asset
-          ? await this.hydrateAssetAsPlaylist(z.asset, { cropZoom: z.cropZoom, cropOffsetX: z.cropOffsetX, cropOffsetY: z.cropOffsetY })
+          ? await this.hydrateAssetAsPlaylist(orgId, z.asset, { cropZoom: z.cropZoom, cropOffsetX: z.cropOffsetX, cropOffsetY: z.cropOffsetY })
           : null,
     })));
   }

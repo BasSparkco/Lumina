@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { Search, Check, ChevronDown } from 'lucide-react';
 import { FONT_LIBRARY, fontStack } from '@lumina/types';
 
-const CATEGORY_ORDER = ['SANS', 'SERIF', 'DISPLAY', 'HANDWRITTEN', 'MONOSPACE', 'ARABIC'] as const;
+const CATEGORY_ORDER = ['SANS', 'SERIF', 'DISPLAY', 'HANDWRITTEN', 'MONOSPACE', 'ARABIC', 'HEBREW'] as const;
 
 interface FontPickerProps {
   value: string | null | undefined;

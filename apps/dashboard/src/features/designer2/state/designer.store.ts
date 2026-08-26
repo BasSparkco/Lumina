@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DesignDocument, DesignElement } from '@lumina/design-schema';
+import type { DesignDocument, DesignElement, DesignScene } from '@lumina/design-schema';
 import { bringToFront, nextLayerZIndex, reindexLayers, sendToBack } from '@/lib/layers';
 
 interface DesignerState {
@@ -14,6 +14,14 @@ interface DesignerState {
   clearSelection: () => void;
   setZoom: (zoom: number) => void;
   setActiveScene: (sceneId: string) => void;
+  // designer.md §17.2/Phase 8 — the "Design instance variables" resolution source (VariablesPanel).
+  setVariables: (variables: Record<string, string> | undefined) => void;
+
+  addScene: (scene: DesignScene) => void;
+  duplicateScene: (id: string) => void;
+  deleteScene: (id: string) => void;
+  reorderScenes: (orderedIds: string[]) => void;
+  updateScene: (id: string, patch: Partial<Pick<DesignScene, 'name' | 'durationMs' | 'background'>>) => void;
 
   addElement: (element: DesignElement) => void;
   updateElement: (id: string, patch: Partial<DesignElement>) => void;
@@ -45,6 +53,18 @@ function cloneWithNewId(element: DesignElement, offset: number): DesignElement {
   return { ...element, id: `el_${crypto.randomUUID()}`, x: element.x + offset, y: element.y + offset };
 }
 
+// designer.md §12 (Phase 6) — a duplicated scene must not share element ids with its source, same
+// reasoning as cloneWithNewId for element duplication. No position offset needed: it's a separate
+// scene, so there's no overlap to avoid.
+function cloneScene(scene: DesignScene): DesignScene {
+  return {
+    ...scene,
+    id: `scene_${crypto.randomUUID()}`,
+    name: `${scene.name} (copy)`,
+    elements: scene.elements.map((el) => ({ ...el, id: `el_${crypto.randomUUID()}` })),
+  };
+}
+
 // Module-level store (no Provider) — Phase 1 never mounts more than one designer2 instance at
 // once, so per-instance isolation isn't needed yet. Revisit if that changes.
 export const useDesignerStore = create<DesignerState>((set, get) => ({
@@ -59,6 +79,60 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   clearSelection: () => set({ selectedElementIds: [] }),
   setZoom: (zoom) => set({ zoom }),
   setActiveScene: (sceneId) => set({ activeSceneId: sceneId, selectedElementIds: [] }),
+
+  setVariables: (variables) => {
+    const { document } = get();
+    if (!document) return;
+    set({ document: { ...document, variables } });
+  },
+
+  addScene: (scene) => {
+    const { document } = get();
+    if (!document) return;
+    set({ document: { ...document, scenes: [...document.scenes, scene] }, activeSceneId: scene.id, selectedElementIds: [] });
+  },
+
+  duplicateScene: (id) => {
+    const { document } = get();
+    if (!document) return;
+    const idx = document.scenes.findIndex((s) => s.id === id);
+    if (idx < 0) return;
+    const clone = cloneScene(document.scenes[idx]!);
+    const scenes = [...document.scenes];
+    scenes.splice(idx + 1, 0, clone);
+    set({ document: { ...document, scenes }, activeSceneId: clone.id, selectedElementIds: [] });
+  },
+
+  deleteScene: (id) => {
+    const { document, activeSceneId } = get();
+    if (!document || document.scenes.length <= 1) return;
+    const idx = document.scenes.findIndex((s) => s.id === id);
+    if (idx < 0) return;
+    const scenes = document.scenes.filter((s) => s.id !== id);
+    const nextActiveId =
+      activeSceneId === id ? (scenes[Math.max(0, idx - 1)]?.id ?? scenes[0]!.id) : activeSceneId;
+    set({ document: { ...document, scenes }, activeSceneId: nextActiveId, selectedElementIds: [] });
+  },
+
+  reorderScenes: (orderedIds) => {
+    const { document } = get();
+    if (!document) return;
+    const byId = new Map(document.scenes.map((s) => [s.id, s]));
+    const scenes = orderedIds.map((id) => byId.get(id)).filter((s): s is DesignScene => Boolean(s));
+    if (scenes.length !== document.scenes.length) return;
+    set({ document: { ...document, scenes } });
+  },
+
+  updateScene: (id, patch) => {
+    const { document } = get();
+    if (!document) return;
+    set({
+      document: {
+        ...document,
+        scenes: document.scenes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      },
+    });
+  },
 
   addElement: (element) => {
     const { document, activeSceneId } = get();

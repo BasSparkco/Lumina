@@ -18,6 +18,20 @@ export function loginPath() {
   return `/${LOCALES.includes(seg) ? seg : 'en'}/login`;
 }
 
+// designer.md Phase 10 — plain `Error` alone loses the HTTP status, which the designer2 autosave/
+// manual-save flow needs to distinguish a 409 revision conflict from any other failure (network
+// error, validation error) without resorting to matching on message text. Purely additive: every
+// existing `catch`/`.message` read elsewhere in the app keeps working unchanged.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
@@ -42,7 +56,7 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = await res.json().catch(() => ({})) as { message?: string };
     // res.statusText is always '' on HTTP/2 responses (no reason-phrase), so it can't be
     // trusted as a non-empty fallback — always fall through to the status code.
-    throw new Error(body.message || res.statusText || `Request failed (${res.status})`);
+    throw new ApiError(body.message || res.statusText || `Request failed (${res.status})`, res.status);
   }
   // NestJS's default status for DELETE routes is 200, not 204, and these controllers don't
   // override it — so a successful delete comes back as `200` with a genuinely empty body,
@@ -64,7 +78,8 @@ export const authApi = {
 
 // ── Org settings ────────────────────────────────────────────────────────────
 export const orgApi = {
-  getSettings: () => req<{ autoPublish: boolean }>('/org/settings'),
+  // `name` — designer.md Phase 8, seeds the `{{business.name}}` dynamic variable in designer2.
+  getSettings: () => req<{ autoPublish: boolean; name: string }>('/org/settings'),
   updateSettings: (autoPublish: boolean) =>
     req<{ autoPublish: boolean }>('/org/settings', { method: 'PUT', body: JSON.stringify({ autoPublish }) }),
   // Super Admin only — every tenant, not just the caller's own (see OrgController.listAll).
@@ -344,7 +359,7 @@ export const playlistsApi = {
   remove: (id: string) => req<void>(`/playlists/${id}`, { method: 'DELETE' }),
   addItem: (
     id: string,
-    item: { kind?: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string },
+    item: { kind?: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string; designAssetId?: string },
     durationSecs: number, muted?: boolean, playFullVideo?: boolean,
   ) =>
     req<PlaylistItem>(`/playlists/${id}/items`, { method: 'POST', body: JSON.stringify({ ...item, durationSecs, muted, playFullVideo }) }),
@@ -437,11 +452,26 @@ export interface DesignAsset {
   name: string;
   designJson: DesignDocument;
   schemaVersion: number;
+  // designer.md Phase 10 — optimistic concurrency token; sent back on PATCH, 409 on mismatch.
+  revision: number;
   thumbnailAssetId: string | null;
   sourceTemplateId: string | null;
   sourceTemplateVersion: number | null;
   organizationId: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface DesignAssetVersion {
+  id: string;
+  versionNumber: number;
+  createdAt: string;
+  reason: string | null;
+}
+
+export interface DesignDraft {
+  documentId: string;
+  draftJson: DesignDocument;
   updatedAt: string;
 }
 
@@ -465,11 +495,29 @@ export const templatesApi = {
   createDesign: (id: string) => req<DesignAsset>(`/templates/${id}/create-design`, { method: 'POST' }),
 };
 
-// designer.md §21 — only the read side exists (designer.md Phase 5's own scope); PATCH/DELETE/
-// duplicate/versions/autosave are designer.md Phase 10.
+// designer.md §21/§26 — Phase 10. `create`/`update` re-validate designJson (including asset
+// ownership) server-side regardless of what the client sends. `update` requires `revision` — a
+// 409 (surfaced as ApiError with status 409) means someone else saved in between. Duplicate/
+// delete are not built yet — no UI trigger point without a "My Designs" browse page.
 export const designsApi = {
   list: () => req<DesignAsset[]>('/designs'),
   get: (id: string) => req<DesignAsset>(`/designs/${id}`),
+  create: (input: { name: string; designJson?: DesignDocument }) =>
+    req<DesignAsset>('/designs', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id: string, input: { designJson: DesignDocument; revision: number; name?: string }) =>
+    req<DesignAsset>(`/designs/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  listVersions: (id: string) => req<DesignAssetVersion[]>(`/designs/${id}/versions`),
+  restoreVersion: (id: string, versionId: string) => req<DesignAsset>(`/designs/${id}/restore/${versionId}`, { method: 'POST' }),
+};
+
+// designer.md §19.6/§21/§26 — autosave draft, keyed by the client-generated DesignDocument.id
+// (not a DesignAsset id — a brand-new unsaved design can still autosave before its first real
+// Save). Never touches DesignAsset/revision/versions.
+export const designDraftsApi = {
+  get: (documentId: string) => req<DesignDraft | null>(`/design-drafts/${documentId}`),
+  put: (documentId: string, draftJson: DesignDocument) =>
+    req<DesignDraft>(`/design-drafts/${documentId}`, { method: 'PUT', body: JSON.stringify({ draftJson }) }),
+  remove: (documentId: string) => req<void>(`/design-drafts/${documentId}`, { method: 'DELETE' }),
 };
 
 // ── Schedules ────────────────────────────────────────────────────────────────
@@ -666,7 +714,7 @@ export interface Asset {
   usageCount?: number;
   inUse?: boolean;
 }
-export type PlaylistItemKind = 'ASSET' | 'THEME' | 'LAYOUT';
+export type PlaylistItemKind = 'ASSET' | 'THEME' | 'LAYOUT' | 'DESIGN';
 export interface PlaylistItem {
   id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
   // Per-placement image/video framing (crop editor) — null means "show the whole asset", and
@@ -674,10 +722,12 @@ export interface PlaylistItem {
   cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null;
   kind: PlaylistItemKind;
   // Exactly one of these is set, matching `kind` — a playlist item can be a plain asset
-  // (including an APP-type one), a whole Theme, or a whole Layout.
+  // (including an APP-type one), a whole Theme, a whole Layout, or (designer.md Phase 11) a
+  // whole Design.
   asset: Asset | null;
   theme: { id: string; name: string; category: ThemeCategory } | null;
   layout: { id: string; name: string } | null;
+  design: { id: string; name: string } | null;
 }
 export type TransitionStyle = 'NONE' | 'CROSSFADE';
 export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';

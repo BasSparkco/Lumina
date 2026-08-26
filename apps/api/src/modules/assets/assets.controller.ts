@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
@@ -121,6 +122,11 @@ export class AssetsController {
     @InjectQueue('media') private readonly mediaQueue: Queue,
   ) {}
 
+  // Phase 12 "Upload abuse controls" — the 500MB per-file limit below caps a single request, but
+  // nothing previously stopped a script from just hammering this endpoint back-to-back to fill
+  // storage / rack up transcoding queue cost. Tighter than the app-wide default (120/min);
+  // generous enough that no real content-creation workflow would ever hit it.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('upload')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }))
@@ -130,6 +136,7 @@ export class AssetsController {
     });
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('upload-audio')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }))
@@ -207,6 +214,7 @@ export class AssetsController {
   // The three routes below manage the shared library itself (organizationId: null) rather than
   // any tenant's own assets — restricted to LIBRARY_MANAGER, not the default "anyone but VIEWER"
   // policy every other route in this controller falls under (see RolesGuard).
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('library')
   @Roles('LIBRARY_MANAGER')
   @ApiConsumes('multipart/form-data')
@@ -239,6 +247,7 @@ export class AssetsController {
     };
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('stock/import')
   importStockPhoto(@CurrentUser() user: JwtUser, @Body() dto: ImportStockPhotoDto) {
     return this.assets.importStockPhoto(user.orgId, dto.photoId, async (assetId, key, type, mimeType) => {
@@ -255,6 +264,7 @@ export class AssetsController {
     };
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('stock-videos/import')
   importStockVideo(@CurrentUser() user: JwtUser, @Body() dto: ImportStockVideoDto) {
     return this.assets.importStockVideo(user.orgId, dto.videoId, async (assetId, key, type, mimeType) => {

@@ -9,22 +9,26 @@
  * caller's `resolveAssetUrl` can find it; otherwise (no assetId, asset not yet loaded/found, or
  * the image fails to decode) they fall back to the same placeholder box Phase 2 used. Video stays
  * a placeholder-free hard error — still nothing in the UI can create one (designer.md Phase 9).
+ *
+ * Phase 8: QR elements resolve to a real generated code (falling back to the placeholder box only
+ * when there's no value to encode). Text elements paint with a transparent fill — the visible
+ * glyphs are a DOM overlay synced by FabricCanvasAdapter, not drawn by Fabric at all — see that
+ * file's Phase 8 comments for why (no real bidi/RTL shaping in Fabric's Textbox).
+ *
+ * Phase 9: Video elements are the same hybrid idea as text — a transparent hit-box here, real
+ * playback in a DOM `<video>` overlay (FabricCanvasAdapter). Scene background color also moved
+ * out of Fabric entirely this phase (was `canvas.backgroundColor`, now a DOM div in
+ * CanvasViewport, rendered *below* the video overlay layer) — an opaque Fabric-painted background
+ * would otherwise sit on top of a video positioned behind the canvas and hide it completely. See
+ * FabricCanvasAdapter's Phase 9 comments for the full stacking model.
  */
-import { Circle, Ellipse, FabricImage, FabricText, filters, Group, Line, Rect, Textbox, Triangle, type Canvas, type FabricObject } from 'fabric';
-import type { DesignElement, DesignScene, ImageElement } from '@lumina/design-schema';
+import { Circle, Ellipse, FabricImage, FabricText, filters, Group, Line, Rect, Textbox, Triangle, type FabricObject } from 'fabric';
+import QRCode from 'qrcode';
+import type { DesignElement, ImageElement, QrElement, VideoElement } from '@lumina/design-schema';
 import { fontStack } from '@lumina/types';
 import type { DesignerFabricObject } from './FabricEventBridge';
 
 export type ResolveAssetUrl = (assetId: string) => string | undefined;
-
-export function applySceneBackground(canvas: Canvas, background: DesignScene['background']): void {
-  if (background.type === 'color') {
-    canvas.backgroundColor = background.color;
-    return;
-  }
-  // Image/video scene backgrounds need an asset-backed fabric object — Phase 2/Phase 9 work
-  // (asset resolution isn't wired up yet). Fall back to the canvas's default background for now.
-}
 
 const PLACEHOLDER_FILL = '#374151';
 const PLACEHOLDER_STROKE = '#6b7280';
@@ -175,6 +179,43 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
   return new Group([img], { left: 0, top: 0, width: element.width, height: element.height, subTargetCheck: false });
 }
 
+// designer.md §17.1/Phase 8 — `element.value` here is already resolved (CanvasViewport applies
+// `dynamicBindings` before calling into this factory at all, per §4.1 keeping variable
+// resolution out of the Fabric layer entirely — this function never sees a `{{token}}`, only a
+// real string or nothing). Renders a real scannable code via the same `qrcode` package
+// apps/player's QrCodeWidget already uses; falls back to the placeholder box when there's
+// nothing to encode yet.
+async function createQrObject(element: QrElement): Promise<FabricObject> {
+  const value = element.value?.trim();
+  if (!value) return placeholderGroup(element.width, element.height, 'QR', element.backgroundColor, element.foregroundColor);
+
+  let dataUrl: string;
+  try {
+    dataUrl = await QRCode.toDataURL(value, {
+      margin: 1,
+      color: { dark: element.foregroundColor, light: element.backgroundColor },
+      errorCorrectionLevel: element.errorCorrection,
+    });
+  } catch {
+    return placeholderGroup(element.width, element.height, 'QR', element.backgroundColor, element.foregroundColor);
+  }
+
+  const img = await FabricImage.fromURL(dataUrl);
+  img.set({ scaleX: element.width / (img.width || element.width), scaleY: element.height / (img.height || element.height) });
+  // Same wrapping convention as createImageObject — selection/transform handles reflect the
+  // element's own box regardless of the generated code's pixel dimensions.
+  return new Group([img], { left: 0, top: 0, width: element.width, height: element.height, subTargetCheck: false });
+}
+
+// designer.md Phase 9 — video has no fabric.js-native playback, so (like text, Phase 8) this is
+// a hybrid: Fabric owns only a hit-box for selection/transform here; the actual visible frame is
+// a synced DOM `<video>` overlay (FabricCanvasAdapter), which is why this is fully transparent
+// rather than drawing anything — unlike Image/QR, there's no "generate a static picture" step.
+function createVideoObject(element: VideoElement): FabricObject {
+  if (!element.assetId) return placeholderGroup(element.width, element.height, 'Video', PLACEHOLDER_FILL, '#9ca3af');
+  return new Rect({ left: 0, top: 0, width: element.width, height: element.height, fill: 'transparent' });
+}
+
 export async function createFabricObject(element: DesignElement, resolveAssetUrl: ResolveAssetUrl): Promise<FabricObject> {
   let obj: FabricObject;
 
@@ -191,12 +232,15 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
           fontSize: element.fontSize,
           fontWeight: element.fontWeight,
           fontStyle: element.fontStyle,
-          fill: element.fill,
+          // designer.md Phase 8 amendment — Fabric's Textbox has no real bidi/RTL shaping, so it
+          // never paints visible glyphs at all: fill is forced transparent and this object exists
+          // on canvas purely for hit-testing/selection/transform handles (and Phase 7's animation
+          // tweens). The actual visible text is a synced DOM overlay (FabricCanvasAdapter),
+          // rendered with native browser text layout — correct bidi for free, nothing hand-built.
+          fill: 'transparent',
           textAlign: element.textAlign,
           lineHeight: element.lineHeight,
           charSpacing: element.charSpacing,
-          // RTL glyph shaping/bidi layout isn't attempted here — designer.md Phase 8 follow-up.
-          // `direction` is still faithfully persisted on the DesignElement either way.
         }),
       );
       break;
@@ -207,10 +251,11 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
       obj = createShapeObject(element);
       break;
     case 'qr':
-      obj = placeholderGroup(element.width, element.height, 'QR', element.backgroundColor, element.foregroundColor);
+      obj = await createQrObject(element);
       break;
     case 'video':
-      throw new Error('Video elements are not supported until designer.md Phase 9');
+      obj = createVideoObject(element);
+      break;
   }
 
   obj.set({

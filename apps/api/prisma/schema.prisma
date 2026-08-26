@@ -43,6 +43,7 @@ model Organization {
   buildings            Building[]
   poiCategories        PoiCategory[]
   designAssets         DesignAsset[]
+  designDrafts         DesignDraft[]
   designTemplateAccess DesignTemplateTenant[]
 }
 
@@ -462,6 +463,7 @@ enum PlaylistItemKind {
   ASSET
   THEME
   LAYOUT
+  DESIGN
 }
 
 model PlaylistItem {
@@ -491,11 +493,11 @@ model PlaylistItem {
   playlistId String
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
 
-  // Which of assetId/themeId/layoutId is populated — exactly one, matching kind (enforced by a
-  // migration-only CHECK constraint, since Prisma's schema can't express cross-column
-  // constraints). A mixed playlist item can be a plain asset (including an APP-type one — see
-  // AssetType.APP), a whole Theme, or a whole Layout, letting a screen rotate through any
-  // combination of premade designs and media in one playlist.
+  // Which of assetId/themeId/layoutId/designAssetId is populated — exactly one, matching kind
+  // (enforced by a migration-only CHECK constraint, since Prisma's schema can't express
+  // cross-column constraints). A mixed playlist item can be a plain asset (including an APP-type
+  // one — see AssetType.APP), a whole Theme, a whole Layout, or (designer.md Phase 11) a whole
+  // Design, letting a screen rotate through any combination in one playlist.
   kind PlaylistItemKind @default(ASSET)
 
   assetId String?
@@ -506,6 +508,9 @@ model PlaylistItem {
 
   layoutId String?
   layout   Layout? @relation(fields: [layoutId], references: [id])
+
+  designAssetId String?
+  designAsset   DesignAsset? @relation(fields: [designAssetId], references: [id])
 
   @@unique([playlistId, position])
 }
@@ -724,15 +729,22 @@ model DesignTemplateTenant {
 }
 
 // designer.md §19.1 — a customer-owned editable Design JSON document, created from scratch or
-// (designer.md §11) cloned from a Template. Deliberately minimal for now: only what designer.md
-// Phase 5's own "Save as Asset" workflow needs (create + read). Autosave drafts, manual-save
-// version history, publish/restore, and the full PATCH/DELETE/duplicate surface (designer.md
-// §19.2/§19.6/§21/§26) are designer.md Phase 10's job, not built here.
+// (designer.md §11) cloned from a Template.
+//
+// Amendment (2026-08-26, Phase 10): `revision`/`versions` added — optimistic concurrency plus
+// manual-save version history (§19.2/§26). Autosave drafts live in the separate DesignDraft model
+// below (never touch this row at all — see its own comment for why). Duplicate/delete are still
+// not built (no UI trigger point without a "My Designs" browse page, which doesn't exist yet).
 model DesignAsset {
   id            String    @id @default(cuid())
   name          String
   designJson    Json
   schemaVersion Int       @default(1)
+  // Bumped on every manual save (DesignsService.update) — the client must send back the revision
+  // it last read; a mismatch means someone else saved in between, and the write is rejected
+  // rather than silently overwriting (designer.md Phase 10 Acceptance: "stale client cannot
+  // silently overwrite newer server revision").
+  revision      Int       @default(1)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   deletedAt     DateTime?
@@ -750,7 +762,48 @@ model DesignAsset {
   sourceTemplate        DesignTemplate? @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   sourceTemplateVersion Int?
 
+  versions      DesignAssetVersion[]
+  playlistItems PlaylistItem[]
+
   @@index([organizationId, createdAt])
+}
+
+// designer.md §19.2 — snapshotted on every manual save (never on autosave — "do not create a
+// version row for every mouse movement") and on restore (which snapshots the restored content as
+// a *new* version rather than rewriting history, per §26 "Restored version becomes a new current
+// version").
+model DesignAssetVersion {
+  id            String   @id @default(cuid())
+  versionNumber Int
+  designJson    Json
+  schemaVersion Int
+  createdAt     DateTime @default(now())
+  // e.g. "restore" when this snapshot was produced by a version restore rather than a direct save.
+  reason        String?
+
+  designAssetId String
+  designAsset   DesignAsset @relation(fields: [designAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([designAssetId, versionNumber])
+}
+
+// designer.md §19.6 Option B (a table, not Redis — keeps this on the same ORM/pattern as
+// everything else rather than introducing a second persistence mechanism for one feature).
+// `documentId` is the client-generated DesignDocument.id, not a DesignAsset FK — it stays stable
+// even before the first real Save ever creates a DesignAsset row, so a brand-new unsaved design
+// can still autosave a recoverable draft. Never promoted into DesignAsset.designJson/version
+// history directly — only a real Manual Save does that; this is purely crash-recovery state,
+// deleted once a manual save makes it redundant.
+model DesignDraft {
+  id             String   @id @default(cuid())
+  documentId     String   @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  draftJson      Json
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, documentId])
 }
 
 // ─── Wayfinding (Phase 7) ──────────────────────────────────────────────────────

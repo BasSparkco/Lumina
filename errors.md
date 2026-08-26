@@ -1,146 +1,88 @@
-# Known lint errors (pre-existing, not blocking)
+# Known pre-existing errors — apps/api test typings
 
-Found during final verification before the 2026-08-21 production-readiness merge (`7a81d0c`).
-All 12 are pre-existing — confirmed none are in files touched during that audit session, and
-several were already present on `main` before that work started. They make `pnpm lint` /
-GitHub Actions CI fail, but do **not** affect `pnpm typecheck`, `pnpm test`, or `pnpm build` —
-all of those pass clean, and the app builds and runs correctly.
+**Status:** fixed 2026-08-26 (during designer.md Phase 12 hardening work). See
+[Resolution](#resolution) below. Left in place as a record of what happened and why, per this
+project's convention of documenting rather than silently fixing/ignoring cross-cutting issues.
 
-**Update 2026-08-21: all 12 fixed.** `pnpm --filter dashboard lint` and
-`pnpm --filter worker lint` both pass clean (typecheck/test/build reverified too). See each
-item below for what changed.
+## Summary (as originally filed)
 
-**Status key:** ⬜ not started · ✅ fixed
+`cd apps/api && npx tsc --noEmit -p tsconfig.json` reported **94 errors**, all confined to 5
+`*.spec.ts` files. Zero errors existed outside test files — every actual source file in
+`apps/api` (and every other workspace) typechecked clean.
 
+```
+9   src/common/guards/super-admin.guard.spec.ts
+5   src/common/org-scoped.service.spec.ts
+41  src/modules/player/player.service.spec.ts
+24  src/modules/playlists/playlists.service.spec.ts
+15  src/modules/screens/screens.service.spec.ts
 ---
-
-## apps/dashboard (11 errors)
-
-### ✅ 1. `LayoutsSection.tsx:285` — setState directly in a useEffect
+94 total
 ```
-useEffect(() => {
-  setSelectedZoneId(null);
-}, [editing]);
+
+By error code:
+
 ```
-`react-hooks/set-state-in-effect`. Resets selection when `editing` changes. Fixable by deriving
-`selectedZoneId` differently (e.g. computed from `editing` instead of stored+reset), but that's a
-real behavior-shape change in a file this size — needs care, not a blind rule-silencing.
-
-Fixed: replaced the effect with a render-time "adjust state when a prop changes" reset
-(compare `editing` to a `prevEditing` state, reset+update inline during render instead of in
-a post-commit effect) — combined with #2 into one block, since both reset on the same
-`editing` transition.
-
-### ✅ 2. `LayoutsSection.tsx:308` — setState directly in a useEffect
+62  TS2304  Cannot find name 'expect' / 'jest'
+29  TS2593  Cannot find name 'describe' / 'it' (jest/mocha type-defs hint)
+ 2  TS7031  Binding element implicitly has an 'any' type (knock-on: no jest types means callback params can't be inferred)
+ 1  TS7006  Parameter implicitly has an 'any' type (same knock-on cause)
 ```
-useEffect(() => {
-  setZoom(1);
-}, [editing]);
-```
-Same rule, same file. Resets zoom on the same `editing` transition as #1 — likely wants the same
-fix approach as #1, ideally addressed together.
 
-Fixed together with #1 — folded into the same render-time reset block.
+TypeScript couldn't see the ambient Jest globals (`describe`, `it`, `expect`, `jest`) inside these
+spec files, even though `@types/jest@30.0.0` was installed and correctly resolved from
+`apps/api/node_modules/@types/jest`.
 
-### ✅ 3. `ThemesSection.tsx:84` — unused import
-`'MediaCrop' is defined but never used` (`@typescript-eslint/no-unused-vars`). Straightforward —
-either it's genuinely dead and safe to drop, or something that meant to use it doesn't yet.
-Worth a quick check of git history/intent before deleting.
+## How this was found
 
-Fixed: confirmed `CropEditor` itself is still used (line 3854) and its `onSave` callback's
-`crop` param is inferred rather than annotated — the `MediaCrop` type import was genuinely
-unused. Dropped just the type import, kept `CropEditor`.
+Surfaced mid-session during designer.md Phase 11 (Player Runtime Integration, 2026-08-26) after a
+routine `pnpm install`. Confirmed unrelated to that phase's own changes via `git stash`/`git stash
+pop` — the errors reproduced identically with zero of that session's code applied.
 
-### ✅ 4. `ThemesSection.tsx:1527` — floating promise
-`Promises must be awaited, end with a .catch, or be marked with void`
-(`@typescript-eslint/no-floating-promises`). An un-awaited async call with no error handling —
-worth checking whether a rejection here fails silently.
+## Root cause (confirmed)
 
-Fixed: `loadImage()` does reject on an image load error, and it was failing silently. Added
-`.catch((err) => console.error(...))`.
+A `pnpm install` non-deterministically hoists different `ts-jest`/`typescript` peer combinations
+across installs — the workspace root hoists `typescript@6.0.3`, and evidence in the pnpm store
+showed two differently-hashed `ts-jest@29.4.12` installs (diverging peer sets). With no explicit
+`"types"` array in `apps/api/tsconfig.json`, TypeScript's automatic `@types/*` inclusion depended
+on which peer set won a given install — sometimes it picked up `@types/jest`, sometimes not.
 
-### ✅ 5. `ThemesSection.tsx:1920` — promise-returning handler where void expected
-`@typescript-eslint/no-misused-promises`. Likely an `onClick`/similar prop given an `async`
-function directly — usually fixed by wrapping in `() => { void handler(); }`.
+This was **purely a `tsc --noEmit` type-check problem**, confirmed via `pnpm --filter api test`:
+`jest` itself ran all suites successfully throughout, because `apps/api/jest.config.ts` pins its
+own `ts-jest` transform options independently of the plain-`tsc` compile pass.
 
-Fixed exactly as predicted: `onClick={handleEyedropper}` → `onClick={() => { void handleEyedropper(); }}`.
+A second, separate bug was found and fixed in the same session while adding new spec coverage:
+TypeScript 6's stricter `rootDir` inference broke `ts-jest`'s per-file isolated-module transpile
+(`TS5011: The common source directory of 'tsconfig.json' is './src/modules/<x>'...`) for *every*
+spec file — this one *did* block `jest` itself from running at all, not just `tsc --noEmit`. Fixed
+in `apps/api/jest.config.ts` by passing `rootDir: '.'` through ts-jest's own `tsconfig` transform
+option, alongside the existing `types: ['jest', 'node']` override there.
 
-### ✅ 6. `screens/page.tsx:8` — unused import
-`'PlaylistSummary' is defined but never used` (`@typescript-eslint/no-unused-vars`).
+## Resolution
 
-### ✅ 7. `screens/page.tsx:8` — unused import
-`'Layout' is defined but never used` (`@typescript-eslint/no-unused-vars`). Same import line as #6.
+Added an explicit `"types": ["jest", "node"]` to `apps/api/tsconfig.json`'s `compilerOptions` —
+the alternative from the original "To fix" plan below, chosen over pinning `typescript` at the
+workspace root because it fixes the actual proximate cause (auto-inclusion depending on hoisting
+order) without touching every other workspace's dependency resolution.
 
-### ✅ 8. `screens/page.tsx:8` — unused import
-`'Theme' is defined but never used` (`@typescript-eslint/no-unused-vars`). Same import line as
-#6/#7 — likely a quick single-line fix removing all three unused type imports at once.
+**Verified this didn't narrow type coverage elsewhere**: an explicit `types` array stops
+TypeScript's *automatic* inclusion of every `@types/*` package (not just the ones listed), which
+raised a real concern — `apps/api` uses ambient global augmentations from `@types/express` and
+`@types/multer` (`Express.Multer.File`, used throughout `assets.controller.ts`/`assets.service.ts`)
+that aren't reached via explicit imports. Tested empirically before committing to this fix: with
+`types: ["jest", "node"]` in place, `tsc --noEmit` produced **zero** new errors outside spec files
+— the explicit imports of `@nestjs/platform-express` etc. pull in what's needed regardless of the
+`types` array, so this was safe.
 
-Fixed 6/7/8 together: confirmed all three only ever appeared in that one import (not used
-elsewhere, not even in a comment referencing real usage) and removed them in one edit.
+**Full verification sweep**, all clean:
+- `cd apps/api && npx tsc --noEmit -p tsconfig.json` — 0 errors (was 94; grew to 154 mid-session
+  after a 6th spec file was added, then to 0 after this fix).
+- `cd apps/api && npx jest` — 6 suites, 29 tests, all passing.
+- `cd apps/api && npx nest build` — clean.
+- `pnpm --filter dashboard exec tsc --noEmit` / `pnpm --filter player exec tsc --noEmit` — both
+  clean, confirming the fix (scoped to `apps/api/tsconfig.json` only) didn't affect other
+  workspaces.
 
-### ✅ 9. `hooks/useEditorHistory.ts:18` — setState directly in a useEffect
-```
-useEffect(() => {
-  setHistory({ past: [], future: [] });
-  pendingCaptureRef.current = null;
-}, [sessionKey]);
-```
-`react-hooks/set-state-in-effect`. Resets undo/redo history when the edit session changes.
-
-Fixed: split the two resets. `setHistory` moved to a render-time adjustment (track
-`prevSessionKey` in state, reset inline when it differs from `sessionKey`) — same pattern as
-#1/#2. The ref reset couldn't join it (refs can't be touched during render, see #10/#11) so it
-stayed in a small effect on `[sessionKey]`, which is fine since only the *setState* half of the
-original effect was the lint violation.
-
-### ✅ 10. `hooks/useEditorHistory.ts:53` — ref mutated during render
-```
-const undoRef = useRef(undo);
-const redoRef = useRef(redo);
-undoRef.current = undo;   // line 53
-redoRef.current = redo;   // line 54
-```
-`react-hooks/refs`. Classic "ref mirrors latest closure" pattern (keeps a stable keydown listener
-calling the current `undo`/`redo` without resubscribing) — functionally fine in practice today,
-but not technically allowed during render per the stricter newer rule. Straightforward fix: move
-both assignments into a `useEffect(() => { undoRef.current = undo; redoRef.current = redo; }, [undo, redo])`.
-
-Fixed exactly as predicted.
-
-### ✅ 11. `hooks/useEditorHistory.ts:54` — ref mutated during render
-Same issue as #10, second line of the same pair — fix both together.
-
-Fixed together with #10.
-
----
-
-## apps/worker (1 error)
-
-### ✅ 12. `apps/worker/src/app.module.ts:41` — prefer `??=`
-```
-if (process.env[key] === undefined) {
-  process.env[key] = value;
-}
-```
-`@typescript-eslint/prefer-nullish-coalescing`. This is the exact same hand-rolled `.env` file
-parser that `apps/api/src/app.module.ts` had — already replaced there with the real `dotenv`
-package (see the production-readiness audit's M12 fix, `report.md`). The same replacement
-(`dotenv.config({ path: [...], quiet: true })`) applies directly here; worth doing as one fix
-across both apps rather than just silencing this one line.
-
-Fixed exactly as predicted: swapped the hand-rolled parser for `dotenv.config({ path: [...],
-quiet: true })`, mirroring `apps/api/src/app.module.ts` verbatim (same candidate path list,
-same `override: false` semantics). Added `dotenv` (`^17.4.2`, matching the api app's version)
-to `apps/worker/package.json` dependencies and ran `pnpm install`. Verified at runtime that it
-resolves and parses `apps/worker/.env` correctly.
-
----
-
-## Also found during verification (not in original 12, not fixed)
-
-`pnpm lint` at the repo root also surfaces 7 pre-existing errors + 1 warning in **apps/player**
-(`ThemeRenderer.tsx`, `ZonePlayer.tsx`, `PairingPage.tsx`, `PlayerPage.tsx` — dot-notation,
-a missing `@next/next` rule definition, and several `no-misused-promises` on async handlers).
-Confirmed pre-existing: no player files were touched while fixing the 12 above, and `git log`
-shows the flagged lines predate this session. Out of scope for this pass — flagging here so
-they don't get lost, same spirit as the original list.
+If this regresses after a future `pnpm install` (e.g. a `typescript`/`ts-jest` upgrade changes
+what `types: ["jest", "node"]` resolves to), re-run the verification sweep above before assuming
+the cause is the same one described here.
