@@ -21,6 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1094.0",
     "@aws-sdk/s3-request-presigner": "^3.1094.0",
+    "@smithy/node-http-handler": "^4.9.6",
     "@lumina/db": "workspace:*",
     "@lumina/design-schema": "workspace:*",
     "@lumina/types": "workspace:*",

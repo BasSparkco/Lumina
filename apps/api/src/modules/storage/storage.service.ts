@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import type { Readable } from 'stream';
 
 export interface MediaObject {
@@ -33,6 +34,17 @@ export class StorageService {
         secretAccessKey: config.getOrThrow<string>('S3_SECRET_KEY'),
       },
       forcePathStyle: true, // required for MinIO
+      // Without these, a stalled connection (e.g. MinIO restarting while this
+      // client holds a stale pooled keep-alive socket) hangs the SDK call
+      // forever instead of failing fast — seen in prod as multi-minute hangs
+      // on both uploads and media GETs. connectionTimeout bounds establishing
+      // the TCP connection; socketTimeout aborts on inactivity (not total
+      // duration, so it won't cut off a slow-but-progressing large upload/
+      // download — only a truly stalled one).
+      requestHandler: new NodeHttpHandler({
+        connectionTimeout: 5_000,
+        socketTimeout: 30_000,
+      }),
     });
   }
 
