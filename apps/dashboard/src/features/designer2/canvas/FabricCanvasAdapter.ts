@@ -313,20 +313,28 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   // on every canvas render (drag, resize, rotate, zoom, Phase 7 animation ticks — `after:render`
   // fires after all of them uniformly). Pure position mirroring, not a full transform-matrix
   // conversion: every element here uses originX/originY 'left'/'top' (see FabricObjectFactory),
-  // so left/top already give the unrotated top-left corner directly, scaled by the canvas's own
-  // zoom; rotate()/scale() pivot around the CSS default center origin, matching Fabric's own
-  // center-pivoted rotation/scaling.
+  // so left/top already give the *scaled* box's unrotated top-left corner directly (Fabric anchors
+  // left/top to whichever edge/corner a resize handle drag did *not* move) — the CSS box therefore
+  // has to be sized at the final scaled dimensions (width*scaleX, height*scaleY), not the
+  // pre-scale width/height with a separate CSS `scale()` layered on top. A `scale()` transform
+  // pivots around the CSS box's own center by default (`transformOrigin` is only ever set to
+  // 'center center', see createVideoOverlay), which matches Fabric only when the resize itself was
+  // anchored at the center — for every edge/corner-handle drag it isn't, so during a live resize
+  // the overlay visibly grew from the box's center instead of the handle's fixed opposite edge
+  // (e.g. dragging the bottom handle down made the video appear to grow upward too). Only rotation
+  // still needs a CSS transform — Fabric rotates around the object's own center exactly like CSS
+  // `rotate()` does, so that part was never wrong.
   private applyOverlayGeometry(el: HTMLElement, obj: DesignerFabricObject, zoom: number): void {
     el.style.display = obj.visible === false ? 'none' : 'block';
-    el.style.left = `${(obj.left ?? 0) * zoom}px`;
-    el.style.top = `${(obj.top ?? 0) * zoom}px`;
-    el.style.width = `${(obj.width ?? 0) * zoom}px`;
-    el.style.height = `${(obj.height ?? 0) * zoom}px`;
-    el.style.opacity = String(obj.opacity ?? 1);
     const scaleX = obj.scaleX ?? 1;
     const scaleY = obj.scaleY ?? 1;
+    el.style.left = `${(obj.left ?? 0) * zoom}px`;
+    el.style.top = `${(obj.top ?? 0) * zoom}px`;
+    el.style.width = `${(obj.width ?? 0) * scaleX * zoom}px`;
+    el.style.height = `${(obj.height ?? 0) * scaleY * zoom}px`;
+    el.style.opacity = String(obj.opacity ?? 1);
     const angle = obj.angle ?? 0;
-    el.style.transform = scaleX === 1 && scaleY === 1 && angle === 0 ? '' : `rotate(${angle}deg) scale(${scaleX}, ${scaleY})`;
+    el.style.transform = angle === 0 ? '' : `rotate(${angle}deg)`;
   }
 
   // Static content (text/font-family/color/align/direction) is set once at creation
