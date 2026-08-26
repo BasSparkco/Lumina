@@ -33,16 +33,21 @@ function Designer2PageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const templateId = searchParams.get('templateId');
+  const templateIdParam = searchParams.get('templateId');
   const designIdParam = searchParams.get('designId');
   const { isSuperAdmin } = usePermissions();
-  const canRender = useRouteGuard(!templateId || isSuperAdmin, 'designer2');
+  const canRender = useRouteGuard(!templateIdParam || isSuperAdmin, 'designer2');
   const loadDocument = useDesignerStore((s) => s.loadDocument);
   // Tracks which source (a specific templateId/designId, or the sentinel 'blank') has already
   // been loaded, so switching between modes in the same session reloads correctly instead of
   // only ever running once like Phase 1's original ref-boolean guard did.
   const loadedKey = useRef<string | null>(null);
   const [templateName, setTemplateName] = useState<string | null>(null);
+  // designer.md Phase 10-style tracking, mirrored for Templates — the persisted DesignTemplate id
+  // this session is tracking once there is one. `templateIdParam` seeds it on load; a Super
+  // Admin's first save-as-template (see DesignerShell's saveAsTemplate branch) sets it via
+  // handleTemplateSaved below, independent of the URL, updated separately just like designId.
+  const [templateId, setTemplateId] = useState<string | null>(templateIdParam);
   const [loadError, setLoadError] = useState<string | null>(null);
   // designer.md Phase 10 — the persisted DesignAsset id/revision this session is tracking, once
   // there is one. `designIdParam` seeds it on load; a first save (create) updates it via
@@ -53,11 +58,11 @@ function Designer2PageInner() {
 
   useEffect(() => {
     if (!canRender) return;
-    const key = templateId ? `template:${templateId}` : designIdParam ? `design:${designIdParam}` : 'blank';
+    const key = templateIdParam ? `template:${templateIdParam}` : designIdParam ? `design:${designIdParam}` : 'blank';
     if (loadedKey.current === key) return;
     loadedKey.current = key;
 
-    if (templateId) {
+    if (templateIdParam) {
       // No `cancelled`-flag guard here (unlike a typical fetch-in-effect): React 18 Strict Mode's
       // dev-only double-invoke (mount -> cleanup -> mount) would otherwise write `loadedKey.current`
       // on the first, throwaway invocation and then have that invocation's own cleanup mark its
@@ -65,7 +70,7 @@ function Designer2PageInner() {
       // set and never starts its own fetch, so nothing ever applies the result. Letting the
       // throwaway invocation's fetch finish and apply the result is exactly what should happen.
       adminTemplatesApi
-        .get(templateId)
+        .get(templateIdParam)
         .then((template) => {
           setTemplateName(template.name);
           loadDocument(DesignDocumentSchema.parse(template.designJson));
@@ -101,7 +106,7 @@ function Designer2PageInner() {
     }
 
     loadDocument(buildBlankDesignDocument('Untitled Design'));
-  }, [canRender, templateId, designIdParam, loadDocument]);
+  }, [canRender, templateIdParam, designIdParam, loadDocument]);
 
   // designer.md Phase 10 — the first successful save (create) gets this design a real id for the
   // first time; reflect it in the URL (replace, not push — a blank editor turning into a saved
@@ -114,6 +119,18 @@ function Designer2PageInner() {
     if (result.id !== designIdParam) {
       loadedKey.current = `design:${result.id}`;
       router.replace(`${pathname}?designId=${result.id}`);
+    }
+  }
+
+  // Mirrors handleDesignSaved above — a Super Admin's first save-as-template (DesignerShell's
+  // saveAsTemplate branch) gets this document a real Template id for the first time; reflect it
+  // in the URL the same way so a refresh reloads the same Template instead of starting blank.
+  function handleTemplateSaved(result: { id: string; name: string }) {
+    setTemplateId(result.id);
+    setTemplateName(result.name);
+    if (result.id !== templateIdParam) {
+      loadedKey.current = `template:${result.id}`;
+      router.replace(`${pathname}?templateId=${result.id}`);
     }
   }
 
@@ -132,6 +149,8 @@ function Designer2PageInner() {
         designId={designId}
         designRevision={designRevision}
         onDesignSaved={handleDesignSaved}
+        isSuperAdmin={isSuperAdmin}
+        onTemplateSaved={handleTemplateSaved}
       />
     </div>
   );

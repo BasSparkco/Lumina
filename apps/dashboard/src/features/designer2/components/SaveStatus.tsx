@@ -1,14 +1,16 @@
 import type { AutosaveStatus } from '../hooks/useAutosave';
 
-// designer.md §26's own four states, driven by useAutosave.ts. Previously a static "Not saved"
-// placeholder (designer.md Phase 9's own comment already mis-cited which phase — autosave itself
-// is Phase 10, not 9).
+// designer.md §26's own four states, driven by useAutosave.ts. This tracks the background
+// autosave *draft* only (a recovery copy, not a real save) — labeled "Draft…" rather than the
+// bare "Saved"/"Saving…" it used to say, since that wording was indistinguishable from the
+// manual Save button's own outcome (see SaveResult next to it) and is exactly what left users
+// unsure whether their real Save had gone anywhere.
 const LABELS: Record<AutosaveStatus, string> = {
-  idle: 'Not saved',
-  saving: 'Saving…',
-  saved: 'Saved',
-  offline: 'Offline — changes stored locally',
-  error: 'Save failed',
+  idle: 'Draft not saved',
+  saving: 'Saving draft…',
+  saved: 'Draft saved',
+  offline: 'Offline — draft stored locally',
+  error: 'Draft save failed',
 };
 
 export function SaveStatus({ status }: { status: AutosaveStatus }) {

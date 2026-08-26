@@ -55,12 +55,12 @@ export function DesignerSidebar({
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
   return (
+    <div className="flex shrink-0">
     <div className="relative flex w-16 shrink-0 flex-col items-center gap-1 border-r border-gray-200 py-3 dark:border-gray-800">
-      <button className={tabBtn} onClick={() => setTemplatesOpen(true)}>
+      <button className={tabBtn} aria-pressed={templatesOpen} onClick={() => setTemplatesOpen((v) => !v)}>
         <LayoutTemplate className="h-4 w-4" />
         Templates
       </button>
-      {templatesOpen && <TemplatesGalleryPanel onClose={() => setTemplatesOpen(false)} />}
 
       <button className={tabBtn} onClick={onAddText}>
         <Type className="h-4 w-4" />
@@ -121,6 +121,12 @@ export function DesignerSidebar({
         <Upload className="h-4 w-4" />
         Uploads
       </button>
+    </div>
+    {templatesOpen && (
+      <div className="flex w-80 shrink-0 flex-col border-r border-gray-200 dark:border-gray-800">
+        <TemplatesGalleryPanel onClose={() => setTemplatesOpen(false)} />
+      </div>
+    )}
     </div>
   );
 }

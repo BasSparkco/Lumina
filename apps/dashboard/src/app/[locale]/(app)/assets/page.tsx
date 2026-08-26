@@ -1,12 +1,12 @@
 'use client';
-import { useEffect, useMemo } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import { useRef, useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations, useLocale } from 'next-intl';
 import { ImageIcon, Film, Music, FileText, Trash2, Upload, RefreshCw, Maximize2, Download, Type, Pencil, Volume2, Library, CopyPlus, Search, Check, AlertTriangle, AudioLines, Plus, LayoutTemplate, Palette, MapPin, LayoutGrid, SquarePlay, ExternalLink, ListVideo, ArrowLeft, Shuffle, ListOrdered } from 'lucide-react';
-import { assetsApi, appsApi, type Asset, type TextSize, type AssetCategory, type TickerDirection, type AppProvider, type ResolvedApp, type AppPlaybackOrder } from '@/lib/api';
+import { assetsApi, appsApi, designsApi, type Asset, type DesignAsset, type TextSize, type AssetCategory, type TickerDirection, type AppProvider, type ResolvedApp, type AppPlaybackOrder } from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { ContextMenu, type ContextMenuState, type ContextMenuAction } from '@/components/ContextMenu';
@@ -551,7 +551,7 @@ function LibraryUploadModal({ onClose, onUploaded }: LibraryUploadModalProps) {
   );
 }
 
-export default function AssetsPage() {
+function AssetsPageInner() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const { canEditContent, canManageLibrary } = usePermissions();
@@ -577,7 +577,14 @@ export default function AssetsPage() {
   const [appModalProvider, setAppModalProvider] = useState<AppProvider | null>(null);
   const [appPlaylistModalProvider, setAppPlaylistModalProvider] = useState<AppProvider | null>(null);
   const [providerMenu, setProviderMenu] = useState<ContextMenuState | null>(null);
-  const [tab, setTab] = useState<'mine' | 'apps' | 'library'>('mine');
+  const searchParams = useSearchParams();
+  // designer2's Save flow links here as `/assets?tab=designs` after saving a design. Read once as
+  // the initial state (not synced via an effect) — the component using useSearchParams is already
+  // wrapped in Suspense (see the default export below), which is what makes it safe to derive this
+  // during the initial render instead of risking a server/client hydration mismatch.
+  const [tab, setTab] = useState<'mine' | 'apps' | 'library' | 'designs'>(
+    searchParams.get('tab') === 'designs' ? 'designs' : 'mine',
+  );
   // Apps tab: 'gallery' (default) shows what you've already created; 'create' shows the
   // provider grid to start a new one, behind the top-right Create button.
   const [appsView, setAppsView] = useState<'gallery' | 'create'>('gallery');
@@ -593,6 +600,11 @@ export default function AssetsPage() {
   const [usageFilter, setUsageFilter] = useState<'' | 'IN_USE' | 'UNUSED'>('');
 
   const { data: assets = [], isLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+  const { data: designs = [], isLoading: designsLoading } = useQuery({
+    queryKey: ['designs'],
+    queryFn: designsApi.list,
+    enabled: tab === 'designs',
+  });
 
   // APP assets live on the Apps tab, not here (see appsroadmap.md Phase 7) — My Assets only
   // ever shows the rest.
@@ -889,6 +901,12 @@ export default function AssetsPage() {
             <Upload className="w-4 h-4" /> {t('libraryUpload')}
           </button>
         )}
+        {tab === 'designs' && (
+          <button onClick={() => router.push(`/${locale}/designer2`)}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            <Plus className="w-4 h-4" /> {t('newDesign')}
+          </button>
+        )}
       </div>
 
       {showLibraryUpload && canManageLibrary && (
@@ -926,6 +944,10 @@ export default function AssetsPage() {
         <button onClick={() => setTab('library')}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'library' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
           <Library className="w-4 h-4" /> {t('libraryTab')}
+        </button>
+        <button onClick={() => setTab('designs')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'designs' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          <LayoutTemplate className="w-4 h-4" /> {t('designsTab')}
         </button>
       </div>
 
@@ -1390,6 +1412,47 @@ export default function AssetsPage() {
           {libraryDeleteError && <p className="text-xs text-red-600 mt-3">{libraryDeleteError}</p>}
         </div>
       )}
+
+      {tab === 'designs' && (
+        <div>
+          {designsLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+
+          {!designsLoading && designs.length === 0 && (
+            <div className="text-center py-16 text-gray-400">
+              <LayoutTemplate className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">{t('designsEmpty')}</p>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {designs.map((design: DesignAsset) => (
+              <button
+                key={design.id}
+                onClick={() => router.push(`/${locale}/designer2?designId=${design.id}`)}
+                className="text-start bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden hover:border-indigo-300 dark:hover:border-indigo-700"
+              >
+                <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-300 dark:text-gray-500">
+                  <LayoutTemplate className="w-8 h-8" />
+                </div>
+                <div className="p-3">
+                  <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{design.name}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                    {new Date(design.updatedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function AssetsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AssetsPageInner />
+    </Suspense>
   );
 }

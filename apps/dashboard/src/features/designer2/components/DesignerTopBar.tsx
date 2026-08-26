@@ -1,7 +1,14 @@
 'use client';
-import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2, Check } from 'lucide-react';
 import { SaveStatus } from './SaveStatus';
 import type { AutosaveStatus } from '../hooks/useAutosave';
+
+export interface SaveResult {
+  kind: 'template' | 'design';
+  name: string;
+  href: string;
+}
 
 interface DesignerTopBarProps {
   name: string;
@@ -26,6 +33,15 @@ interface DesignerTopBarProps {
   saving?: boolean;
   saveError?: string | null;
   saveStatus: AutosaveStatus;
+  // Real outcome of the last manual Save — distinct from `saveStatus` above, which only ever
+  // reports the background autosave draft. Cleared a few seconds after a successful save.
+  saveResult?: SaveResult | null;
+  // A brand-new, never-saved document opened by a Super Admin can be saved as either a Template
+  // (super-admin-only, shows up on /admin/templates) or a personal Design (shows up on Assets ->
+  // My Designs, same as every other user gets). Once the first save happens the mode is locked in
+  // (mirrors how ?templateId=/?designId= already lock in existing documents), so this choice only
+  // ever renders pre-first-save.
+  saveTargetChoice?: { value: 'template' | 'design'; onChange: (v: 'template' | 'design') => void } | null;
 }
 
 const btn =
@@ -49,6 +65,8 @@ export function DesignerTopBar({
   saving,
   saveError,
   saveStatus,
+  saveResult,
+  saveTargetChoice,
 }: DesignerTopBarProps) {
   return (
     <div className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
@@ -87,7 +105,33 @@ export function DesignerTopBar({
       </button>
 
       <div className="ml-auto flex items-center gap-3">
+        {saveTargetChoice && (
+          <div className="flex items-center rounded-md border border-gray-200 p-0.5 text-xs dark:border-gray-800">
+            {(['design', 'template'] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => saveTargetChoice.onChange(v)}
+                className={`rounded px-2 py-1 font-medium transition-colors ${
+                  saveTargetChoice.value === v
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                }`}
+              >
+                {v === 'template' ? 'Save as Template' : 'Save as Design'}
+              </button>
+            ))}
+          </div>
+        )}
         {saveError && <span className="text-xs text-red-500 dark:text-red-400">{saveError}</span>}
+        {!saveError && saveResult && (
+          <Link
+            href={saveResult.href}
+            className="flex items-center gap-1 text-xs text-green-600 hover:underline dark:text-green-400"
+          >
+            <Check className="h-3.5 w-3.5" />
+            Saved as {saveResult.kind === 'template' ? 'Template' : 'Design'} &ldquo;{saveResult.name}&rdquo; · View
+          </Link>
+        )}
         <SaveStatus status={saveStatus} />
         {/* Preview plays a scene-sequencing loop (designer.md Phase 6) — real, but Designer-only:
             no dynamic variables/animation/video/Player-runtime parity yet (designer.md Phase 11). */}

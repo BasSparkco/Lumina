@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { useLocale } from 'next-intl';
 import { Square } from 'lucide-react';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { adminTemplatesApi, designsApi } from '@/lib/api';
@@ -15,7 +16,7 @@ import {
   createTextElement,
   createVideoPlaceholderElement,
 } from '../lib/defaultElements';
-import { DesignerTopBar } from './DesignerTopBar';
+import { DesignerTopBar, type SaveResult } from './DesignerTopBar';
 import { DesignerSidebar } from './DesignerSidebar';
 import { CanvasViewport } from './CanvasViewport';
 import { PropertiesPanel } from './PropertiesPanel';
@@ -36,6 +37,11 @@ interface DesignerShellProps {
   designId?: string | null;
   designRevision?: number;
   onDesignSaved?: (result: { id: string; revision: number }) => void;
+  // Only Super Admin gets a choice of save target for a brand-new document (neither templateId
+  // nor designId set yet) — everyone else always saves a personal DesignAsset, matching the
+  // existing behavior. See handleSave's third branch below.
+  isSuperAdmin?: boolean;
+  onTemplateSaved?: (result: { id: string; name: string }) => void;
 }
 
 // Top-level layout, per designer.md §22's suggested UI:
@@ -44,7 +50,16 @@ interface DesignerShellProps {
 //   Scenes / Timeline
 // Layers is a toggled overlay (see LayersPanel), not a persistent row — matches the existing
 // Layout/Theme editors' own convention.
-export function DesignerShell({ templateId, templateName, designId, designRevision, onDesignSaved }: DesignerShellProps) {
+export function DesignerShell({
+  templateId,
+  templateName,
+  designId,
+  designRevision,
+  onDesignSaved,
+  isSuperAdmin,
+  onTemplateSaved,
+}: DesignerShellProps) {
+  const locale = useLocale();
   const document = useDesignerStore((s) => s.document);
   const loadDocument = useDesignerStore((s) => s.loadDocument);
   const activeSceneId = useDesignerStore((s) => s.activeSceneId);
@@ -82,31 +97,63 @@ export function DesignerShell({ templateId, templateName, designId, designRevisi
   const { confirmDelete } = useConfirmBeforeDelete();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Pre-first-save choice, Super Admin only — see DesignerShellProps.isSuperAdmin above.
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  // Real outcome of the last manual Save (which record, which page it lives on) — SaveStatus
+  // above only ever reports the unrelated background autosave draft, which is exactly what left
+  // users unable to tell where a Save actually went. Cleared on the next save attempt and after
+  // a few seconds so it doesn't linger indefinitely.
+  const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
+  const saveResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (saveResultTimer.current) clearTimeout(saveResultTimer.current);
+  }, []);
+
+  function flashSaveResult(result: SaveResult) {
+    setSaveResult(result);
+    if (saveResultTimer.current) clearTimeout(saveResultTimer.current);
+    saveResultTimer.current = setTimeout(() => setSaveResult(null), 8000);
+  }
 
   const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
 
   // designer.md Phase 10 — Manual Save. `document` is already validated DesignDocument state, so
   // no re-validation here — the API re-validates it against DesignDocumentSchema (and, for plain
   // designs, asset ownership) server-side regardless, never trusting a client-shaped payload as-is.
-  // Three branches: Template authoring (unchanged since Phase 5), updating an already-persisted
+  // Four branches: Template authoring (unchanged since Phase 5), updating an already-persisted
   // Design Asset (revision-checked — a 409 surfaces the conflict message as-is, no auto-merge),
-  // or the very first save of a brand-new design (creates the row, then reports the new id/
-  // revision up to page.tsx via onDesignSaved so it can update the `?designId=` URL).
+  // the very first save of a brand-new document a Super Admin chose to author as a Template
+  // (creates a DesignTemplate row, then locks the editor into Template mode via onTemplateSaved
+  // the same way a first Asset save locks into Design mode below), or the very first save of a
+  // brand-new design for everyone else, Super Admin included when they didn't pick Template
+  // (creates the row, then reports the new id/revision up to page.tsx via onDesignSaved so it can
+  // update the `?designId=` URL). Every branch ends by flashing exactly what got saved and where
+  // — the generic autosave "Saved" label above is a different thing (see SaveStatus's comment)
+  // and was never telling the user this.
   async function handleSave() {
     if (!document) return;
     setSaving(true);
     setSaveError(null);
     try {
       if (templateId) {
-        await adminTemplatesApi.update(templateId, { designJson: document });
+        const updated = await adminTemplatesApi.update(templateId, { designJson: document });
+        flashSaveResult({ kind: 'template', name: updated.name, href: `/${locale}/admin/templates` });
       } else if (designId) {
         const updated = await designsApi.update(designId, { designJson: document, revision: designRevision ?? 1 });
         clearLocalDraft(document.id);
         onDesignSaved?.({ id: updated.id, revision: updated.revision });
+        flashSaveResult({ kind: 'design', name: updated.name, href: `/${locale}/assets?tab=designs` });
+      } else if (isSuperAdmin && saveAsTemplate) {
+        const created = await adminTemplatesApi.create({ name: document.name, designJson: document });
+        clearLocalDraft(document.id);
+        onTemplateSaved?.({ id: created.id, name: created.name });
+        flashSaveResult({ kind: 'template', name: created.name, href: `/${locale}/admin/templates` });
       } else {
         const created = await designsApi.create({ name: document.name, designJson: document });
         clearLocalDraft(document.id);
         onDesignSaved?.({ id: created.id, revision: created.revision });
+        flashSaveResult({ kind: 'design', name: created.name, href: `/${locale}/assets?tab=designs` });
       }
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Save failed');
@@ -196,6 +243,10 @@ export function DesignerShell({ templateId, templateName, designId, designRevisi
         saving={saving}
         saveError={saveError}
         saveStatus={saveStatus}
+        saveResult={saveResult}
+        saveTargetChoice={
+          isSuperAdmin && !templateId && !designId ? { value: saveAsTemplate ? 'template' : 'design', onChange: (v) => setSaveAsTemplate(v === 'template') } : null
+        }
         previewing={previewing}
         onTogglePreview={previewing ? stopPreview : startPreview}
       />

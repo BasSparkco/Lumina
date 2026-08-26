@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { X, LayoutTemplate, Check } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { useLocale } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { X, LayoutTemplate } from 'lucide-react';
 import { templatesApi } from '@/lib/api';
 
 interface TemplatesGalleryPanelProps {
@@ -19,58 +20,54 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 // designer.md §11's customer-facing half of the Template -> Asset workflow: browse authorized
 // Templates (backend already filters to PUBLISHED + GLOBAL/authorized-tenant — see
-// TemplatesService.customerList), "Use" one to clone it into a new tenant-owned DesignAsset (the
-// Critical Backend Rule — never an update to the Template itself). Still stops at a confirmation
-// rather than opening the clone in this editor — designer2 can load `?designId=` now (designer.md
-// Phase 10), but there's no "My Designs" browse page yet to navigate to it from (still deferred).
+// TemplatesService.customerList; this is the exact same DesignTemplate data the Super Admin
+// manages on /admin/templates, just pre-filtered), "Use" one to clone it into a new tenant-owned
+// DesignAsset (the Critical Backend Rule — never an update to the Template itself), then jump
+// straight into editing that clone via `?designId=` (designer.md Phase 10) — it lands on Assets ->
+// My Designs from there same as any other saved design, closing the loop this panel used to leave
+// dangling at a plain confirmation message.
 export function TemplatesGalleryPanel({ onClose }: TemplatesGalleryPanelProps) {
+  const router = useRouter();
+  const locale = useLocale();
   const { data: templates = [], isLoading } = useQuery({ queryKey: ['templates'], queryFn: templatesApi.list });
-  const [createdName, setCreatedName] = useState<string | null>(null);
 
   const useMut = useMutation({
     mutationFn: (id: string) => templatesApi.createDesign(id),
-    onSuccess: (asset) => setCreatedName(asset.name),
+    onSuccess: (asset) => {
+      onClose();
+      router.push(`/${locale}/designer2?designId=${asset.id}`);
+    },
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={onClose}>
-      <div
-        className="flex max-h-[80vh] w-full max-w-3xl flex-col gap-4 overflow-hidden rounded-xl bg-white p-5 dark:bg-gray-900"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-            <LayoutTemplate className="h-4 w-4 text-indigo-600" /> Templates
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <>
+      <div className="flex items-center justify-between border-b border-gray-200 px-3 py-3 dark:border-gray-800">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <LayoutTemplate className="h-4 w-4 text-indigo-600" /> Templates
+        </h2>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" aria-label="Close">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
-        {createdName && (
-          <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400">
-            <Check className="h-4 w-4 shrink-0" />
-            &ldquo;{createdName}&rdquo; was added to My Designs.
-          </div>
-        )}
-        {useMut.isError && <p className="text-xs text-red-500">{(useMut.error as Error).message}</p>}
+      <div className="flex-1 overflow-y-auto p-3">
+        {useMut.isError && <p className="mb-2 text-xs text-red-500">{(useMut.error as Error).message}</p>}
 
-        <div className="grid grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
-          {isLoading && <p className="col-span-full py-8 text-center text-sm text-gray-400 dark:text-gray-600">Loading…</p>}
+        <div className="grid grid-cols-2 gap-2">
+          {isLoading && <p className="col-span-full py-8 text-center text-xs text-gray-400 dark:text-gray-600">Loading…</p>}
           {!isLoading && templates.length === 0 && (
-            <p className="col-span-full py-8 text-center text-sm text-gray-400 dark:text-gray-600">No templates are available yet.</p>
+            <p className="col-span-full py-8 text-center text-xs text-gray-400 dark:text-gray-600">No templates are available yet.</p>
           )}
           {templates.map((t) => (
-            <div key={t.id} className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
-              <div className="flex h-24 items-center justify-center rounded-md bg-gray-100 text-[10px] text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+            <div key={t.id} className="flex flex-col gap-1.5 rounded-lg border border-gray-200 p-2 dark:border-gray-800">
+              <div className="flex h-16 items-center justify-center rounded-md bg-gray-100 text-center text-[9px] text-gray-400 dark:bg-gray-800 dark:text-gray-500">
                 {CATEGORY_LABELS[t.category] ?? t.category}
               </div>
-              <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{t.name}</p>
-              {t.description && <p className="line-clamp-2 text-[11px] text-gray-500 dark:text-gray-400">{t.description}</p>}
+              <p className="truncate text-[11px] font-medium text-gray-900 dark:text-gray-100">{t.name}</p>
               <button
                 disabled={useMut.isPending}
                 onClick={() => useMut.mutate(t.id)}
-                className="mt-auto rounded-md bg-indigo-600 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="mt-auto rounded-md bg-indigo-600 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 Use this template
               </button>
@@ -78,6 +75,6 @@ export function TemplatesGalleryPanel({ onClose }: TemplatesGalleryPanelProps) {
           ))}
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -209,3 +209,5 @@ it was originally created.
 | MinIO API | 9010 |
 | MinIO Console | 9011 |
 | Player | 5000 |
+
+

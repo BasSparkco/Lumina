@@ -22,7 +22,7 @@
  * would otherwise sit on top of a video positioned behind the canvas and hide it completely. See
  * FabricCanvasAdapter's Phase 9 comments for the full stacking model.
  */
-import { Circle, Ellipse, FabricImage, FabricText, filters, Group, Line, Rect, Textbox, Triangle, type FabricObject } from 'fabric';
+import { Circle, Ellipse, FabricImage, FabricText, filters, FixedLayout, Group, LayoutManager, Line, Rect, Textbox, Triangle, type FabricObject } from 'fabric';
 import QRCode from 'qrcode';
 import type { DesignElement, ImageElement, QrElement, VideoElement } from '@lumina/design-schema';
 import { fontStack } from '@lumina/types';
@@ -41,6 +41,20 @@ const PLACEHOLDER_STROKE = '#6b7280';
 // omitted entirely, never passed through as explicit `undefined`.
 function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
+
+// Every wrapper Group below (placeholderGroup/createImageObject/createQrObject) is sized to the
+// element's own width/height by construction and must stay that size no matter how its child is
+// transformed. Fabric's default Group layout strategy (FitContentLayout) ignores that intent: it
+// unconditionally recomputes the group's width/height/position from the children's *unclipped*
+// bounding box on every layout pass (construction, and any future add/remove), so a `cover`-fit
+// image — deliberately scaled larger than the box and cropped back down via clipPath, which
+// FitContentLayout's bounds calculation doesn't know about — silently overrides the width/height/
+// left/top passed into the constructor, leaving the visible (clipped) region shifted into a
+// corner of the nominal box. A LayoutManager built on FixedLayout instead keeps exactly the size
+// passed in and never re-derives it from children.
+function fixedSizeLayoutManager(): LayoutManager {
+  return new LayoutManager(new FixedLayout());
 }
 
 function placeholderGroup(width: number, height: number, label: string, fill: string, textColor: string): Group {
@@ -62,7 +76,7 @@ function placeholderGroup(width: number, height: number, label: string, fill: st
     left: width / 2,
     top: height / 2,
   });
-  return new Group([box, text], { width, height, subTargetCheck: false, interactive: false });
+  return new Group([box, text], { width, height, subTargetCheck: false, interactive: false, layoutManager: fixedSizeLayoutManager() });
 }
 
 function createShapeObject(element: Extract<DesignElement, { type: 'shape' }>): FabricObject {
@@ -175,8 +189,16 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
 
   // Wrapped in a Group sized exactly to the element's box (like placeholderGroup) so selection/
   // transform handles reflect the element's own width/height regardless of the photo's aspect
-  // ratio or the cover/contain scale applied above.
-  return new Group([img], { left: 0, top: 0, width: element.width, height: element.height, subTargetCheck: false });
+  // ratio or the cover/contain scale applied above. Must use a fixed-size layout manager — see
+  // fixedSizeLayoutManager's comment for why the default one breaks this.
+  return new Group([img], {
+    left: 0,
+    top: 0,
+    width: element.width,
+    height: element.height,
+    subTargetCheck: false,
+    layoutManager: fixedSizeLayoutManager(),
+  });
 }
 
 // designer.md §17.1/Phase 8 — `element.value` here is already resolved (CanvasViewport applies
@@ -204,7 +226,14 @@ async function createQrObject(element: QrElement): Promise<FabricObject> {
   img.set({ scaleX: element.width / (img.width || element.width), scaleY: element.height / (img.height || element.height) });
   // Same wrapping convention as createImageObject — selection/transform handles reflect the
   // element's own box regardless of the generated code's pixel dimensions.
-  return new Group([img], { left: 0, top: 0, width: element.width, height: element.height, subTargetCheck: false });
+  return new Group([img], {
+    left: 0,
+    top: 0,
+    width: element.width,
+    height: element.height,
+    subTargetCheck: false,
+    layoutManager: fixedSizeLayoutManager(),
+  });
 }
 
 // designer.md Phase 9 — video has no fabric.js-native playback, so (like text, Phase 8) this is
