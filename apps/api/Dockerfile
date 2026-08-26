@@ -25,6 +25,12 @@ RUN DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholde
 RUN pnpm --filter @lumina/db build
 # api's prisma/theme-presets.ts and themes.service.ts consume @lumina/types' compiled output.
 RUN pnpm --filter @lumina/types build
+# designer.md Phase 11 — player.service.ts/designs.service.ts/templates.service.ts consume
+# @lumina/design-schema's compiled output (its own package.json resolves via dist/, unlike
+# dashboard's Next build, which reaches @lumina/* through a tsconfig path alias straight to
+# source instead — this package.json-driven resolution only works with the dist built first).
+# Must come after @lumina/types above — design-schema itself depends on it.
+RUN pnpm --filter @lumina/design-schema build
 RUN pnpm --filter api build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────

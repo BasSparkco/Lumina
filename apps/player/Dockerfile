@@ -20,6 +20,10 @@ ENV VITE_WS_URL=$VITE_WS_URL
 
 # player consumes @lumina/types' compiled dist output, so it must be built first.
 RUN pnpm --filter @lumina/types build
+# designer.md Phase 11 — DesignRenderer.tsx consumes @lumina/design-schema's compiled output
+# (ANIMATION_MOTION/resolveEasing/ResolvedDesignPayload etc.) the same package.json-resolution
+# way as @lumina/types above — must come after it, since design-schema itself depends on types.
+RUN pnpm --filter @lumina/design-schema build
 RUN pnpm --filter player build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
