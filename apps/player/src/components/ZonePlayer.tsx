@@ -36,6 +36,16 @@ export interface ZonePlayerHandle {
   setSpeed: (rate: number) => void;
 }
 
+// Explicitly tells the browser to give up this element's hardware decode session instead of
+// waiting for garbage collection to get around to it whenever the element is detached from
+// the DOM. Safe to call on an element that's already been unmounted — el.pause()/removeAttribute
+// still work on a detached node. See the autoplay effect's cleanup for why this matters.
+function releaseVideoDecoder(el: HTMLVideoElement) {
+  el.pause();
+  el.removeAttribute('src');
+  el.load();
+}
+
 // Exported for ThemeRenderer's asset-backed TEXT element, which needs the same size mapping.
 export const FONT_SIZE_CLAMPS: Record<string, string> = {
   SMALL: 'clamp(1rem, 3vw, 2.5rem)',
@@ -53,7 +63,6 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const preloadRef = useRef<HTMLVideoElement | null>(null);
   // Tracks an explicit Custom Player pause across a state refetch of the same video — see the
   // autoplay effect below for why this can't just live in the `item` object itself.
   const pausedRef = useRef(false);
@@ -85,12 +94,25 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
     // VIDEO with playFullVideo: onEnded (below) triggers advance, no timer
     // DOCUMENT: its own page-cycling effect below hands off to advance() once pages are done
 
-    // Preload next video
+    // Warm the service worker's media cache for the next video/image ahead of time — a plain
+    // fetch, not a hidden <video>/Image element. For video: a hidden preload <video> used to
+    // hold its own hardware decode session open for the whole time the current item was
+    // playing; on embedded/TV WebViews, which commonly support only 1-2 concurrent hardware
+    // video decoders, that meant a transition into a video item could need three simultaneous
+    // sessions (the outgoing video mid-teardown, the incoming video starting up, and this
+    // preload) competing for a budget of one or two — the decoder that lost produced a black
+    // frame with no error. For images: without this, the <img src=...> below only starts
+    // fetching the instant the item becomes current, so the browser paints it top-down as
+    // bytes stream in — looking "slow" regardless of actual connection speed, since there was
+    // never a head start. A fetch() only touches the network/cache layer (no decoder, no DOM
+    // element) — see src/sw.ts for how this request gets cached so the actual element
+    // switch-over below is served instantly from Cache Storage instead of hitting the network
+    // again. Doesn't help the very first item shown on load (nothing played before it to
+    // preload during) — same limitation the video preload already had.
     const nextIdx = (index + 1) % playlist.items.length;
     const next = playlist.items[nextIdx];
-    if (next?.kind === 'ASSET' && next.asset?.type === 'VIDEO' && next.asset.url && preloadRef.current) {
-      preloadRef.current.src = next.asset.url;
-      preloadRef.current.load();
+    if (next?.kind === 'ASSET' && next.asset?.url && (next.asset.type === 'VIDEO' || next.asset.type === 'IMAGE')) {
+      void fetch(next.asset.url, { mode: 'cors', credentials: 'omit' }).catch(() => undefined);
     }
 
     setPageIndex(0);
@@ -150,19 +172,36 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
     }
     const wantsMuted = item.muted || forceMuted;
     el.volume = Math.max(0, Math.min(1, volume / 100));
-    if (pausedRef.current) return;
-    el.play().catch(() => {
-      if (!el.muted) {
-        el.muted = true;
-        void el.play();
+
+    let unlockCleanup: (() => void) | undefined;
+    if (!pausedRef.current) {
+      el.play().catch(() => {
+        if (!el.muted) {
+          el.muted = true;
+          void el.play();
+        }
+      });
+      if (!wantsMuted) {
+        unlockCleanup = onAudioUnlock(() => {
+          if (!videoRef.current || pausedRef.current) return;
+          videoRef.current.muted = false;
+          void videoRef.current.play().catch(() => undefined);
+        });
       }
-    });
-    if (wantsMuted) return;
-    return onAudioUnlock(() => {
-      if (!videoRef.current || pausedRef.current) return;
-      videoRef.current.muted = false;
-      void videoRef.current.play().catch(() => undefined);
-    });
+    }
+
+    // Unconditional cleanup — every branch above (paused, muted, unmuted) must still release
+    // this element's decode session before the effect re-runs for the next item. Previously
+    // the paused and muted branches `return`ed with no cleanup at all, so a muted video (the
+    // common case for signage playing before the first user interaction unlocks audio) never
+    // had its decoder explicitly released; it just waited on garbage collection. On
+    // embedded/TV WebViews, which commonly cap concurrent hardware video decoders at 1-2, the
+    // next item's <video> element could start before that GC happened — losing the decoder
+    // race and rendering as a black frame with no audio/video and no error event.
+    return () => {
+      unlockCleanup?.();
+      releaseVideoDecoder(el);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
 
@@ -323,12 +362,12 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           muted={item.muted || forceMuted}
           loop={playlist.items.length === 1}
           playsInline
+          preload="auto"
           crossOrigin="anonymous"
           style={{ width: '100%', height: '100%', objectFit: 'contain', ...mediaCropStyle(item) }}
           onEnded={playlist.items.length === 1 ? undefined : advance}
         />
       )}
-      <video ref={preloadRef} style={{ display: 'none' }} preload="auto" muted />
     </div>
   );
 }

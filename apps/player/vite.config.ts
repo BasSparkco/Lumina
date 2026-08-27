@@ -6,20 +6,23 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      workbox: {
+      // Switched from `generateSW` (a purely declarative runtimeCaching config) to
+      // `injectManifest`, which lets src/sw.ts run real fetch-handling code. The declarative
+      // CacheFirst entry this replaces looked correct but never actually cached video: a
+      // <video> element's request carries a `Range` header, the origin correctly answers with
+      // 206 Partial Content (see apps/api's MediaController), and Workbox's default
+      // cacheable-response check only stores status 200 (or opaque 0) responses — so every
+      // 206 was silently dropped and every play, and every playlist loop back to the same
+      // clip, re-hit the network. src/sw.ts fixes this by always populating the cache with one
+      // full range-header-free fetch, then slicing whatever byte range was actually requested
+      // out of that single cached copy (workbox-range-requests' createPartialResponse).
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.(mp4|webm|jpg|jpeg|png|gif|webp|svg)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'media-cache',
-              expiration: { maxEntries: 200, maxAgeSeconds: 86400 * 7 },
-            },
-          },
-        ],
       },
+      registerType: 'autoUpdate',
       manifest: {
         name: 'Lumina Player',
         short_name: 'Lumina',
