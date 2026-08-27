@@ -41,9 +41,23 @@ export class StorageService {
       // the TCP connection; socketTimeout aborts on inactivity (not total
       // duration, so it won't cut off a slow-but-progressing large upload/
       // download — only a truly stalled one).
+      //
+      // maxSockets: @smithy/node-http-handler hardcodes a pool of 50 keep-alive sockets to the
+      // S3/MinIO endpoint when this isn't set. Every image/video request the media controller
+      // serves goes through this one client, and a video's Range-request streaming holds its
+      // socket open for the duration of playback — so 50 was nowhere near enough concurrent
+      // capacity for a signage deployment with more than a handful of screens/dashboard users
+      // active at once. Once the pool filled, every further request queued behind it and hit
+      // connectionTimeout waiting for a socket to free up — indistinguishable from MinIO itself
+      // being unreachable (same TimeoutError, same message), but MinIO was up and answering raw
+      // TCP connects instantly the whole time. Confirmed in prod: 76 of 305 requests (25%) failed
+      // this way over ~5 hours under normal traffic. Local MinIO connections are cheap, so there's
+      // no real downside to a much larger pool here.
       requestHandler: new NodeHttpHandler({
         connectionTimeout: 5_000,
         socketTimeout: 30_000,
+        httpAgent: { maxSockets: 500 },
+        httpsAgent: { maxSockets: 500 },
       }),
     });
   }
