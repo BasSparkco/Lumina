@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Headers, NotFoundException, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Headers, NotFoundException, Param, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { StorageService } from '../storage/storage.service';
 
@@ -11,7 +11,6 @@ export class MediaController {
   constructor(private readonly storage: StorageService) {}
 
   @Get(':orgId/assets/:filename')
-  @Header('Cache-Control', 'public, max-age=31536000, immutable')
   serveAsset(
     @Param('orgId') orgId: string,
     @Param('filename') filename: string,
@@ -19,7 +18,7 @@ export class MediaController {
     @Query('download') download: string | undefined,
     @Res() res: Response,
   ) {
-    return this.serve(`${orgId}/assets/${filename}`, range, download, res);
+    return this.serve(`${orgId}/assets/${filename}`, range, download, res, 'public, max-age=31536000, immutable');
   }
 
   // Screenshot keys (see StorageService.screenshotKey) live under a different prefix than
@@ -29,13 +28,12 @@ export class MediaController {
   // overwritten in place on every capture, not content-addressed, so a long-lived cache would
   // keep showing a stale frame after "Refresh now".
   @Get(':orgId/screenshots/:filename')
-  @Header('Cache-Control', 'no-store')
   serveScreenshot(
     @Param('orgId') orgId: string,
     @Param('filename') filename: string,
     @Res() res: Response,
   ) {
-    return this.serve(`${orgId}/screenshots/${filename}`, undefined, undefined, res);
+    return this.serve(`${orgId}/screenshots/${filename}`, undefined, undefined, res, 'no-store');
   }
 
   private async serve(
@@ -43,6 +41,7 @@ export class MediaController {
     range: string | undefined,
     download: string | undefined,
     res: Response,
+    cacheControl: string,
   ) {
     let object;
     try {
@@ -53,6 +52,13 @@ export class MediaController {
       throw err;
     }
 
+    // Set only once the object is actually in hand — a decorator-level @Header() applies to
+    // every response from the handler unconditionally, including a 500 from a transient storage
+    // hiccup (e.g. MinIO taking a moment to accept new connections). An error response cached
+    // `immutable` for a year turns a 30-second blip into a permanent-looking broken image/video
+    // for every client (browser, CDN) that happened to request it during that window — exactly
+    // what made the storage timeout fix insufficient on its own.
+    res.setHeader('Cache-Control', cacheControl);
     res.status(object.statusCode);
     res.setHeader('Accept-Ranges', 'bytes');
     if (object.contentType) res.setHeader('Content-Type', object.contentType);
