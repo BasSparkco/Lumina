@@ -324,6 +324,7 @@ export interface PlayerState {
   stopped: boolean;
   showClock: boolean;
   orientation: 0 | 90 | 180 | 270;
+  aspectRatio: '16:9' | '9:16' | 'stretch';
   emergencyActive: boolean;
   emergencyPlaylist: Playlist | null;
   // Screen-level ASSET streaming mode's single asset, already wrapped as a one-item Playlist —

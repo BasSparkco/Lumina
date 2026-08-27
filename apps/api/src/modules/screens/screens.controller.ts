@@ -17,6 +17,7 @@ import { SetShowClockDto } from './dto/set-show-clock.dto';
 import { UpdatePrayerDto } from './dto/update-prayer.dto';
 import { SetVolumeDto } from './dto/set-volume.dto';
 import { SetOrientationDto } from './dto/set-orientation.dto';
+import { SetAspectRatioDto } from './dto/set-aspect-ratio.dto';
 import { SetGroupDto } from './dto/set-group.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -168,6 +169,15 @@ export class ScreensController {
     @Body() dto: SetOrientationDto,
   ) {
     return this.screens.setOrientation(user.orgId, id, dto.orientation);
+  }
+
+  @Put(':id/aspect-ratio')
+  setAspectRatio(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Body() dto: SetAspectRatioDto,
+  ) {
+    return this.screens.setAspectRatio(user.orgId, id, dto.aspectRatio);
   }
 
   @Put(':id/prayer')

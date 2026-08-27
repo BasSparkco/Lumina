@@ -526,6 +526,7 @@ export default function ScreensPage() {
   const [expandedPrayer, setExpandedPrayer] = useState<string | null>(null);
   const [expandedScreenshot, setExpandedScreenshot] = useState<string | null>(null);
   const [expandedCrash, setExpandedCrash] = useState<string | null>(null);
+  const [expandedDisplay, setExpandedDisplay] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
@@ -707,6 +708,18 @@ export default function ScreensPage() {
   const orientationMut = useMutation({
     mutationFn: ({ id, orientation }: { id: string; orientation: 0 | 90 | 180 | 270 }) =>
       screensApi.setOrientation(id, orientation),
+    onSuccess: (updated) => {
+      logAction({
+        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+      });
+      void qc.invalidateQueries({ queryKey: ['screens'] });
+    },
+  });
+
+  const aspectRatioMut = useMutation({
+    mutationFn: ({ id, aspectRatio }: { id: string; aspectRatio: '16:9' | '9:16' | 'stretch' }) =>
+      screensApi.setAspectRatio(id, aspectRatio),
     onSuccess: (updated) => {
       logAction({
         resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
@@ -1112,23 +1125,6 @@ export default function ScreensPage() {
                   </button>
                   {expandedScreenshot === screen.id && <ScreenshotPanel screen={screen} />}
 
-                  <div>
-                    <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('orientation.label')}</label>
-                    <div className="grid grid-cols-4 gap-1">
-                      {([0, 90, 180, 270] as const).map(deg => (
-                        <button key={deg} type="button" disabled={!canEditContent}
-                          onClick={() => orientationMut.mutate({ id: screen.id, orientation: deg })}
-                          className={`flex items-center justify-center gap-1 text-sm py-1.5 rounded-lg border font-medium disabled:opacity-50 ${
-                            screen.orientation === deg
-                              ? 'bg-indigo-600 border-indigo-600 text-white'
-                              : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                          }`}>
-                          {deg}°
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {screen.stopped && (
                     <div className="flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-2 py-1.5">
                       <Pause className="w-3 h-3 fill-current" /> {t('stoppedBanner')}
@@ -1218,6 +1214,55 @@ export default function ScreensPage() {
                       {groups.map((g: ScreenGroup) => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
                   </div>
+
+                  {/* Display & Screen Settings — physical mounting (Orientation & Rotation) and
+                      the proportional layout it implies (Aspect Ratio), grouped together since
+                      picking a mounting angle should drive the matching aspect ratio by default. */}
+                  <button
+                    onClick={() => setExpandedDisplay(expandedDisplay === screen.id ? null : screen.id)}
+                    className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                    <Monitor className="w-3.5 h-3.5" />
+                    {expandedDisplay === screen.id ? t('display.hide') : t('display.show')}
+                  </button>
+                  {expandedDisplay === screen.id && (
+                    <div className="space-y-2 pl-1">
+                      <div>
+                        <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('orientation.label')}</label>
+                        <select
+                          value={screen.orientation} disabled={!canEditContent}
+                          onChange={e => {
+                            const orientation = Number(e.target.value) as 0 | 90 | 180 | 270;
+                            orientationMut.mutate({ id: screen.id, orientation });
+                            // Auto-suggest the matching aspect ratio for the new mounting angle,
+                            // unless the user has deliberately opted into Stretch to Fit — that
+                            // choice is orientation-agnostic and shouldn't get silently undone.
+                            if (screen.aspectRatio !== 'stretch') {
+                              const suggested = orientation === 90 || orientation === 270 ? '9:16' : '16:9';
+                              if (suggested !== screen.aspectRatio) {
+                                aspectRatioMut.mutate({ id: screen.id, aspectRatio: suggested });
+                              }
+                            }
+                          }}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                          {([0, 90, 180, 270] as const).map(deg => (
+                            <option key={deg} value={deg}>{t(`orientation.options.${deg}`)}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('aspectRatio.label')}</label>
+                        <select
+                          value={screen.aspectRatio} disabled={!canEditContent}
+                          onChange={e => aspectRatioMut.mutate({ id: screen.id, aspectRatio: e.target.value as '16:9' | '9:16' | 'stretch' })}
+                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                          <option value="16:9">16:9</option>
+                          <option value="9:16">9:16</option>
+                          <option value="stretch">{t('aspectRatio.options.stretch')}</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Screen location — always available, since Weather zones need it too and
                       shouldn't be locked behind the faith-features toggle */}

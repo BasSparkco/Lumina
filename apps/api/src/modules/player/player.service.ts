@@ -205,6 +205,7 @@ export class PlayerService {
       stopped: screen.stopped,
       showClock: screen.showClock,
       orientation: screen.orientation,
+      aspectRatio: screen.aspectRatio,
       emergencyActive: screen.emergencyActive,
       emergencyPlaylist: screen.emergencyPlaylist
         ? await this.hydratePlaylist(screen.organizationId, screen.emergencyPlaylist)

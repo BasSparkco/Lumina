@@ -347,6 +347,13 @@ export class ScreensService {
     return updated;
   }
 
+  async setAspectRatio(orgId: string, screenId: string, aspectRatio: '16:9' | '9:16' | 'stretch') {
+    await this.findOne(orgId, screenId);
+    const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { aspectRatio } });
+    this.gateway.sendToScreen(screenId, { type: 'publish' });
+    return updated;
+  }
+
   async updatePrayerConfig(orgId: string, screenId: string, dto: UpdatePrayerDto) {
     await this.findOne(orgId, screenId);
     const updated = await this.prisma.screen.update({

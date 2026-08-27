@@ -138,6 +138,13 @@ model Screen {
   // player like every other live setting below — screens mounted sideways/upside-down get this
   // set once from here rather than requiring someone at the physical device.
   orientation         Int           @default(0)
+  // Intended display aspect ratio ("16:9" | "9:16" | "stretch"), same "W:H" string convention as
+  // Theme.aspectRatio, plus "stretch" to force content to fill the screen regardless of fit —
+  // dashboard-controlled, used to guide which content is a fit for this screen. Distinct from
+  // `orientation`: a screen can be physically rotated *and* logically portrait/landscape
+  // independently. The dashboard auto-suggests "16:9"/"9:16" from `orientation` but "stretch" is
+  // always a deliberate, orientation-agnostic user choice.
+  aspectRatio         String        @default("16:9")
   // Item 5 (awaiting-content badge) — reported by the player on each heartbeat, since it's the
   // one that actually knows whether *right now* resolves to real content (schedule gaps,
   // locally-resolved layout zones, etc.), not just "is a playlist assigned." Defaults to false

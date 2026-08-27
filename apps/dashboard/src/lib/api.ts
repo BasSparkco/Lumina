@@ -121,6 +121,8 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/show-clock`, { method: 'PUT', body: JSON.stringify({ showClock }) }),
   setOrientation: (id: string, orientation: 0 | 90 | 180 | 270) =>
     req<Screen>(`/screens/${id}/orientation`, { method: 'PUT', body: JSON.stringify({ orientation }) }),
+  setAspectRatio: (id: string, aspectRatio: '16:9' | '9:16' | 'stretch') =>
+    req<Screen>(`/screens/${id}/aspect-ratio`, { method: 'PUT', body: JSON.stringify({ aspectRatio }) }),
   updatePrayer: (id: string, data: { latitude?: number; longitude?: number; prayerMethod?: string; athanEnabled?: boolean; timezone?: string; timezoneEnabled?: boolean }) =>
     req<Screen>(`/screens/${id}/prayer`, { method: 'PUT', body: JSON.stringify(data) }),
   captureScreenshot: (id: string) => req<{ ok: boolean }>(`/screens/${id}/capture-screenshot`, { method: 'POST' }),
@@ -612,6 +614,7 @@ export interface Screen {
   prayerMethod: string; athanEnabled: boolean; timezone: string; timezoneEnabled: boolean;
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
   hasContent: boolean; volume: number | null; orientation: 0 | 90 | 180 | 270;
+  aspectRatio: '16:9' | '9:16' | 'stretch';
   kioskLocation: {
     id: string; floorId: string; x: number; y: number;
     floor?: { id: string; label: string; building: { id: string; name: string } };

@@ -206,7 +206,23 @@
       "settings": "Settings"
     },
     "orientation": {
-      "label": "Orientation"
+      "label": "Orientation & Rotation",
+      "options": {
+        "0": "Landscape - 0° (Standard widescreen)",
+        "90": "Portrait - 90° (Vertical, rotated right)",
+        "180": "Landscape - 180° (Inverted widescreen)",
+        "270": "Portrait - 270° (Vertical, rotated left)"
+      }
+    },
+    "aspectRatio": {
+      "label": "Aspect Ratio",
+      "options": {
+        "stretch": "Stretch to Fit"
+      }
+    },
+    "display": {
+      "show": "Display & Screen Settings",
+      "hide": "Hide display & screen settings"
     },
     "timezoneEnable": "Custom timezone",
     "hideFaith": "Hide faith settings",
