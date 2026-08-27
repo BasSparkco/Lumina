@@ -297,12 +297,12 @@ export default function PlayerPage() {
 
   // Paused from the dashboard — takes priority over everything else, including an
   // active emergency override, since it's an explicit "blank this screen now" action.
-  if (state.stopped) return <FullscreenContainer orientation={state.orientation}><Splash text="Playback paused" /></FullscreenContainer>;
+  if (state.stopped) return <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}><Splash text="Playback paused" /></FullscreenContainer>;
 
   // Emergency override — fullscreen single zone
   if (state.emergencyActive && state.emergencyPlaylist) {
     return (
-      <FullscreenContainer orientation={state.orientation} showClock={state.showClock} timezone={state.timezone}>
+      <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio} showClock={state.showClock} timezone={state.timezone}>
         <ZonePlayer playlist={state.emergencyPlaylist} state={state} volume={state.volume} forceMuted={muted} onAssetChange={id => { currentAssetRef.current = id; }} />
       </FullscreenContainer>
     );
@@ -314,7 +314,7 @@ export default function PlayerPage() {
   // flips this flag for every kiosk in a building at once).
   if (state.emergencyActive && state.wayfinding) {
     return (
-      <FullscreenContainer orientation={state.orientation}>
+      <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
         <WayfindingEvacuationView directory={state.wayfinding} />
       </FullscreenContainer>
     );
@@ -326,7 +326,7 @@ export default function PlayerPage() {
   // browser's own touch-capability signal is the right source of truth here.
   if (state.wayfinding) {
     return (
-      <FullscreenContainer orientation={state.orientation}>
+      <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
         {isTouchCapable()
           ? <WayfindingKioskMap state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
           : <WayfindingDirectoryBoard directory={state.wayfinding} />}
@@ -337,11 +337,11 @@ export default function PlayerPage() {
   // Single-playlist mode (schedule-resolved) — a playlist item can itself be a THEME, a LAYOUT,
   // or an APP-type asset; ZonePlayer (via ZoneRenderer for LAYOUT items) handles all of it.
   if (!activePlaylist || activePlaylist.items.length === 0) {
-    return <FullscreenContainer orientation={state.orientation}><Splash text="No content scheduled right now" /></FullscreenContainer>;
+    return <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}><Splash text="No content scheduled right now" /></FullscreenContainer>;
   }
 
   return (
-    <FullscreenContainer orientation={state.orientation} showClock={state.showClock} timezone={state.timezone}>
+    <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio} showClock={state.showClock} timezone={state.timezone}>
       <ZonePlayer
         ref={zonePlayerRef}
         playlist={activePlaylist}
@@ -356,15 +356,43 @@ export default function PlayerPage() {
   );
 }
 
+// "16:9"/"9:16" as [width-parts, height-parts] — kept as integer ratios (not a precomputed float)
+// so the CSS below stays exact instead of accumulating floating-point rounding at the pixel edge.
+const ASPECT_RATIO_PARTS: Record<'16:9' | '9:16', [number, number]> = {
+  '16:9': [16, 9],
+  '9:16': [9, 16],
+};
+
+// Letterboxes/pillarboxes content to the screen's *intended* aspect ratio (Screen.aspectRatio,
+// dashboard Settings tab) instead of always stretching it to fill whatever the device's real
+// panel happens to be — e.g. a 16:9-designed layout shown on a non-16:9 panel gets black bars
+// instead of visibly distorted content. "stretch" (or no value, e.g. cached pre-upgrade state)
+// opts back out and fills the box exactly like before this field existed.
+// `avail` is expressed in the *pre-rotation* box's own units (vw/vh already swapped for sideways
+// orientations by the caller — see FullscreenContainer below), so this only ever does simple
+// same-unit arithmetic and never needs to know the real device pixel size.
+function letterboxSize(aspectRatio: '16:9' | '9:16' | 'stretch' | undefined, availW: string, availH: string): React.CSSProperties {
+  if (!aspectRatio || aspectRatio === 'stretch') return { width: '100%', height: '100%' };
+  const [w, h] = ASPECT_RATIO_PARTS[aspectRatio];
+  return {
+    width: `min(${availW}, ${availH} * ${w} / ${h})`,
+    height: `min(${availH}, ${availW} * ${h} / ${w})`,
+  };
+}
+
 // Rotates the whole display for kiosks physically mounted sideways/upside-down. Dashboard-driven
-// (Screen.orientation, see ScreensPage's Content tab) rather than a device setting, so it can be
+// (Screen.orientation, see ScreensPage's Settings tab) rather than a device setting, so it can be
 // set remotely without anyone standing at the screen. Centers a box sized to the *rotated*
 // dimensions inside the true (unrotated) viewport so it fills the screen exactly at every angle:
 // rotation happens about the box's own center, which `translate(-50%, -50%)` has already pinned
 // to the viewport's center, so the two operations commute regardless of transform order.
-function FullscreenContainer({ children, orientation = 0, showClock, timezone, hideControls }: { children?: React.ReactNode; orientation?: 0 | 90 | 180 | 270; showClock?: boolean; timezone?: string; hideControls?: boolean }) {
+function FullscreenContainer({ children, orientation = 0, aspectRatio, showClock, timezone, hideControls }: { children?: React.ReactNode; orientation?: 0 | 90 | 180 | 270; aspectRatio?: '16:9' | '9:16' | 'stretch'; showClock?: boolean; timezone?: string; hideControls?: boolean }) {
   const deviceMuted = useDeviceSettingsStore(s => s.muted);
   const sideways = orientation === 90 || orientation === 270;
+  // Matches the swap applied to the rotate wrapper's own width/height just below — the box this
+  // letterboxes into is the *pre-rotation* one, so "available width" here is 100vh, not 100vw,
+  // whenever the panel is mounted sideways.
+  const box = letterboxSize(aspectRatio, sideways ? '100vh' : '100vw', sideways ? '100vw' : '100vh');
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000', overflow: 'hidden', position: 'fixed', inset: 0 }}>
       <div
@@ -376,7 +404,11 @@ function FullscreenContainer({ children, orientation = 0, showClock, timezone, h
         }}
       >
         <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
-          {children}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ ...box, background: '#000', position: 'relative', overflow: 'hidden' }}>
+              {children}
+            </div>
+          </div>
           {showClock && timezone && <ClockOverlay timezone={timezone} />}
           {!hideControls && !deviceMuted && <SoundLockedIndicator />}
           {!hideControls && <PlayerControlPanel />}
