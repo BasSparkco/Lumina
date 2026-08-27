@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2, Check } from 'lucide-react';
 import { SaveStatus } from './SaveStatus';
@@ -12,6 +13,10 @@ export interface SaveResult {
 
 interface DesignerTopBarProps {
   name: string;
+  // Click-to-rename, matching the Assets page's pattern — omitted (e.g. in Template-authoring
+  // mode, where `name` is a "Template: X" composite, not a plain editable value) disables it and
+  // the name just renders as static text.
+  onRename?: (name: string) => void;
   onBack: () => void;
   canUndo: boolean;
   canRedo: boolean;
@@ -49,6 +54,7 @@ const btn =
 
 export function DesignerTopBar({
   name,
+  onRename,
   onBack,
   canUndo,
   canRedo,
@@ -68,12 +74,47 @@ export function DesignerTopBar({
   saveResult,
   saveTargetChoice,
 }: DesignerTopBarProps) {
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  function startRename() {
+    if (!onRename) return;
+    setRenameValue(name);
+    setRenaming(true);
+  }
+
+  function commitRename() {
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== name) onRename?.(trimmed);
+    setRenaming(false);
+  }
+
   return (
     <div className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
       <button className={btn} onClick={onBack} aria-label="Back">
         <ArrowLeft className="h-4 w-4" />
       </button>
-      <span className="mx-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">{name}</span>
+      {renaming ? (
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitRename();
+            if (e.key === 'Escape') setRenaming(false);
+          }}
+          className="mx-1 w-48 truncate rounded border border-indigo-300 bg-white px-1 text-sm font-medium text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-indigo-700 dark:bg-gray-900 dark:text-gray-100"
+        />
+      ) : (
+        <span
+          onClick={startRename}
+          title={onRename ? 'Click to rename' : undefined}
+          className={`mx-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100 ${onRename ? 'cursor-text rounded px-1 hover:bg-gray-100 dark:hover:bg-gray-800' : ''}`}
+        >
+          {name}
+        </span>
+      )}
 
       <div className="mx-2 h-5 w-px bg-gray-200 dark:bg-gray-800" />
 

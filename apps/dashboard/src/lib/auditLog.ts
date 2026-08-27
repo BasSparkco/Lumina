@@ -8,7 +8,7 @@
 // server-side audit logging — that's the only way to *actually* guarantee every change is
 // captured, including ones made directly against the API rather than through this dashboard.
 
-export type AuditResourceType = 'MEMBER' | 'PLAYLIST' | 'SCREEN' | 'ASSET' | 'LAYOUT' | 'THEME' | 'SCHEDULE' | 'GROUP' | 'BUILDING';
+export type AuditResourceType = 'MEMBER' | 'PLAYLIST' | 'SCREEN' | 'ASSET' | 'LAYOUT' | 'THEME' | 'SCHEDULE' | 'GROUP' | 'BUILDING' | 'DESIGN';
 export type AuditAction =
   | 'CREATE' | 'UPDATE' | 'DELETE'
   | 'INVITE' | 'ROLE_CHANGE' | 'REMOVE'

@@ -508,6 +508,8 @@ export const designsApi = {
     req<DesignAsset>('/designs', { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: { designJson: DesignDocument; revision: number; name?: string }) =>
     req<DesignAsset>(`/designs/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  rename: (id: string, name: string) =>
+    req<DesignAsset>(`/designs/${id}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),
   listVersions: (id: string) => req<DesignAssetVersion[]>(`/designs/${id}/versions`),
   restoreVersion: (id: string, versionId: string) => req<DesignAsset>(`/designs/${id}/restore/${versionId}`, { method: 'POST' }),
 };

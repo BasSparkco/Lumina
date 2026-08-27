@@ -1220,7 +1220,8 @@
       "THEME": "Theme",
       "SCHEDULE": "Schedule",
       "GROUP": "Group",
-      "BUILDING": "Building"
+      "BUILDING": "Building",
+      "DESIGN": "Design"
     },
     "actions": {
       "CREATE": "Created",

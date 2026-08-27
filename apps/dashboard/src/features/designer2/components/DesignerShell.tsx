@@ -62,6 +62,7 @@ export function DesignerShell({
   const locale = useLocale();
   const document = useDesignerStore((s) => s.document);
   const loadDocument = useDesignerStore((s) => s.loadDocument);
+  const renameDocument = useDesignerStore((s) => s.renameDocument);
   const activeSceneId = useDesignerStore((s) => s.activeSceneId);
   const zoom = useDesignerStore((s) => s.zoom);
   const selectedElementIds = useDesignerStore((s) => s.selectedElementIds);
@@ -140,7 +141,7 @@ export function DesignerShell({
         const updated = await adminTemplatesApi.update(templateId, { designJson: document });
         flashSaveResult({ kind: 'template', name: updated.name, href: `/${locale}/admin/templates` });
       } else if (designId) {
-        const updated = await designsApi.update(designId, { designJson: document, revision: designRevision ?? 1 });
+        const updated = await designsApi.update(designId, { designJson: document, revision: designRevision ?? 1, name: document.name });
         clearLocalDraft(document.id);
         onDesignSaved?.({ id: updated.id, revision: updated.revision });
         flashSaveResult({ kind: 'design', name: updated.name, href: `/${locale}/assets?tab=designs` });
@@ -170,6 +171,17 @@ export function DesignerShell({
     const fresh = await designsApi.get(designId);
     loadDocument(fresh.designJson);
     onDesignSaved?.({ id: fresh.id, revision: fresh.revision });
+  }
+
+  // Topbar click-to-rename (Assets-page pattern). Updates the live document immediately either
+  // way; for an already-persisted design also fires the lightweight PUT /designs/:id/name so the
+  // new name shows up in Assets -> My Designs without requiring a full manual Save. Best-effort:
+  // if the request fails, document.name (and therefore the topbar) already reflects it, and the
+  // next successful full Save carries `name` along too (see handleSave's designId branch above),
+  // so a transient failure here doesn't strand the rename.
+  function handleRename(name: string) {
+    renameDocument(name);
+    if (designId) void designsApi.rename(designId, name);
   }
 
   function handleDelete() {
@@ -229,6 +241,7 @@ export function DesignerShell({
     <div className="flex h-full w-full flex-col">
       <DesignerTopBar
         name={templateId ? `Template: ${templateName ?? document?.name ?? '…'}` : (document?.name ?? 'Untitled Design')}
+        onRename={!templateId && document ? handleRename : undefined}
         onBack={() => window.history.back()}
         canUndo={canUndo}
         canRedo={canRedo}

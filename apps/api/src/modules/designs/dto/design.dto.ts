@@ -16,3 +16,10 @@ export class DesignDto {
 export class DesignDraftDto {
   @IsObject() draftJson!: Record<string, unknown>;
 }
+
+// PUT /designs/:id/name — deliberately its own tiny DTO rather than reusing DesignDto: a rename
+// is name-only and must not accidentally accept/ignore a designJson/revision payload the way a
+// PATCH built on DesignDto's all-optional fields could.
+export class RenameDesignDto {
+  @IsString() name!: string;
+}

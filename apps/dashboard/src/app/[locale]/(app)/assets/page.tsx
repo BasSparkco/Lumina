@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { FontPicker, fontStack } from '@/components/FontPicker';
 import { TickerTextPreview } from '@/components/TickerTextPreview';
+import { DesignPreview } from '@/components/DesignPreview';
 import { DEFAULT_FONT_ID } from '@lumina/types';
 import '@/lib/fontImports';
 
@@ -605,6 +606,8 @@ function AssetsPageInner() {
     queryFn: designsApi.list,
     enabled: tab === 'designs',
   });
+  const [renamingDesignId, setRenamingDesignId] = useState<string | null>(null);
+  const [designRenameValue, setDesignRenameValue] = useState('');
 
   // APP assets live on the Apps tab, not here (see appsroadmap.md Phase 7) — My Assets only
   // ever shows the rest.
@@ -783,6 +786,31 @@ function AssetsPageInner() {
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === asset.name) { setRenamingId(null); return; }
     renameMut.mutate({ id: asset.id, name: trimmed, previousName: asset.name });
+  }
+
+  const renameDesignMut = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => designsApi.rename(id, name),
+    onSuccess: (renamed, { previousName }) => {
+      logAction({
+        resourceType: 'DESIGN', resourceName: previousName, action: 'UPDATE',
+        userName: user?.name ?? '', userEmail: user?.email ?? '',
+        detail: ta('detailRenamedTo', { name: renamed.name }),
+      });
+      void qc.invalidateQueries({ queryKey: ['designs'] });
+      setRenamingDesignId(null);
+    },
+  });
+
+  function startRenameDesign(design: DesignAsset) {
+    if (!canEditContent) return;
+    setRenamingDesignId(design.id);
+    setDesignRenameValue(design.name);
+  }
+
+  function commitRenameDesign(design: DesignAsset) {
+    const trimmed = designRenameValue.trim();
+    if (!trimmed || trimmed === design.name) { setRenamingDesignId(null); return; }
+    renameDesignMut.mutate({ id: design.id, name: trimmed, previousName: design.name });
   }
 
   async function runUpload(entries: { file: File; extractAudioOnly: boolean }[]) {
@@ -1426,21 +1454,47 @@ function AssetsPageInner() {
 
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {designs.map((design: DesignAsset) => (
-              <button
+              <div
                 key={design.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => router.push(`/${locale}/designer2?designId=${design.id}`)}
-                className="text-start bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden hover:border-indigo-300 dark:hover:border-indigo-700"
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/${locale}/designer2?designId=${design.id}`); } }}
+                className="cursor-pointer text-start bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden hover:border-indigo-300 dark:hover:border-indigo-700"
               >
-                <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-300 dark:text-gray-500">
-                  <LayoutTemplate className="w-8 h-8" />
+                <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-300 dark:text-gray-500 overflow-hidden">
+                  {design.designJson.scenes.length > 0
+                    ? <DesignPreview document={design.designJson} />
+                    : <LayoutTemplate className="w-8 h-8" />}
                 </div>
                 <div className="p-3">
-                  <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{design.name}</p>
+                  {renamingDesignId === design.id ? (
+                    <input
+                      autoFocus
+                      value={designRenameValue}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setDesignRenameValue(e.target.value)}
+                      onBlur={() => commitRenameDesign(design)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') commitRenameDesign(design);
+                        if (e.key === 'Escape') setRenamingDesignId(null);
+                      }}
+                      disabled={renameDesignMut.isPending}
+                      className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 rounded px-1 -mx-1 border border-indigo-300 dark:border-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  ) : (
+                    <p
+                      onClick={e => { e.stopPropagation(); startRenameDesign(design); }}
+                      title={canEditContent ? tc('clickToRename') : undefined}
+                      className={`truncate text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                      {design.name}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                     {new Date(design.updatedAt).toLocaleDateString()}
                   </p>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>

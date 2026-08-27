@@ -16,6 +16,10 @@ interface DesignerState {
   setActiveScene: (sceneId: string) => void;
   // designer.md §17.2/Phase 8 — the "Design instance variables" resolution source (VariablesPanel).
   setVariables: (variables: Record<string, string> | undefined) => void;
+  // Topbar click-to-rename — deliberately not wrapped in the undo/redo commit() history callers
+  // use for canvas edits (see DesignerTopBar); it's document metadata, not canvas content, so
+  // Ctrl+Z shouldn't touch it.
+  renameDocument: (name: string) => void;
 
   addScene: (scene: DesignScene) => void;
   duplicateScene: (id: string) => void;
@@ -84,6 +88,12 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
     const { document } = get();
     if (!document) return;
     set({ document: { ...document, variables } });
+  },
+
+  renameDocument: (name) => {
+    const { document } = get();
+    if (!document) return;
+    set({ document: { ...document, name } });
   },
 
   addScene: (scene) => {

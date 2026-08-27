@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { DesignsService } from './designs.service';
-import { DesignDto, DesignDraftDto } from './dto/design.dto';
+import { DesignDto, DesignDraftDto, RenameDesignDto } from './dto/design.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -34,6 +34,11 @@ export class DesignsController {
   @Patch(':id')
   update(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: DesignDto) {
     return this.designs.update(user.orgId, id, dto);
+  }
+
+  @Put(':id/name')
+  rename(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: RenameDesignDto) {
+    return this.designs.rename(user.orgId, id, dto.name);
   }
 
   @Get(':id/versions')

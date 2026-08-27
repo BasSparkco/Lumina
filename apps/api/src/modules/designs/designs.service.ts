@@ -154,6 +154,19 @@ export class DesignsService {
     return updated;
   }
 
+  // PUT /designs/:id/name — a lightweight rename, deliberately separate from update() (the manual-
+  // save path): renaming a file doesn't change its content, so this never touches designJson,
+  // never checks/bumps revision, and never snapshots a version row. The document's own embedded
+  // `designJson.name` is left stale in the DB until the next full save — the frontend updates its
+  // live document.name at the same time as this call (see designer.store.ts's renameDocument), so
+  // that next save (if any) serializes the corrected name right back into designJson too.
+  async rename(orgId: string, id: string, name: string) {
+    await this.findOne(orgId, id);
+    const trimmed = name.trim();
+    if (!trimmed) throw new BadRequestException('name is required');
+    return this.prisma.designAsset.update({ where: { id }, data: { name: trimmed } });
+  }
+
   async listVersions(orgId: string, id: string) {
     await this.findOne(orgId, id);
     return this.prisma.designAssetVersion.findMany({

@@ -1220,7 +1220,8 @@
       "THEME": "سمة",
       "SCHEDULE": "جدولة",
       "GROUP": "مجموعة",
-      "BUILDING": "مبنى"
+      "BUILDING": "مبنى",
+      "DESIGN": "تصميم"
     },
     "actions": {
       "CREATE": "تم الإنشاء",
