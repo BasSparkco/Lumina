@@ -190,20 +190,30 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
       }
     }
 
-    // Unconditional cleanup — every branch above (paused, muted, unmuted) must still release
-    // this element's decode session before the effect re-runs for the next item. Previously
-    // the paused and muted branches `return`ed with no cleanup at all, so a muted video (the
-    // common case for signage playing before the first user interaction unlocks audio) never
-    // had its decoder explicitly released; it just waited on garbage collection. On
-    // embedded/TV WebViews, which commonly cap concurrent hardware video decoders at 1-2, the
-    // next item's <video> element could start before that GC happened — losing the decoder
-    // race and rendering as a black frame with no audio/video and no error event.
-    return () => {
-      unlockCleanup?.();
-      releaseVideoDecoder(el);
-    };
+    return () => { unlockCleanup?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item]);
+
+  // Releases a video's hardware decode session the moment we're actually done with it — either
+  // the playlist moved on to a different item, or the whole player unmounted mid-video. This is
+  // deliberately its own effect keyed on `item?.id` (a primitive), NOT folded into the effect
+  // above that's keyed on the whole `item` object — that one legitimately needs to re-run on
+  // every heartbeat/publish refetch (even of the same still-playing video) to re-apply live
+  // muted/volume changes, but its cleanup must NOT tear down the element on those refetches.
+  // It used to: `releaseVideoDecoder` lived in that effect's unconditional cleanup, so every
+  // heartbeat poll (every few seconds, and it never stops) that landed while a video was
+  // mid-playback ran `el.pause(); el.removeAttribute('src'); el.load()` on the still-mounted,
+  // still-supposed-to-be-playing element — killing its src out from under it with nothing left
+  // to ever re-set it, which is why the player kept getting stuck on a black screen instead of
+  // looping. Keying on `item?.id` instead means this only fires on an actual item change (a
+  // different id, or unmount), exactly when the underlying <video> DOM node is really going
+  // away (see ZonePlayer's key={item.id} below) or being abandoned by React for the next item's
+  // element — never on a same-video refetch.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    return () => releaseVideoDecoder(el);
+  }, [item?.id]);
 
   // `volume` has no JSX/DOM-attribute equivalent (unlike `muted`), so a volume-only change
   // (screen/group volume edited in the dashboard, no new item/src) needs its own effect to
