@@ -2,7 +2,22 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, ChevronUp, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, LayoutTemplate, Smartphone, Volume2, VolumeX } from 'lucide-react';
+import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, GripVertical, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, LayoutTemplate, Smartphone, Volume2, VolumeX } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
@@ -41,6 +56,122 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   APP: <Smartphone className="w-3.5 h-3.5 text-teal-500" />,
 };
 
+type Translate = ReturnType<typeof useTranslations>;
+
+/** One draggable row in a playlist's item list. A separate component (not inlined in the
+ * parent's .map()) because useSortable is a hook — calling it once per item inside the parent's
+ * own render body would violate the rules of hooks the moment the list length changes. */
+function PlaylistItemRow({
+  item, index, canEditContent, t, tCrop, onView, onCrop, onDurationChange, onTogglePlayFullVideo, onToggleMuted, onRemove,
+}: {
+  item: PlaylistItem;
+  index: number;
+  canEditContent: boolean;
+  t: Translate;
+  tCrop: Translate;
+  onView: () => void;
+  onCrop: () => void;
+  onDurationChange: (dur: number) => void;
+  onTogglePlayFullVideo: () => void;
+  onToggleMuted: () => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center gap-3 px-3 py-2.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}
+    >
+      {canEditContent && (
+        <button type="button" {...attributes} {...listeners}
+          className="cursor-grab touch-none p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:cursor-grabbing">
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      <span className="text-xs text-gray-300 dark:text-gray-500 w-4 text-center">{index + 1}</span>
+
+      {item.kind === 'ASSET' && item.asset ? (
+        item.asset.thumbnailUrl ? (
+          <button onClick={onView} title={t('clickToView')}
+            className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-indigo-400 transition-all">
+            <Image src={item.asset.thumbnailUrl} width={40} height={40} className="w-full h-full object-cover" alt="" />
+          </button>
+        ) : (
+          <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
+        )
+      ) : (
+        <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+          {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-indigo-500" />
+            : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />
+            : <LayoutTemplate className="w-3.5 h-3.5 text-indigo-500" />}
+        </div>
+      )}
+
+      <div className="flex-1 min-w-0">
+        {item.kind === 'ASSET' && item.asset ? (
+          <>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.asset.name}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[item.asset.type]} {item.asset.type}</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+              {item.kind === 'THEME' ? item.theme?.name : item.kind === 'LAYOUT' ? item.layout?.name : item.design?.name}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+              {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5" />
+                : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5" />
+                : <LayoutTemplate className="w-3.5 h-3.5" />}
+              {item.kind === 'THEME' ? t('itemKind.theme') : item.kind === 'LAYOUT' ? t('itemKind.layout') : t('itemKind.design')}
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        {item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && (
+          <input type="checkbox" checked={item.playFullVideo} disabled={!canEditContent}
+            onChange={onTogglePlayFullVideo} title={t('playFullVideo')}
+            className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
+        )}
+        <input type="number" min={1} max={3600}
+          disabled={!canEditContent || (item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo)}
+          value={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo
+            ? (item.asset.durationSecs ?? item.durationSecs)
+            : item.durationSecs}
+          title={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo ? t('videoDuration') : undefined}
+          onChange={e => onDurationChange(Number(e.target.value))}
+          className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
+        <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
+      </div>
+
+      {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'VIDEO' || item.asset.type === 'APP') && (
+        <button onClick={onToggleMuted} title={item.muted ? t('unmute') : t('mute')}
+          className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+          {item.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+        </button>
+      )}
+
+      {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'IMAGE' || item.asset.type === 'VIDEO') && (
+        <button onClick={onCrop} title={tCrop('editCrop')}
+          className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+          <Crop className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      {canEditContent && (
+        <button onClick={onRemove}
+          className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** The items/settings for one expanded playlist — everything that used to live on its own
  * /playlists/[id] page, now mounted inline only while that row is expanded (so collapsed rows
  * don't pay for items/approval queries they aren't showing). */
@@ -63,6 +194,7 @@ function PlaylistDetail({ id }: { id: string }) {
   const [assetTypeFilter, setAssetTypeFilter] = useState<Set<Asset['type']>>(new Set());
   const [viewingItemId, setViewingItemId] = useState<string | null>(null);
   const [croppingItemId, setCroppingItemId] = useState<string | null>(null);
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const { data: playlist, isLoading } = useQuery({
     queryKey: ['playlist', id],
@@ -189,13 +321,14 @@ function PlaylistDetail({ id }: { id: string }) {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
-  function move(index: number, dir: -1 | 1) {
+  function handleDragEnd(e: DragEndEvent) {
     if (!playlist) return;
-    const items = [...playlist.items];
-    const target = index + dir;
-    if (target < 0 || target >= items.length) return;
-    [items[index], items[target]] = [items[target]!, items[index]!];
-    reorderMut.mutate(items.map(i => i.id));
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const orderedIds = playlist.items.map(i => i.id);
+    const oldIndex = orderedIds.indexOf(String(active.id));
+    const newIndex = orderedIds.indexOf(String(over.id));
+    reorderMut.mutate(arrayMove(orderedIds, oldIndex, newIndex));
   }
 
   if (isLoading) return <div className="px-4 py-6 text-sm text-gray-400">{t('loading')}</div>;
@@ -430,102 +563,28 @@ function PlaylistDetail({ id }: { id: string }) {
         </div>
       )}
 
-      <div className="space-y-2">
-        {playlist.items.map((item: PlaylistItem, i: number) => (
-          <div key={item.id} className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center gap-3 px-3 py-2.5">
-            {canEditContent && (
-              <div className="flex flex-col gap-0.5">
-                <button onClick={() => move(i, -1)} disabled={i === 0}
-                  className="p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20">
-                  <ChevronUp className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => move(i, 1)} disabled={i === playlist.items.length - 1}
-                  className="p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20">
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            <span className="text-xs text-gray-300 dark:text-gray-500 w-4 text-center">{i + 1}</span>
-
-            {item.kind === 'ASSET' && item.asset ? (
-              item.asset.thumbnailUrl ? (
-                <button onClick={() => setViewingItemId(item.id)} title={t('clickToView')}
-                  className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-indigo-400 transition-all">
-                  <Image src={item.asset.thumbnailUrl} width={40} height={40} className="w-full h-full object-cover" alt="" />
-                </button>
-              ) : (
-                <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
-              )
-            ) : (
-              <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-indigo-500" />
-                  : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />
-                  : <LayoutTemplate className="w-3.5 h-3.5 text-indigo-500" />}
-              </div>
-            )}
-
-            <div className="flex-1 min-w-0">
-              {item.kind === 'ASSET' && item.asset ? (
-                <>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.asset.name}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[item.asset.type]} {item.asset.type}</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {item.kind === 'THEME' ? item.theme?.name : item.kind === 'LAYOUT' ? item.layout?.name : item.design?.name}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                    {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5" />
-                      : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5" />
-                      : <LayoutTemplate className="w-3.5 h-3.5" />}
-                    {item.kind === 'THEME' ? t('itemKind.theme') : item.kind === 'LAYOUT' ? t('itemKind.layout') : t('itemKind.design')}
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && (
-                <input type="checkbox" checked={item.playFullVideo} disabled={!canEditContent}
-                  onChange={() => playFullVideoMut.mutate(item)} title={t('playFullVideo')}
-                  className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
-              )}
-              <input type="number" min={1} max={3600}
-                disabled={!canEditContent || (item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo)}
-                value={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo
-                  ? (item.asset.durationSecs ?? item.durationSecs)
-                  : item.durationSecs}
-                title={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo ? t('videoDuration') : undefined}
-                onChange={e => durMut.mutate({ itemId: item.id, dur: Number(e.target.value) })}
-                className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
-              <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
-            </div>
-
-            {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'VIDEO' || item.asset.type === 'APP') && (
-              <button onClick={() => mutedMut.mutate(item)} title={item.muted ? t('unmute') : t('mute')}
-                className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
-                {item.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-              </button>
-            )}
-
-            {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'IMAGE' || item.asset.type === 'VIDEO') && (
-              <button onClick={() => setCroppingItemId(item.id)} title={tCrop('editCrop')}
-                className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
-                <Crop className="w-3.5 h-3.5" />
-              </button>
-            )}
-
-            {canEditContent && (
-              <button onClick={() => removeMut.mutate(item)}
-                className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
+      <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={playlist.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {playlist.items.map((item: PlaylistItem, i: number) => (
+              <PlaylistItemRow
+                key={item.id}
+                item={item}
+                index={i}
+                canEditContent={canEditContent}
+                t={t}
+                tCrop={tCrop}
+                onView={() => setViewingItemId(item.id)}
+                onCrop={() => setCroppingItemId(item.id)}
+                onDurationChange={dur => durMut.mutate({ itemId: item.id, dur })}
+                onTogglePlayFullVideo={() => playFullVideoMut.mutate(item)}
+                onToggleMuted={() => mutedMut.mutate(item)}
+                onRemove={() => removeMut.mutate(item)}
+              />
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
 
       {viewingItemId && (() => {
         const item = playlist.items.find(i => i.id === viewingItemId);

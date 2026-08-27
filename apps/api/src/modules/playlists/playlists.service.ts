@@ -241,11 +241,15 @@ export class PlaylistsService {
         where: { playlistId },
         orderBy: { position: 'asc' },
       });
-      await Promise.all(
-        remaining.map((item: (typeof remaining)[number], i: number) =>
-          tx.playlistItem.update({ where: { id: item.id }, data: { position: i } }),
-        ),
-      );
+      const ids = remaining.map((item: (typeof remaining)[number]) => item.id);
+      // Postgres checks the (playlistId, position) unique index immediately after each
+      // statement, not at commit — writing straight to final positions in one pass can collide
+      // with another row's still-current position mid-transaction (e.g. any item shifting into a
+      // slot a later-processed row hasn't vacated yet). Stage every row through a temporary,
+      // guaranteed-unused negative position first, then a second pass assigns real positions once
+      // nothing still holds them.
+      await Promise.all(ids.map((id: string, i: number) => tx.playlistItem.update({ where: { id }, data: { position: -(i + 1) } })));
+      await Promise.all(ids.map((id: string, i: number) => tx.playlistItem.update({ where: { id }, data: { position: i } })));
     });
   }
 
@@ -255,11 +259,14 @@ export class PlaylistsService {
       where: { id: { in: orderedIds }, playlistId },
     });
     if (ownedCount !== orderedIds.length) throw new NotFoundException('Playlist item not found');
-    // Same atomicity concern as removeItem's re-sequence above — a partial failure mid-batch
-    // must not leave the playlist with duplicate/gapped positions.
-    await this.prisma.$transaction(async tx =>
-      Promise.all(orderedIds.map((id, i) => tx.playlistItem.update({ where: { id }, data: { position: i } }))),
-    );
+    // Same atomicity concern as removeItem's re-sequence above, but far more likely to actually
+    // hit here: any adjacent-item swap (the arrow buttons, or a drag-and-drop reorder) sends the
+    // moved item's target position while another item still holds it — see the comment in
+    // removeItem above for why this needs the same two-phase (negative-position staging) update.
+    await this.prisma.$transaction(async tx => {
+      await Promise.all(orderedIds.map((id, i) => tx.playlistItem.update({ where: { id }, data: { position: -(i + 1) } })));
+      await Promise.all(orderedIds.map((id, i) => tx.playlistItem.update({ where: { id }, data: { position: i } })));
+    });
   }
 
   async submit(orgId: string, id: string) {
