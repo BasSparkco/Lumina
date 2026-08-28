@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "ts-node prisma/seed.ts",
     "db:seed-library": "ts-node prisma/seed-library.ts",
+    "db:seed-wayfinding": "ts-node prisma/seed-wayfinding.ts",
     "db:reset-password": "ts-node prisma/reset-password.ts",
     "db:studio": "prisma studio"
   },
