@@ -160,6 +160,10 @@ model Screen {
   // instead of it getting silently cleared (see ScreensService.setStreamingType). WAYFINDING is a
   // third, unrelated mode (kiosk map/directory, driven by KioskLocation, not by either FK below).
   streamingType       StreamingType @default(PLAYLIST)
+  // Manual drag-and-drop ordering on the dashboard's Screens page (same pattern as
+  // Playlist.sortOrder) — customers want their more important screens pinned near the top of
+  // the fleet grid rather than stuck wherever createdAt puts them.
+  sortOrder           Int           @default(0)
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
@@ -189,6 +193,7 @@ model Screen {
   // Backs ScreensService.list — the org-scoped, createdAt-desc fleet listing every Screens page
   // load hits.
   @@index([organizationId, createdAt])
+  @@index([organizationId, sortOrder])
 }
 
 enum ScreenStatus {

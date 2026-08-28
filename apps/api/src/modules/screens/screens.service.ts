@@ -56,7 +56,7 @@ export class ScreensService {
   async list(orgId: string) {
     const screens = await this.prisma.screen.findMany({
       where: { organizationId: orgId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       include: {
         playlist: { select: { id: true, name: true } },
         // Without this, the dashboard's Screens page (which lists off this endpoint, not
@@ -123,6 +123,18 @@ export class ScreensService {
   async rename(orgId: string, id: string, name: string) {
     await this.findOne(orgId, id);
     return this.prisma.screen.update({ where: { id }, data: { name } });
+  }
+
+  async reorder(orgId: string, orderedIds: string[]) {
+    const ownedCount = await this.prisma.screen.count({
+      where: { id: { in: orderedIds }, organizationId: orgId },
+    });
+    if (ownedCount !== orderedIds.length) throw new NotFoundException('Screen not found');
+    // No unique constraint on sortOrder, so (as with PlaylistsService.reorderPlaylists) a
+    // single-pass update can't collide mid-transaction — just write final values directly.
+    await this.prisma.$transaction(
+      orderedIds.map((id, i) => this.prisma.screen.update({ where: { id }, data: { sortOrder: i } })),
+    );
   }
 
   async assignPlaylist(orgId: string, screenId: string, playlistId: string | null) {

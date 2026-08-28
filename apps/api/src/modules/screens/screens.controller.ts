@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsArray, IsString } from 'class-validator';
 import { ScreensService } from './screens.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
 import { AssignPlaylistDto } from './dto/assign-playlist.dto';
@@ -26,6 +26,7 @@ import type { JwtUser } from '../../common/types/jwt-user';
 
 class PairDto { @IsString() code!: string; }
 class RenameScreenDto { @IsString() name!: string; }
+class ReorderDto { @IsArray() @IsString({ each: true }) ids!: string[]; }
 
 @ApiTags('screens')
 @ApiBearerAuth()
@@ -47,6 +48,12 @@ export class ScreensController {
   @Get('fleet-status')
   fleetStatus(@CurrentUser() user: JwtUser) {
     return this.screens.fleetStatus(user.orgId);
+  }
+
+  // Must come before @Get(':id')/@Put(':id') — otherwise Nest matches "reorder" as the :id param.
+  @Put('reorder')
+  reorder(@CurrentUser() user: JwtUser, @Body() dto: ReorderDto) {
+    return this.screens.reorder(user.orgId, dto.ids);
   }
 
   @Get(':id')

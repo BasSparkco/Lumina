@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, X, Search, ImageIcon, Film, Music, Type, FileText } from 'lucide-react';
+import { ChevronDown, X, Search, ImageIcon, Film, Music, Type, FileText, Smartphone } from 'lucide-react';
 import { assetsApi } from '@/lib/api';
 import type { Asset } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
@@ -12,6 +12,7 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
   AUDIO: <Music className="h-3 w-3 text-green-500" />,
   TEXT: <Type className="h-3 w-3 text-amber-500" />,
   DOCUMENT: <FileText className="h-3 w-3 text-red-500" />,
+  APP: <Smartphone className="h-3 w-3 text-teal-500" />,
 };
 
 interface AssetSelectProps {

@@ -12,9 +12,10 @@ interface AssetPickerProps {
   disabled?: boolean;
   // Restricts the list to specific asset types — defaults to every type playable standalone
   // (image/video/document). Theme IMAGE/VIDEO/DOCUMENT elements each pass a single-type list so
-  // e.g. an IMAGE element can't be pointed at a video asset. TEXT is opt-in only (theme TEXT
-  // elements' "from asset" mode) since it's not part of the general default.
-  types?: ('IMAGE' | 'VIDEO' | 'DOCUMENT' | 'TEXT')[];
+  // e.g. an IMAGE element can't be pointed at a video asset. TEXT and APP are opt-in only (theme
+  // TEXT elements' "from asset" mode, and screens' ASSET streaming-type picker) since they're not
+  // part of the general default.
+  types?: ('IMAGE' | 'VIDEO' | 'DOCUMENT' | 'TEXT' | 'APP')[];
   // Optional, translated overrides for the loading/error states — every existing call site keeps
   // working unchanged (falls back to a plain English default) without needing to thread a new
   // i18n key through immediately.

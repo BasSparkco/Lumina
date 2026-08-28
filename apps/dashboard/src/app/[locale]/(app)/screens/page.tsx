@@ -1,10 +1,17 @@
 'use client';
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import NextImage from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser } from 'lucide-react';
+import {
+  DndContext, PointerSensor, closestCenter, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical } from 'lucide-react';
 import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, type Screen, type StreamingType } from '@/lib/api';
 import { PoiMapEditor } from '@/components/PoiMapEditor';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
@@ -495,6 +502,20 @@ function CustomPlayerPanel({ screen, progress, disabled }: { screen: Screen; pro
   );
 }
 
+type SortableCardRenderProps = Pick<ReturnType<typeof useSortable>, 'attributes' | 'listeners' | 'setNodeRef' | 'isDragging'> & { style: CSSProperties };
+
+/** useSortable is a hook, so each card's drag state needs its own component — a render-prop
+ * here (instead of duplicating the whole card's markup into a new component) lets the existing
+ * card JSX below stay put. Same pattern as playlists/page.tsx's SortablePlaylistRow. */
+function SortableScreenCard({ id, disabled, children }: {
+  id: string;
+  disabled: boolean;
+  children: (props: SortableCardRenderProps) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  return <>{children({ attributes, listeners, setNodeRef, isDragging, style: { transform: CSS.Transform.toString(transform), transition } })}</>;
+}
+
 export default function ScreensPage() {
   const qc = useQueryClient();
   const router = useRouter();
@@ -517,6 +538,7 @@ export default function ScreensPage() {
   const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
   const autoPublish = orgSettings?.autoPublish ?? false;
   const { statuses: liveStatuses, playbackProgress } = useScreenSocket();
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const [showPair, setShowPair] = useState(false);
   const [pairCode, setPairCode] = useState('');
@@ -568,6 +590,20 @@ export default function ScreensPage() {
       setRenamingId(null);
     },
   });
+
+  const reorderMut = useMutation({
+    mutationFn: (ids: string[]) => screensApi.reorder(ids),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['screens'] }); },
+  });
+
+  function handleScreenDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const orderedIds = pairedScreens.map(s => s.id);
+    const oldIndex = orderedIds.indexOf(String(active.id));
+    const newIndex = orderedIds.indexOf(String(over.id));
+    reorderMut.mutate(arrayMove(orderedIds, oldIndex, newIndex));
+  }
 
   function startRename(screen: Screen) {
     if (!canEditContent) return;
@@ -817,6 +853,10 @@ export default function ScreensPage() {
   const visibleScreens = groupFilteredScreens.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
   const screenLimit = planLimit(currentPlan);
   const atScreenLimit = screenLimit !== null && pairedScreens.length >= screenLimit;
+  // Dragging reorders the *unfiltered* paired-screens list by array index, which doesn't map
+  // cleanly onto a filtered/grouped subset — so only enable it with no group filter or search
+  // active. Same reasoning as playlists/page.tsx's canDragPlaylists.
+  const canDragScreens = canEditContent && !search.trim() && activeGroupId === null;
 
   return (
     <div className="px-6 py-8">
@@ -998,14 +1038,24 @@ export default function ScreensPage() {
         </div>
       )}
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 items-start">
-        {visibleScreens.map((screen: Screen) => {
-          const live = statusFor(screen);
-          const tab = activeTab[screen.id] ?? 'content';
-          return (
-            <div key={screen.id} className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 border-t-4 ${live === 'ONLINE' ? 'border-t-green-500' : 'border-t-gray-300 dark:border-t-gray-700'} p-5 flex flex-col gap-3.5`}>
+      <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleScreenDragEnd}>
+        <SortableContext items={visibleScreens.map(s => s.id)} strategy={rectSortingStrategy}>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 items-start">
+            {visibleScreens.map((screen: Screen) => {
+              const live = statusFor(screen);
+              const tab = activeTab[screen.id] ?? 'content';
+              return (
+                <SortableScreenCard key={screen.id} id={screen.id} disabled={!canDragScreens}>
+                  {({ attributes, listeners, setNodeRef, style, isDragging }) => (
+            <div ref={setNodeRef} style={style} className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 border-t-4 ${live === 'ONLINE' ? 'border-t-green-500' : 'border-t-gray-300 dark:border-t-gray-700'} p-5 flex flex-col gap-3.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2 min-w-0">
+                  {canDragScreens && (
+                    <button type="button" {...attributes} {...listeners} title={t('dragToReorder')}
+                      className="cursor-grab touch-none p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:cursor-grabbing shrink-0">
+                      <GripVertical className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <Tv2 className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
                   {renamingId === screen.id ? (
                     <input
@@ -1077,6 +1127,7 @@ export default function ScreensPage() {
                       <AssetPicker
                         value={screen.assetId} disabled={!canEditContent} placeholder={t('none')}
                         onChange={assetId => assetMut.mutate({ id: screen.id, assetId })}
+                        types={['IMAGE', 'VIDEO', 'DOCUMENT', 'TEXT', 'APP']}
                         pasteHint={t('pasteImageHint')} pasteError={t('pasteImageError')}
                         uploadingLabel={t('uploadingImage')} uploadFailedLabel={t('uploadImageFailed')}
                       />
@@ -1333,9 +1384,13 @@ export default function ScreensPage() {
                 </>
               )}
             </div>
-          );
-        })}
-      </div>
+                  )}
+                </SortableScreenCard>
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Unpaired screens — kept server-side after Unpair so re-pairing the same device lands
           back on its name/history/settings, but that means they'd otherwise accumulate forever

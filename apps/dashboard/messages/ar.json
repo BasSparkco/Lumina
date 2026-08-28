@@ -172,6 +172,7 @@
     "subtitle": "إدارة ومراقبة شاشات العرض الخاصة بك",
     "refresh": "تحديث",
     "pairScreen": "إقران شاشة",
+    "dragToReorder": "اسحب لإعادة الترتيب",
     "limitReached": "تم بلوغ حد الشاشات ({limit})",
     "limitReachedContactAdmin": "اطلب من أحد المسؤولين ترقية الخطة لإقران المزيد من الشاشات",
     "pairModalTitle": "إقران شاشة",
