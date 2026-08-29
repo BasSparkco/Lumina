@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { cache } from '../lib/db';
+import { clearLocalPlayerData } from '../lib/local-player-data';
+import {
+  getMediaStorageDiagnostic,
+  subscribeMediaStorageDiagnostic,
+} from '../lib/media-storage';
+import {
+  getConnectivityDiagnostic,
+  subscribeConnectivity,
+} from '../lib/connectivity';
 import { disconnectSocket } from '../lib/socket';
 import { usePlayerStore } from '../store/playerStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
@@ -19,11 +27,21 @@ export default function PlayerControlPanel() {
   const navigate = useNavigate();
   const { forget } = usePlayerStore();
   const { autoStart, muted, setAutoStart, setMuted } = useDeviceSettingsStore();
+  const storage = useSyncExternalStore(
+    subscribeMediaStorageDiagnostic,
+    getMediaStorageDiagnostic,
+    getMediaStorageDiagnostic,
+  );
+  const connectivity = useSyncExternalStore(
+    subscribeConnectivity,
+    getConnectivityDiagnostic,
+    getConnectivityDiagnostic,
+  );
 
   async function handleUnpair() {
     if (!window.confirm('Unpair this device? It will need a new pairing code to reconnect.')) return;
     disconnectSocket();
-    await cache.clear();
+    await clearLocalPlayerData();
     forget();
     void navigate('/');
   }
@@ -59,11 +77,53 @@ export default function PlayerControlPanel() {
               <ToggleRow label={muted ? 'Muted' : 'Unmuted'} checked={!muted} onChange={v => setMuted(!v)} />
             </Section>
 
+            <Section title="Connectivity">
+              <div style={styles.storageRow}>
+                <span style={{
+                  ...styles.storageState,
+                  color: connectivity.state === 'ONLINE'
+                    ? '#4ade80'
+                    : connectivity.state === 'CHECKING'
+                      ? '#facc15'
+                      : connectivity.state === 'DEGRADED'
+                        ? '#fb923c'
+                        : '#93c5fd',
+                }}>
+                  {connectivity.state}
+                </span>
+                <span style={styles.storageUsage}>
+                  Browser {connectivity.browserOnline ? 'online' : 'offline'}
+                </span>
+              </div>
+              <div style={styles.storageMessage}>{connectivity.message}</div>
+              {connectivity.lastSuccessAt !== null && (
+                <div style={styles.storageQuota}>
+                  Last server contact: {new Date(connectivity.lastSuccessAt).toLocaleString()}
+                </div>
+              )}
+            </Section>
+
+            <Section title="Persistent media storage">
+              <div style={styles.storageRow}>
+                <span style={{
+                  ...styles.storageState,
+                  color: storage.state === 'READY' ? '#4ade80' : storage.state === 'INITIALIZING' ? '#facc15' : '#fb7185',
+                }}>
+                  {storage.state}
+                </span>
+                <span style={styles.storageUsage}>{formatBytes(storage.mediaBytes)}</span>
+              </div>
+              <div style={styles.storageMessage}>{storage.message}</div>
+              {storage.quotaBytes !== null && (
+                <div style={styles.storageQuota}>Origin quota: {formatBytes(storage.quotaBytes)}</div>
+              )}
+            </Section>
+
             <Section title="Device">
               <button style={styles.actionButton} onClick={() => window.location.reload()}>
                 Refresh
               </button>
-              <button style={styles.actionButton} onClick={handleUnpair}>
+              <button style={styles.actionButton} onClick={() => { void handleUnpair(); }}>
                 Unpair
               </button>
               <button style={{ ...styles.actionButton, ...styles.dangerButton }} onClick={closeTab}>
@@ -98,6 +158,18 @@ function ToggleRow({ label, checked, onChange }: { label: string; checked: boole
       </span>
     </button>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = -1;
+  do {
+    value /= 1024;
+    unit += 1;
+  } while (value >= 1024 && unit < units.length - 1);
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
 function GearIcon() {
@@ -136,6 +208,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   section: { padding: '12px 20px', borderTop: '1px solid #262626' },
   sectionTitle: { fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#888', marginBottom: 10 },
+  storageRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  storageState: { fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.04em' },
+  storageUsage: { fontSize: '0.8rem', color: '#aaa' },
+  storageMessage: { marginTop: 7, fontSize: '0.78rem', lineHeight: 1.4, color: '#bbb' },
+  storageQuota: { marginTop: 4, fontSize: '0.72rem', color: '#777' },
   toggleRow: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
     background: 'none', border: 'none', color: '#eee', padding: '6px 0', cursor: 'pointer', textAlign: 'left', gap: 12,

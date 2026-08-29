@@ -1,6 +1,7 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { AppAsset } from '../lib/api';
 import { onAudioUnlock } from '../lib/audioUnlock';
+import { getConnectivityDiagnostic, subscribeConnectivity } from '../lib/connectivity';
 
 export interface AppPlayerHandle {
   pause: () => void;
@@ -86,6 +87,7 @@ const DEFAULT_ERROR_MESSAGE = "This video isn't available.";
 // rotation slot. A single (non-playlist) video just stays on the message — there's nothing to
 // skip to.
 const ERROR_SKIP_DELAY_MS = 6_000;
+const YT_API_LOAD_TIMEOUT_MS = 15_000;
 
 let ytApiPromise: Promise<YTNamespace> | null = null;
 // Loads the IFrame API script once and shares the promise across every AppPlayer mount — the
@@ -95,17 +97,40 @@ let ytApiPromise: Promise<YTNamespace> | null = null;
 function loadYouTubeIframeApi(): Promise<YTNamespace> {
   if (window.YT?.Player) return Promise.resolve(window.YT);
   if (ytApiPromise) return ytApiPromise;
-  ytApiPromise = new Promise(resolve => {
+  const promise = new Promise<YTNamespace>((resolve, reject) => {
     const previous = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      resolve(window.YT!);
-    };
+    let settled = false;
     const script = document.createElement('script');
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) {
+        if (window.onYouTubeIframeAPIReady === handleReady) window.onYouTubeIframeAPIReady = previous;
+        script.remove();
+        reject(error);
+      } else {
+        resolve(window.YT!);
+      }
+    };
+    const handleReady = () => {
+      previous?.();
+      finish();
+    };
+    const timeout = setTimeout(
+      () => finish(new Error('YouTube player API timed out')),
+      YT_API_LOAD_TIMEOUT_MS,
+    );
+    window.onYouTubeIframeAPIReady = handleReady;
     script.src = 'https://www.youtube.com/iframe_api';
+    script.onerror = () => finish(new Error('YouTube player API failed to load'));
     document.head.appendChild(script);
+  }).catch(error => {
+    ytApiPromise = null;
+    throw error;
   });
-  return ytApiPromise;
+  ytApiPromise = promise;
+  return promise;
 }
 
 function videoIdFromEmbedUrl(embedUrl: string): string {
@@ -129,6 +154,12 @@ function AppPlayer(
 ) {
   const config = appAsset.appConfig;
   const clampedVolume = Math.max(0, Math.min(100, volume));
+  const connectivity = useSyncExternalStore(
+    subscribeConnectivity,
+    getConnectivityDiagnostic,
+    getConnectivityDiagnostic,
+  );
+  const offline = connectivity.state === 'OFFLINE';
 
   useEffect(() => {
     onAssetChange?.(appAsset.id);
@@ -170,16 +201,18 @@ function AppPlayer(
   // "Video unavailable / Watch on YouTube" overlay indefinitely, with a playlist unable to
   // advance past it.
   const [error, setError] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Mounts one YT.Player per Asset (not per playlist item — see the loadVideoById effect below
   // for how item changes are handled without tearing the embed down). A single video loops
   // itself natively via playerVars, the same trick the old bare-iframe src used.
   useEffect(() => {
-    if (!videoId || !containerRef.current) return;
+    if (!videoId || !containerRef.current || offline) return;
     let cancelled = false;
     let player: YTPlayer | null = null;
     setReady(false);
     setError(null);
+    setLoadError(null);
     pausedRef.current = false;
     void loadYouTubeIframeApi().then(YT => {
       if (cancelled || !containerRef.current) return;
@@ -216,6 +249,8 @@ function AppPlayer(
         },
       });
       playerRef.current = player;
+    }).catch(err => {
+      if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Online video failed to load');
     });
     return () => {
       cancelled = true;
@@ -225,7 +260,7 @@ function AppPlayer(
     // Deliberately keyed on appAsset.id, not videoId — a playlist's item changes (index) reuse
     // this same player instance via loadVideoById below rather than remounting the iframe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appAsset.id]);
+  }, [appAsset.id, offline]);
 
   useEffect(() => {
     if (!ready || !playerRef.current || !videoId) return;
@@ -293,6 +328,10 @@ function AppPlayer(
 
   if (!config || !videoId) return null;
 
+  if (offline) {
+    return <NetworkRequiredMessage message="This online video requires an internet connection. Local playlist media will continue playing offline." />;
+  }
+
   return (
     <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#000' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
@@ -309,6 +348,19 @@ function AppPlayer(
           </p>
         </div>
       )}
+      {loadError !== null && <NetworkRequiredMessage message={`${loadError}. Waiting for the network to return.`} />}
+    </div>
+  );
+}
+
+function NetworkRequiredMessage({ message }: { message: string }) {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '5%', textAlign: 'center', background: '#000', color: '#fff',
+      fontFamily: 'system-ui, sans-serif', fontSize: '1.1rem', fontWeight: 600,
+    }}>
+      {message}
     </div>
   );
 }

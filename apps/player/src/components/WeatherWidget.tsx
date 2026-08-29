@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type WeatherData } from '../lib/api';
 import { cache } from '../lib/db';
+import { shouldAttemptNetwork } from '../lib/connectivity';
 
 interface Props {
   latitude: number;
@@ -24,6 +25,7 @@ export default function WeatherWidget({ latitude, longitude, lang = 'en' }: Prop
       if (alive && cached) setData(prev => prev ?? cached);
     });
     const load = async () => {
+      if (!shouldAttemptNetwork()) return;
       try {
         const result = await api.getWeather(latitude, longitude);
         if (alive) setData(result);
@@ -31,8 +33,14 @@ export default function WeatherWidget({ latitude, longitude, lang = 'en' }: Prop
       } catch { /* keep previous */ }
     };
     void load();
+    const handleOnline = () => { void load(); };
+    window.addEventListener('online', handleOnline);
     const interval = setInterval(() => { void load(); }, 10 * 60 * 1000); // refresh every 10m
-    return () => { alive = false; clearInterval(interval); };
+    return () => {
+      alive = false;
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
   }, [latitude, longitude]);
 
   if (!data) {

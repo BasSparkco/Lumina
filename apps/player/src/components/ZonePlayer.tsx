@@ -36,6 +36,12 @@ export interface ZonePlayerHandle {
   setSpeed: (rate: number) => void;
 }
 
+const VIDEO_PROGRESS_CHECK_MS = 2_000;
+const VIDEO_STALL_TIMEOUT_MS = 10_000;
+const VIDEO_START_TIMEOUT_MS = 120_000;
+const MAX_LOCAL_VIDEO_RECOVERIES = 1;
+const NOOP_ASSET_CHANGE = () => undefined;
+
 // Explicitly tells the browser to give up this element's hardware decode session instead of
 // waiting for garbage collection to get around to it whenever the element is detached from
 // the DOM. Safe to call on an element that's already been unmounted — el.pause()/removeAttribute
@@ -54,12 +60,24 @@ export const FONT_SIZE_CLAMPS: Record<string, string> = {
   XLARGE: 'clamp(2.5rem, 9vw, 9rem)',
 };
 
+// playsetting.md Phase 3 — the only three asset kinds Playlist.scaleSettings can override (the
+// Settings modal only offers these; AUDIO/TEXT/APP have no frame-fit concept, see
+// PlaylistSettingsModal's SCALABLE_TYPES). These are also this file's pre-existing hardcoded
+// defaults, kept as the fallback so an unconfigured playlist renders exactly as it always has.
+const DEFAULT_SCALE_FIT = { IMAGE: 'fill', VIDEO: 'contain', DOCUMENT: 'contain' } as const;
+
+function scaleFit(playlist: Playlist, type: keyof typeof DEFAULT_SCALE_FIT): 'contain' | 'cover' | 'fill' {
+  return playlist.scaleSettings?.[type] ?? DEFAULT_SCALE_FIT[type];
+}
+
 function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted = false, controllable = false, onPlaybackProgress }: Props, ref: React.Ref<ZonePlayerHandle>) {
   const [index, setIndex] = useState(0);
   const [item, setItem] = useState<PlaylistItem | null>(null);
   // Which page of a DOCUMENT item is currently showing — durationSecs doubles as "seconds per
   // page" for this type (see hydratePlaylist on the API side).
   const [pageIndex, setPageIndex] = useState(0);
+  const [videoLoadGeneration, setVideoLoadGeneration] = useState(0);
+  const [videoFailed, setVideoFailed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -67,6 +85,12 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
   // autoplay effect below for why this can't just live in the `item` object itself.
   const pausedRef = useRef(false);
   const lastPlayedItemIdRef = useRef<string | null>(null);
+  const videoMountedAtRef = useRef(Date.now());
+  const videoLastProgressAtRef = useRef(Date.now());
+  const videoLastCurrentTimeRef = useRef(0);
+  const videoStartedRef = useRef(false);
+  const videoRecoveryAttemptsRef = useRef(0);
+  const videoRecoveryInProgressRef = useRef(false);
 
   // When playlist changes (publish command) reset to beginning
   useEffect(() => {
@@ -94,27 +118,6 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
     // VIDEO with playFullVideo: onEnded (below) triggers advance, no timer
     // DOCUMENT: its own page-cycling effect below hands off to advance() once pages are done
 
-    // Warm the service worker's media cache for the next video/image ahead of time — a plain
-    // fetch, not a hidden <video>/Image element. For video: a hidden preload <video> used to
-    // hold its own hardware decode session open for the whole time the current item was
-    // playing; on embedded/TV WebViews, which commonly support only 1-2 concurrent hardware
-    // video decoders, that meant a transition into a video item could need three simultaneous
-    // sessions (the outgoing video mid-teardown, the incoming video starting up, and this
-    // preload) competing for a budget of one or two — the decoder that lost produced a black
-    // frame with no error. For images: without this, the <img src=...> below only starts
-    // fetching the instant the item becomes current, so the browser paints it top-down as
-    // bytes stream in — looking "slow" regardless of actual connection speed, since there was
-    // never a head start. A fetch() only touches the network/cache layer (no decoder, no DOM
-    // element) — see src/sw.ts for how this request gets cached so the actual element
-    // switch-over below is served instantly from Cache Storage instead of hitting the network
-    // again. Doesn't help the very first item shown on load (nothing played before it to
-    // preload during) — same limitation the video preload already had.
-    const nextIdx = (index + 1) % playlist.items.length;
-    const next = playlist.items[nextIdx];
-    if (next?.kind === 'ASSET' && next.asset?.url && (next.asset.type === 'VIDEO' || next.asset.type === 'IMAGE')) {
-      void fetch(next.asset.url, { mode: 'cors', credentials: 'omit' }).catch(() => undefined);
-    }
-
     setPageIndex(0);
 
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
@@ -124,6 +127,39 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
   function advance() {
     setIndex(i => (i + 1) % playlist.items.length);
   }
+
+  const videoIdentity = item?.kind === 'ASSET' && item.asset?.type === 'VIDEO'
+    ? `${item.id}:${item.asset.url ?? ''}`
+    : null;
+
+  // Phase 9 (update_payer.md §28/29.1, constrained-hardware tier — "prepare the next local file
+  // and metadata without holding a second active hardware decoder") — the visible <video> below
+  // still fully unmounts and remounts on every transition, paying a cold demux/decode-to-first-
+  // frame cost each time even though the source is now a local OPFS blob. A hidden, non-playing
+  // sibling that has already read the next item's bytes warms the browser's local blob-read path
+  // ahead of the swap, without ever running two live decoders at once (full crossfade between two
+  // *visible* decoders is a separate, hardware-tiered feature this does not attempt).
+  const nextVideoAsset = playlist.items.length > 1 && item
+    ? (() => {
+      const next = playlist.items[(index + 1) % playlist.items.length];
+      if (next?.kind !== 'ASSET' || next.asset?.type !== 'VIDEO' || !next.asset.url) return null;
+      // Nothing to warm if it's the same binary already mounted live (repeated-asset playlist).
+      if (next.id === item.id) return null;
+      return next.asset;
+    })()
+    : null;
+
+  // A different item or binary URL gets a fresh recovery budget. Heartbeat/state refreshes that
+  // return a new object graph but the same id+URL deliberately do not reset playback or recovery.
+  useEffect(() => {
+    videoMountedAtRef.current = Date.now();
+    videoLastProgressAtRef.current = Date.now();
+    videoLastCurrentTimeRef.current = 0;
+    videoStartedRef.current = false;
+    videoRecoveryAttemptsRef.current = 0;
+    videoRecoveryInProgressRef.current = false;
+    setVideoFailed(false);
+  }, [videoIdentity]);
 
   // DOCUMENT items cycle their own pages before handing off to advance() — mirrors how VIDEO's
   // onEnded hands off, except there's an internal "sub-item" (page) advance first.
@@ -192,12 +228,12 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
 
     return () => { unlockCleanup?.(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item]);
+  }, [item, videoLoadGeneration, videoFailed]);
 
   // Releases a video's hardware decode session the moment we're actually done with it — either
   // the playlist moved on to a different item, or the whole player unmounted mid-video. This is
-  // deliberately its own effect keyed on `item?.id` (a primitive), NOT folded into the effect
-  // above that's keyed on the whole `item` object — that one legitimately needs to re-run on
+  // deliberately its own effect keyed on stable video identity/recovery generation, NOT folded
+  // into the effect above that's keyed on the whole `item` object — that one legitimately re-runs on
   // every heartbeat/publish refetch (even of the same still-playing video) to re-apply live
   // muted/volume changes, but its cleanup must NOT tear down the element on those refetches.
   // It used to: `releaseVideoDecoder` lived in that effect's unconditional cleanup, so every
@@ -205,15 +241,71 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
   // mid-playback ran `el.pause(); el.removeAttribute('src'); el.load()` on the still-mounted,
   // still-supposed-to-be-playing element — killing its src out from under it with nothing left
   // to ever re-set it, which is why the player kept getting stuck on a black screen instead of
-  // looping. Keying on `item?.id` instead means this only fires on an actual item change (a
-  // different id, or unmount), exactly when the underlying <video> DOM node is really going
-  // away (see ZonePlayer's key={item.id} below) or being abandoned by React for the next item's
-  // element — never on a same-video refetch.
+  // looping. Stable identity means this fires on an actual item/source change, a deliberate local
+  // recovery remount, fallback removal, or unmount — never on a same-video state refetch.
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     return () => releaseVideoDecoder(el);
-  }, [item?.id]);
+  }, [videoIdentity, videoLoadGeneration, videoFailed]);
+
+  function recoverVideo(reason: 'error' | 'start-timeout' | 'no-progress') {
+    if (videoRecoveryInProgressRef.current || videoFailed || item?.kind !== 'ASSET' || item.asset?.type !== 'VIDEO') return;
+    videoRecoveryInProgressRef.current = true;
+    const attempt = videoRecoveryAttemptsRef.current + 1;
+    videoRecoveryAttemptsRef.current = attempt;
+    console.warn('[lumina-video-playback]', {
+      event: 'recovery',
+      reason,
+      itemId: item.id,
+      assetId: item.asset.id,
+      attempt,
+      currentTime: videoRef.current?.currentTime ?? 0,
+      readyState: videoRef.current?.readyState ?? 0,
+    });
+
+    if (attempt <= MAX_LOCAL_VIDEO_RECOVERIES) {
+      const el = videoRef.current;
+      if (el) releaseVideoDecoder(el);
+      setVideoLoadGeneration(generation => generation + 1);
+      return;
+    }
+
+    if (playlist.items.length > 1) {
+      console.error('[lumina-video-playback]', { event: 'skip', reason, itemId: item.id, assetId: item.asset.id });
+      advance();
+    } else {
+      console.error('[lumina-video-playback]', { event: 'fallback', reason, itemId: item.id, assetId: item.asset.id });
+      setVideoFailed(true);
+    }
+  }
+
+  // Media stalls normally do not throw JavaScript errors, so the global crash watchdog cannot see
+  // them. Watch actual currentTime progress and bound both initial startup and mid-playback stalls.
+  useEffect(() => {
+    if (!videoIdentity || videoFailed) return;
+    videoMountedAtRef.current = Date.now();
+    videoLastProgressAtRef.current = Date.now();
+    videoLastCurrentTimeRef.current = 0;
+    videoStartedRef.current = false;
+    videoRecoveryInProgressRef.current = false;
+
+    const interval = setInterval(() => {
+      const el = videoRef.current;
+      if (!el || pausedRef.current || document.hidden || el.ended) return;
+      const now = Date.now();
+      if (!videoStartedRef.current) {
+        if (now - videoMountedAtRef.current >= VIDEO_START_TIMEOUT_MS) recoverVideo('start-timeout');
+        return;
+      }
+      if (!el.paused && now - videoLastProgressAtRef.current >= VIDEO_STALL_TIMEOUT_MS) recoverVideo('no-progress');
+    }, VIDEO_PROGRESS_CHECK_MS);
+
+    return () => clearInterval(interval);
+    // recoverVideo intentionally uses the current render's item/playlist state. videoIdentity and
+    // generation are the lifecycle boundaries that should restart this watchdog.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoIdentity, videoLoadGeneration, videoFailed]);
 
   // `volume` has no JSX/DOM-attribute equivalent (unlike `muted`), so a volume-only change
   // (screen/group volume edited in the dashboard, no new item/src) needs its own effect to
@@ -253,7 +345,7 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
   return (
     <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative' }}>
       {item.kind === 'THEME' && item.theme && state && (
-        <ThemeRenderer theme={item.theme} state={state} onAssetChange={onAssetChange ?? (() => {})} />
+        <ThemeRenderer theme={item.theme} state={state} onAssetChange={onAssetChange ?? NOOP_ASSET_CHANGE} />
       )}
 
       {item.kind === 'DESIGN' && item.design && (
@@ -283,7 +375,7 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
             <ZoneRenderer
               zone={zone}
               state={state}
-              onAssetChange={onAssetChange ?? (() => {})}
+              onAssetChange={onAssetChange ?? NOOP_ASSET_CHANGE}
               volume={zone.audioVolume ?? volume}
               forceMuted={priorityZone !== null && priorityZone.id !== zone.id}
             />
@@ -307,7 +399,7 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           src={asset.url ?? undefined}
           alt={asset.name}
           crossOrigin="anonymous"
-          style={{ width: '100%', height: '100%', objectFit: 'fill', ...mediaCropStyle(item) }}
+          style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'IMAGE'), ...mediaCropStyle(item) }}
         />
       )}
       {asset?.type === 'DOCUMENT' && asset.pageUrls[pageIndex] && (
@@ -316,7 +408,7 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           src={asset.pageUrls[pageIndex]}
           alt={asset.name}
           crossOrigin="anonymous"
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'DOCUMENT') }}
         />
       )}
       {asset?.type === 'TEXT' && asset.textTickerEnabled && (
@@ -326,7 +418,7 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           color={asset.textColor ?? '#fff'}
           backgroundColor={asset.textBackgroundColor ?? undefined}
           fontFamily={fontStack(asset.textFontFamily)}
-          fontSize={FONT_SIZE_CLAMPS[asset.textSize ?? 'MEDIUM'] ?? FONT_SIZE_CLAMPS['MEDIUM']!}
+          fontSize={FONT_SIZE_CLAMPS[asset.textSize ?? 'MEDIUM'] ?? FONT_SIZE_CLAMPS.MEDIUM!}
           direction={asset.textTickerDirection}
           speedPx={asset.textTickerSpeed ?? 80}
           crossPosition={asset.textTickerCrossOffset ?? 50}
@@ -363,9 +455,17 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           </p>
         </div>
       )}
-      {asset?.type === 'VIDEO' && (
+      {asset?.type === 'VIDEO' && videoFailed && (
+        <div
+          role="status"
+          style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: '#000' }}
+        >
+          Media unavailable
+        </div>
+      )}
+      {asset?.type === 'VIDEO' && !videoFailed && (
         <video
-          key={item.id}
+          key={`${item.id}:${videoLoadGeneration}`}
           ref={videoRef}
           src={asset.url ?? undefined}
           autoPlay
@@ -374,8 +474,35 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           playsInline
           preload="auto"
           crossOrigin="anonymous"
-          style={{ width: '100%', height: '100%', objectFit: 'contain', ...mediaCropStyle(item) }}
+          style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'VIDEO'), ...mediaCropStyle(item) }}
           onEnded={playlist.items.length === 1 ? undefined : advance}
+          onPlaying={() => {
+            videoStartedRef.current = true;
+            videoLastProgressAtRef.current = Date.now();
+            videoRecoveryInProgressRef.current = false;
+            console.info('[lumina-video-playback]', { event: 'playing', itemId: item.id, assetId: asset.id, generation: videoLoadGeneration });
+          }}
+          onTimeUpdate={event => {
+            const currentTime = event.currentTarget.currentTime;
+            if (currentTime <= videoLastCurrentTimeRef.current + 0.05) return;
+            videoStartedRef.current = true;
+            videoLastCurrentTimeRef.current = currentTime;
+            videoLastProgressAtRef.current = Date.now();
+          }}
+          onError={() => recoverVideo('error')}
+          onStalled={() => {
+            console.warn('[lumina-video-playback]', { event: 'stalled', itemId: item.id, assetId: asset.id, currentTime: videoRef.current?.currentTime ?? 0 });
+          }}
+        />
+      )}
+      {nextVideoAsset && (
+        <video
+          key={`preload:${nextVideoAsset.id}:${nextVideoAsset.url}`}
+          src={nextVideoAsset.url ?? undefined}
+          muted
+          preload="auto"
+          aria-hidden="true"
+          style={{ display: 'none' }}
         />
       )}
     </div>

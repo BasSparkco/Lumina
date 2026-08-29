@@ -1,13 +1,30 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
-import { api, ApiError, type Playlist, type PlayerState } from '../lib/api';
-import { cache } from '../lib/db';
+import type { PlayerAssetManifestItem } from '@lumina/types';
+import { api, ApiError, type Playlist, type PlayerState, type HeartbeatTelemetry } from '../lib/api';
+import { clearLocalPlayerData } from '../lib/local-player-data';
+import { initializeMediaStorage, mediaStorageKey, type MediaStorage } from '../lib/media-storage';
+import {
+  createBrowserPresentationActivationCoordinator,
+  type BrowserPresentationActivationCoordinator,
+  type PreparedPlayerPresentation,
+  type PresentationStatus,
+} from '../lib/presentation';
 import { connectSocket, disconnectSocket, getSocket } from '../lib/socket';
 import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/scheduler';
 import { usePlayerStore } from '../store/playerStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { isAudioUnlocked, onAudioUnlock } from '../lib/audioUnlock';
+import { tryInstallPwa } from '../lib/pwaInstall';
+import {
+  reportNetworkFailure,
+  reportNetworkSuccess,
+  shouldAttemptNetwork,
+  startConnectivityMonitoring,
+  stopConnectivityMonitoring,
+  synchronizeAfterReconnect,
+} from '../lib/connectivity';
 import ZonePlayer, { type ZonePlayerHandle } from '../components/ZonePlayer';
 import WayfindingDirectoryBoard from '../components/WayfindingDirectoryBoard';
 import WayfindingKioskMap from '../components/WayfindingKioskMap';
@@ -17,6 +34,14 @@ import PlayerControlPanel from '../components/PlayerControlPanel';
 
 const HEARTBEAT_INTERVAL = 30_000;
 const STATE_REFRESH_INTERVAL = 60_000;
+const MANIFEST_REQUEST_TIMEOUT = 15_000;
+// Phase 10/11 (update_payer.md) — local media otherwise accumulates forever: nothing evicts a
+// binary once the playlist that referenced it moves on. Unreferenced media stays for a week
+// (covers "revert to the previous playlist" without a redownload) and eviction also kicks in
+// early if the origin's storage quota gets tight, so a slow week never turns into a full disk.
+const CLEANUP_INTERVAL = 30 * 60_000;
+const CLEANUP_MAX_UNUSED_MS = 7 * 24 * 60 * 60_000;
+const CLEANUP_QUOTA_TARGET = 0.8;
 
 // Mirrors apps/api/src/modules/ws/screen.gateway.ts's PlayerCommand.
 type PlayerCommand =
@@ -61,13 +86,8 @@ function isTouchCapable() {
   return typeof window !== 'undefined' && (navigator.maxTouchPoints > 0 || 'ontouchstart' in window);
 }
 
-// Offline resilience for wayfinding (Phase 7.2) — the touch kiosk lets a visitor jump to any
-// floor and the directory board rotates through all of them, but the map/board only ever
-// *renders* one floor's plan at a time, so every other floor's image (and every POI icon) would
-// otherwise stay unfetched — and thus uncached — until a visitor happens to browse there while
-// online. Firing an out-of-band `Image` load for everything up front gets it into the browser's
-// HTTP cache and the service worker's `media-cache` runtime-caching rule (see vite.config.ts)
-// the same way a normal `<img>` render would, without waiting on the user to visit each floor.
+// Decode the complete local wayfinding image set up front. Phase 6 rewrites these to leased OPFS
+// object URLs, so this warms local images and never starts an independent network transfer.
 function prefetchWayfindingImages(wayfinding: PlayerState['wayfinding']) {
   if (!wayfinding) return;
   const urls = [
@@ -81,14 +101,16 @@ function prefetchWayfindingImages(wayfinding: PlayerState['wayfinding']) {
 }
 
 export default function PlayerPage() {
-  const { token, unpair, forget } = usePlayerStore();
+  const { token, screenId, unpair, forget } = usePlayerStore();
   const autoStart = useDeviceSettingsStore(s => s.autoStart);
   const muted = useDeviceSettingsStore(s => s.muted);
   const navigate = useNavigate();
-  const [state, setState] = useState<PlayerState | null>(null);
+  const [presentation, setPresentation] = useState<PreparedPlayerPresentation | null>(null);
+  const state = presentation?.state ?? null;
   const [activePlaylist, setActivePlaylist] = useState<Playlist | null>(null);
   const [poweredOn, setPoweredOn] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('Synchronizing content…');
   // Auto-start off (device setting) — gates rendering behind a "Tap to start" screen until the
   // first interaction. Initialized from `autoStart` once and never re-read: flipping the setting
   // mid-session shouldn't un-start a session that's already playing, only change what happens on
@@ -105,6 +127,29 @@ export default function PlayerPage() {
   // Read by the heartbeat interval below, which is set up once on mount and would otherwise
   // only ever see the `activePlaylist`/`state` values from that first render.
   const hasContentRef = useRef(false);
+  const activationRef = useRef<BrowserPresentationActivationCoordinator | null>(null);
+  const storageRef = useRef<MediaStorage | null>(null);
+  // The currently-published presentation's local binaries — cleanup must never evict these out
+  // from under a video that's actively playing from them.
+  const retainedStorageKeysRef = useRef<ReadonlySet<string>>(new Set());
+  const cleanupRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Phase 12 (update_payer.md) telemetry — the most recently fetched manifest's asset list (to
+  // report assetsTotal/Ready/Downloading/Failed against) and the last time a sync check actually
+  // succeeded (ACTIVE or unchanged), independent of whether that tick published new content.
+  const lastManifestAssetsRef = useRef<PlayerAssetManifestItem[]>([]);
+  const lastSuccessfulSyncAtRef = useRef<string | null>(null);
+
+  // React runs the previous effect cleanup only after the replacement presentation commits to
+  // the DOM. That is the safe point to release its object-URL leases.
+  useEffect(() => () => presentation?.release(), [presentation]);
+
+  // Installed-PWA status is one of Chrome's strongest signals for auto-granting persistent OPFS
+  // storage (see media-storage's DEGRADED diagnostic) — riding the same first-gesture hook
+  // audioUnlock.ts already tracks means this costs nothing extra and fires the moment an
+  // installer taps the screen during setup. Does nothing on a genuinely unattended, no-touch
+  // kiosk (Chrome requires a gesture to prompt at all) — that case needs an OS/launch-level fix
+  // instead, see pwaInstall.ts's comment.
+  useEffect(() => onAudioUnlock(() => { void tryInstallPwa(); }), []);
 
   // A revoked credential — the screen row is gone (404), or it still exists but is no longer
   // paired (401: unpaired/re-paired-elsewhere while this player was offline/backgrounded and
@@ -113,30 +158,10 @@ export default function PlayerPage() {
   // socket, so the only way back is a full re-pair — drop credentials and cached content and go
   // request a new pairing code, instead of looping stale content (or a dead token) forever.
   const handleRevoked = useCallback(async () => {
-    await cache.clear();
+    await clearLocalPlayerData();
     forget();
     void navigate('/');
   }, [forget, navigate]);
-
-  const loadState = useCallback(async () => {
-    try {
-      const fresh = await api.getState();
-      await cache.saveState(fresh);
-      setState(fresh);
-      return fresh;
-    } catch (err) {
-      if (err instanceof ApiError && (err.status === 404 || err.status === 401)) {
-        await handleRevoked();
-        return null;
-      }
-      const cached = await cache.getState();
-      if (cached) setState(cached);
-      return cached ?? null;
-    } finally {
-      setLoaded(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleRevoked]);
 
   // Custom Player (Phase 9/10) — forwards ZonePlayer's ~1x/second position samples to the
   // dashboard over the socket. A stable callback (not inline) so ZonePlayer's progress-reporting
@@ -170,6 +195,76 @@ export default function PlayerPage() {
     prefetchWayfindingImages(s.wayfinding);
   }, [resolvePlaylist]);
 
+  // Phase 10/11 (update_payer.md) — evict local media the active presentation no longer
+  // references. Never touches retainedStorageKeysRef's contents regardless of age/size, so a
+  // slow or failed cleanup can't ever pull the rug out from under what's on screen right now.
+  const runCleanup = useCallback(async () => {
+    const storage = storageRef.current;
+    if (!storage) return;
+    try {
+      const usage = await storage.getUsage();
+      const maxMediaBytes = usage.quotaBytes ? Math.floor(usage.quotaBytes * CLEANUP_QUOTA_TARGET) : undefined;
+      const result = await storage.cleanup({
+        retainStorageKeys: retainedStorageKeysRef.current,
+        maxMediaBytes,
+        maxUnusedMs: CLEANUP_MAX_UNUSED_MS,
+      });
+      if (result.removedStorageKeys.length > 0) {
+        console.info('[media-cleanup]', JSON.stringify({
+          removed: result.removedStorageKeys.length,
+          removedBytes: result.removedBytes,
+          remainingBytes: result.remainingBytes,
+        }));
+      }
+    } catch (err) {
+      console.warn('[media-cleanup] failed', err instanceof Error ? err.message : err);
+    }
+  }, []);
+
+  // Phase 12 — READY only when the active revision is committed and every required local asset
+  // is verified (coordinator status ACTIVE); DEGRADED (not FAILED) if a sync check just failed
+  // but there's still valid local content playing from an earlier successful sync.
+  const computeSyncState = useCallback((
+    status: PresentationStatus | undefined,
+    hasLocalContent: boolean,
+  ): NonNullable<HeartbeatTelemetry['syncState']> => {
+    if (!status) return 'UNKNOWN';
+    if (status === 'ACTIVE') return 'READY';
+    if (status === 'DOWNLOADING' || status === 'READY' || status === 'SUPERSEDED') return 'SYNCING';
+    return hasLocalContent ? 'DEGRADED' : 'FAILED';
+  }, []);
+
+  // Phase 12 — assetsReady/Failed are matched against the last-fetched manifest's expected
+  // storage keys (not a raw local-store count), so a stale local file from a since-changed
+  // playlist doesn't get counted as this screen's current content. assetsDownloading is derived
+  // (total - ready - failed) rather than read from the download manager directly, since nothing
+  // in this component observes its live in-flight count today.
+  const gatherTelemetry = useCallback(async (): Promise<HeartbeatTelemetry> => {
+    const storage = storageRef.current;
+    if (!storage) return {};
+    const [usage, storedAssets, failures] = await Promise.all([
+      storage.getUsage(),
+      storage.list(),
+      storage.listVerificationFailures(),
+    ]);
+    const expectedKeys = lastManifestAssetsRef.current.map(a => mediaStorageKey(storage.namespace, a));
+    const readyKeys = new Set(storedAssets.map(a => a.storageKey));
+    const failedKeys = new Set(failures.map(f => f.storageKey));
+    const assetsReady = expectedKeys.filter(k => readyKeys.has(k)).length;
+    const assetsFailed = expectedKeys.filter(k => failedKeys.has(k)).length;
+    return {
+      syncState: computeSyncState(activationRef.current?.getStatus(), retainedStorageKeysRef.current.size > 0),
+      assetsTotal: expectedKeys.length,
+      assetsReady,
+      assetsFailed,
+      assetsDownloading: Math.max(0, expectedKeys.length - assetsReady - assetsFailed),
+      cacheBytes: usage.mediaBytes,
+      ...(usage.availableBytes !== null ? { freeStorageBytes: usage.availableBytes } : {}),
+      storagePersistent: usage.persisted,
+      ...(lastSuccessfulSyncAtRef.current ? { lastSuccessfulSyncAt: lastSuccessfulSyncAtRef.current } : {}),
+    };
+  }, [computeSyncState]);
+
   // Re-evaluate schedule + power window every minute
   const scheduleNextCheck = useCallback((s: PlayerState) => {
     if (scheduleTimerRef.current) clearTimeout(scheduleTimerRef.current);
@@ -181,39 +276,129 @@ export default function PlayerPage() {
   }, [applyState]);
 
   useEffect(() => {
-    if (!token) { void navigate('/'); return; }
+    if (!token || !screenId) { void navigate('/'); return; }
+    let cancelled = false;
+    let manifestController: AbortController | null = null;
+    let reconnectPromise: Promise<void> | null = null;
+    startConnectivityMonitoring();
 
-    void loadState().then(s => {
-      if (s) {
-        applyState(s);
-        scheduleNextCheck(s);
-      }
-    });
+    const publishPresentation = (next: PreparedPlayerPresentation) => {
+      if (cancelled) { next.release(); return; }
+      currentAssetRef.current = null;
+      retainedStorageKeysRef.current = new Set(next.assetStorageKeys);
+      setPresentation(next);
+      applyState(next.state);
+      scheduleNextCheck(next.state);
+      setSyncMessage('Content synchronized');
+      void runCleanup();
+    };
 
-    heartbeatRef.current = setInterval(async () => {
+    const sendHeartbeat = async (): Promise<void> => {
+      if (!shouldAttemptNetwork()) return;
       try {
-        await api.heartbeat(currentAssetRef.current, hasContentRef.current);
+        const telemetry = await gatherTelemetry();
+        await api.heartbeat(currentAssetRef.current, hasContentRef.current, telemetry);
+        reportNetworkSuccess();
       } catch (err) {
-        // Anything else (network hiccup, transient 5xx) should just keep playing on cached
-        // state — only a 401 (revoked credential) needs to react, and it's the same recovery
-        // as loadState()'s, since a missed unpair leaves no pairingCode to resume into either way.
-        if (err instanceof ApiError && err.status === 401) await handleRevoked();
+        if (err instanceof ApiError && err.status === 401) {
+          await handleRevoked();
+          return;
+        }
+        reportNetworkFailure();
       }
-    }, HEARTBEAT_INTERVAL);
+    };
 
-    refreshRef.current = setInterval(async () => {
-      const s = await loadState();
-      if (s) {
-        applyState(s);
-        scheduleNextCheck(s);
+    const refreshPresentation = async (coordinator: BrowserPresentationActivationCoordinator) => {
+      if (!shouldAttemptNetwork()) {
+        setSyncMessage('Offline — playing locally stored content');
+        return;
       }
+
+      manifestController?.abort('superseded');
+      const controller = new AbortController();
+      manifestController = controller;
+      const timeout = setTimeout(() => controller.abort('timeout'), MANIFEST_REQUEST_TIMEOUT);
+      try {
+        setSyncMessage('Synchronizing content…');
+        const manifest = await api.getManifest(controller.signal);
+        clearTimeout(timeout);
+        if (manifestController === controller) manifestController = null;
+        reportNetworkSuccess();
+        lastManifestAssetsRef.current = manifest.assets;
+        const result = await coordinator.activate(manifest);
+        if (cancelled) {
+          result.presentation?.release();
+          return;
+        }
+        if (result.status === 'ACTIVE' && result.presentation) publishPresentation(result.presentation);
+        else if (result.status === 'ACTIVE') setSyncMessage('Content synchronized');
+        else if (result.status === 'FAILED') setSyncMessage('Synchronization failed; retrying later');
+        if (result.status === 'ACTIVE') lastSuccessfulSyncAtRef.current = new Date().toISOString();
+      } catch (err) {
+        if (cancelled || controller.signal.reason === 'superseded') return;
+        if (err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+          await handleRevoked();
+          return;
+        }
+        // A transient manifest/API failure never replaces the active local presentation.
+        reportNetworkFailure(
+          controller.signal.reason === 'timeout'
+            ? 'Server check timed out; continuing the local presentation.'
+            : undefined,
+        );
+        setSyncMessage('Offline — playing locally stored content');
+      } finally {
+        clearTimeout(timeout);
+        if (manifestController === controller) manifestController = null;
+      }
+    };
+
+    const reconnectAndSynchronize = (): Promise<void> => {
+      if (reconnectPromise) return reconnectPromise;
+      reconnectPromise = synchronizeAfterReconnect(
+        sendHeartbeat,
+        async () => {
+          if (activationRef.current) await refreshPresentation(activationRef.current);
+        },
+      ).finally(() => { reconnectPromise = null; });
+      return reconnectPromise;
+    };
+
+    void (async () => {
+      const storage = await initializeMediaStorage(screenId);
+      if (cancelled) return;
+      if (!storage) {
+        setSyncMessage('Persistent media storage is unavailable');
+        setLoaded(true);
+        return;
+      }
+      storageRef.current = storage;
+      const coordinator = createBrowserPresentationActivationCoordinator(storage);
+      activationRef.current = coordinator;
+      const restored = await coordinator.restore();
+      if (restored.status === 'ACTIVE' && restored.presentation) publishPresentation(restored.presentation);
+      if (cancelled) {
+        restored.presentation?.release();
+        coordinator.dispose();
+        if (activationRef.current === coordinator) activationRef.current = null;
+        return;
+      }
+      setLoaded(true);
+      await refreshPresentation(coordinator);
+    })();
+
+    heartbeatRef.current = setInterval(() => { void sendHeartbeat(); }, HEARTBEAT_INTERVAL);
+
+    refreshRef.current = setInterval(() => {
+      if (activationRef.current) void refreshPresentation(activationRef.current);
     }, STATE_REFRESH_INTERVAL);
 
-    const sock = connectSocket(token);
+    cleanupRef.current = setInterval(() => { void runCleanup(); }, CLEANUP_INTERVAL);
+
+    const sock = connectSocket(token, shouldAttemptNetwork());
     sock.on('command', async (cmd: PlayerCommand) => {
       if (cmd.type === 'publish') {
-        const s = await loadState();
-        if (s) { applyState(s); scheduleNextCheck(s); }
+        if (activationRef.current) await refreshPresentation(activationRef.current);
       } else if (cmd.type === 'reload') {
         window.location.reload();
       } else if (cmd.type === 'clear-cache') {
@@ -225,7 +410,7 @@ export default function PlayerPage() {
         // actual "hard reset": app data, every Cache Storage entry the service worker owns, and
         // the registration itself, so the next load re-registers from scratch against whatever
         // is currently deployed.
-        await cache.clear();
+        await clearLocalPlayerData();
         if ('caches' in window) {
           const keys = await caches.keys();
           await Promise.all(keys.map(key => caches.delete(key)));
@@ -238,11 +423,11 @@ export default function PlayerPage() {
       } else if (cmd.type === 'capture-screenshot') {
         void captureAndUploadScreenshot();
       } else if (cmd.type === 'unpair') {
-        await cache.clear();
+        await clearLocalPlayerData();
         unpair(cmd.pairingCode);
         void navigate('/');
       } else if (cmd.type === 'deleted') {
-        await cache.clear();
+        await clearLocalPlayerData();
         forget();
         void navigate('/');
       } else if (cmd.type === 'pause') {
@@ -259,19 +444,37 @@ export default function PlayerPage() {
     // A screen that was briefly offline (wifi hiccup, tab suspended) otherwise doesn't see
     // whatever changed until the next STATE_REFRESH_INTERVAL tick (up to 60s) — `reconnect`
     // (unlike `connect`, which also fires on the very first connection) only fires after a
-    // real drop, so this doesn't duplicate the loadState() call already made above.
-    sock.io.on('reconnect', () => {
-      void loadState().then(s => { if (s) { applyState(s); scheduleNextCheck(s); } });
-    });
+    // real drop, so this doesn't duplicate the initial manifest request above.
+    sock.io.on('reconnect', () => { void reconnectAndSynchronize(); });
+
+    const handleBrowserOffline = () => {
+      manifestController?.abort('offline');
+      sock.disconnect();
+      setSyncMessage('Offline — playing locally stored content');
+    };
+    const handleBrowserOnline = () => {
+      sock.connect();
+      void reconnectAndSynchronize();
+    };
+    window.addEventListener('offline', handleBrowserOffline);
+    window.addEventListener('online', handleBrowserOnline);
 
     return () => {
+      cancelled = true;
+      manifestController?.abort('unmount');
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       if (refreshRef.current) clearInterval(refreshRef.current);
+      if (cleanupRef.current) clearInterval(cleanupRef.current);
       if (scheduleTimerRef.current) clearTimeout(scheduleTimerRef.current);
+      activationRef.current?.dispose();
+      activationRef.current = null;
+      window.removeEventListener('offline', handleBrowserOffline);
+      window.removeEventListener('online', handleBrowserOnline);
       disconnectSocket();
+      stopConnectivityMonitoring();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, screenId]);
 
   if (!loaded) return <FullscreenContainer><Splash text="Loading…" /></FullscreenContainer>;
 
@@ -287,7 +490,7 @@ export default function PlayerPage() {
     );
   }
 
-  if (!state) return <FullscreenContainer><Splash text="No content assigned" /></FullscreenContainer>;
+  if (!state) return <FullscreenContainer><Splash text={syncMessage} /></FullscreenContainer>;
 
   // Outside its power-on window — highest priority of all, above even an explicit stop or
   // emergency override, since it represents the physical display being off. A real off screen
@@ -330,6 +533,18 @@ export default function PlayerPage() {
         {isTouchCapable()
           ? <WayfindingKioskMap state={state} onAssetChange={id => { currentAssetRef.current = id; }} />
           : <WayfindingDirectoryBoard directory={state.wayfinding} />}
+      </FullscreenContainer>
+    );
+  }
+
+  // Streaming type is WAYFINDING but state.wayfinding came back null — the screen has no
+  // KioskLocation yet (dashboard: Screens > this screen > Kiosk floor). Distinct from the
+  // generic "no content" splash below so this is diagnosable on-site instead of looking
+  // identical to an unconfigured playlist.
+  if (state.streamingType === 'WAYFINDING') {
+    return (
+      <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
+        <Splash text="Wayfinding kiosk location not set — configure it for this screen in the dashboard" />
       </FullscreenContainer>
     );
   }

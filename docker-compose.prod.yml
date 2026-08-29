@@ -154,6 +154,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: "https://${DOMAIN}/v1"
         NEXT_PUBLIC_WS_URL: "https://${DOMAIN}"
+        NEXT_PUBLIC_PLAYER_URL: "https://${PLAYER_DOMAIN}"
     restart: unless-stopped
     environment:
       PORT: "3000"

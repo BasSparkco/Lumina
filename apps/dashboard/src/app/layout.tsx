@@ -8,6 +8,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Lumina Signage',
   description: 'Cloud digital signage platform',
+  icons: { icon: '/favicon.ico' },
 };
 
 // This is intentionally the *only* place <html>/<body> are rendered. It has no

@@ -2,6 +2,7 @@ export * from './screen';
 export * from './asset';
 export * from './playlist';
 export * from './player';
+export * from './player-manifest';
 export * from './theme';
 export * from './fonts';
 export * from './wayfinding';

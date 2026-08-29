@@ -1,11 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { DesignDocumentSchema, resolveElementBindings, type DesignElement, type ResolvedDesignPayload, type ResolvedElement, type ResolvedScene, type VariableMap } from '@lumina/design-schema';
+import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerNetworkDependency } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import { SchedulesService } from '../schedules/schedules.service';
 import { PowerSchedulesService } from '../power-schedules/power-schedules.service';
+import { collectManifestReferences, manifestRevision } from './player-manifest';
+
+// Phase 12 (update_payer.md) sync telemetry — every field independently optional, see heartbeat().
+export interface HeartbeatTelemetry {
+  syncState?: 'UNKNOWN' | 'SYNCING' | 'READY' | 'DEGRADED' | 'FAILED';
+  assetsTotal?: number;
+  assetsReady?: number;
+  assetsDownloading?: number;
+  assetsFailed?: number;
+  cacheBytes?: number;
+  freeStorageBytes?: number;
+  storagePersistent?: boolean;
+  lastSuccessfulSyncAt?: string;
+}
 
 // hydratePlaylist/hydrateZones/hydrateAssetAsPlaylist call each other (a LAYOUT-kind playlist
 // item's zones can each play a playlist, whose items can themselves be THEME/LAYOUT-kind) —
@@ -39,6 +54,9 @@ interface HydratedPlaylistItem {
 }
 interface HydratedPlaylist {
   id: string; name: string; transitionStyle: string; transitionDurationMs: number; playbackOrder: string;
+  // playsetting.md Phase 1 — { [assetType]: 'contain' | 'cover' | 'fill' }, already sanitized by
+  // PlaylistsService before it ever reaches the DB. Player-side consumption is Phase 3.
+  scaleSettings: unknown;
   items: HydratedPlaylistItem[];
 }
 
@@ -226,6 +244,7 @@ export class PlayerService {
               id: f.id,
               level: f.level,
               label: f.label,
+              floorPlanAssetId: f.floorPlanAsset?.id ?? null,
               floorPlanUrl: f.floorPlanAsset ? this.storage.publicUrl(f.floorPlanAsset.storageKey) : null,
             })),
             pois: screen.kioskLocation.floor.building.floors.flatMap(f => f.pois.map(p => ({
@@ -246,6 +265,7 @@ export class PlayerService {
                 icon: p.category.icon,
                 color: p.category.color,
               },
+              iconAssetId: p.iconAsset?.id ?? null,
               iconUrl: p.iconAsset ? this.storage.publicUrl(p.iconAsset.storageKey) : null,
             }))),
             // Route graph (Phase 7.3) — the whole building's nodes/edges, so the player can
@@ -311,6 +331,121 @@ export class PlayerService {
     };
   }
 
+  async getManifest(screenId: string): Promise<PlayerContentManifest<Awaited<ReturnType<PlayerService['getState']>>>> {
+    const desiredState = await this.getState(screenId);
+    const references = collectManifestReferences(desiredState);
+    if (references.unresolvedDependencies.length > 0) {
+      throw new ConflictException({
+        code: 'MANIFEST_DEPENDENCY_GRAPH_INCOMPLETE',
+        message: 'Player content contains missing, cyclic, or depth-limited dependencies',
+        dependencies: references.unresolvedDependencies,
+      });
+    }
+
+    const referencedIds = [...references.assetPriorities.keys()];
+    const owner = await this.prisma.screen.findUnique({ where: { id: screenId }, select: { organizationId: true } });
+    if (!owner) throw new NotFoundException('Screen not found');
+    const records = referencedIds.length
+      ? await this.prisma.asset.findMany({
+          // References are hydrated from this screen's content, but enforce ownership again at
+          // the manifest boundary. organizationId=null is the shared system library/preset scope.
+          where: {
+            id: { in: referencedIds },
+            OR: [{ organizationId: owner.organizationId }, { organizationId: null }],
+          },
+          include: { binaries: { orderBy: [{ kind: 'asc' }, { ordinal: 'asc' }] } },
+        })
+      : [];
+    const foundIds = new Set(records.map(asset => asset.id));
+    const missingIntegrity = referencedIds
+      .filter(id => !foundIds.has(id))
+      .map(id => `asset:${id}:not-found`);
+    const assets: PlayerAssetManifestItem[] = [];
+    const networkDependencies: PlayerNetworkDependency[] = [];
+
+    for (const asset of records) {
+      const priority = references.assetPriorities.get(asset.id) ?? 'fallback';
+      if (asset.type === 'TEXT') continue;
+      if (asset.type === 'APP') {
+        const config = asset.appConfig as { embedUrl?: string; items?: { embedUrl?: string }[] } | null;
+        networkDependencies.push({
+          assetId: asset.id,
+          type: 'application',
+          providerId: asset.appProviderId,
+          remoteUrl: asset.sourceUrl ?? config?.embedUrl ?? config?.items?.[0]?.embedUrl ?? null,
+          priority,
+          networkRequired: true,
+        });
+        continue;
+      }
+      if (asset.status !== 'READY') {
+        missingIntegrity.push(`asset:${asset.id}:status-${asset.status.toLowerCase()}`);
+        continue;
+      }
+
+      const requiredBinaries = asset.type === 'DOCUMENT'
+        ? asset.binaries.filter(binary => binary.kind === 'DOCUMENT_PAGE')
+        : asset.binaries.filter(binary => binary.kind === 'PRIMARY' && binary.ordinal === 0);
+      if (requiredBinaries.length === 0) {
+        missingIntegrity.push(`asset:${asset.id}:integrity-metadata-missing`);
+        continue;
+      }
+      if (asset.type === 'DOCUMENT' && requiredBinaries.length !== (asset.pageCount ?? 0)) {
+        missingIntegrity.push(`asset:${asset.id}:document-page-count-mismatch`);
+        continue;
+      }
+
+      for (const binary of requiredBinaries) {
+        const fileSize = Number(binary.sizeBytes);
+        if (!Number.isSafeInteger(fileSize) || fileSize <= 0 || !/^[a-f0-9]{64}$/i.test(binary.sha256)) {
+          missingIntegrity.push(`asset:${asset.id}:invalid-integrity:${binary.id}`);
+          continue;
+        }
+        const isPage = binary.kind === 'DOCUMENT_PAGE';
+        assets.push({
+          assetId: asset.id,
+          binaryId: isPage ? `${asset.id}:page:${binary.ordinal}` : `${asset.id}:primary`,
+          type: isPage ? 'document-page' : manifestAssetType(asset.type),
+          remoteUrl: this.storage.publicUrl(binary.storageKey),
+          binaryVersion: `sha256-${binary.sha256.toLowerCase()}`,
+          sha256: binary.sha256.toLowerCase(),
+          mimeType: binary.mimeType,
+          fileSize,
+          priority,
+          networkRequired: false,
+        });
+      }
+    }
+
+    if (missingIntegrity.length > 0) {
+      throw new ConflictException({
+        code: 'MANIFEST_INTEGRITY_INCOMPLETE',
+        message: 'One or more local media dependencies lack verified final binary metadata',
+        dependencies: [...new Set(missingIntegrity)].sort(),
+      });
+    }
+
+    assets.sort((a, b) => a.binaryId.localeCompare(b.binaryId));
+    networkDependencies.sort((a, b) => a.assetId.localeCompare(b.assetId));
+    const revisionInput = {
+      schemaVersion: 1,
+      desiredState,
+      assets: assets.map(({ remoteUrl: _remoteUrl, ...asset }) => asset),
+      networkDependencies,
+      packagedFonts: references.packagedFonts,
+    };
+    return {
+      schemaVersion: 1,
+      screenId,
+      contentRevision: manifestRevision(revisionInput),
+      generatedAt: new Date().toISOString(),
+      desiredState,
+      assets,
+      networkDependencies,
+      packagedFonts: references.packagedFonts,
+    };
+  }
+
   // A raw Asset played standalone (Screen-level ASSET streaming mode, or a Zone's asset media
   // mode) has no PlaylistItem to carry a placement-specific duration/muted flag, so this
   // fabricates a single-item playlist reusing hydratePlaylist's URL/thumbnail/TEXT handling —
@@ -372,7 +507,12 @@ export class PlayerService {
     return { ok: true, count };
   }
 
-  async heartbeat(screenId: string, _currentAssetId: string | null, hasContent?: boolean) {
+  async heartbeat(
+    screenId: string,
+    _currentAssetId: string | null,
+    hasContent?: boolean,
+    telemetry?: HeartbeatTelemetry,
+  ) {
     const screen = await this.prisma.screen.update({
       where: { id: screenId },
       data: {
@@ -382,6 +522,22 @@ export class PlayerService {
         // (schedule gaps, locally-resolved layout zones) — omit means "unchanged," not "false,"
         // so older player builds that don't send this yet don't flip screens to the badge.
         ...(hasContent !== undefined ? { hasContent } : {}),
+        // Phase 12 sync telemetry — every field is independently optional so an older player
+        // build (or a heartbeat sent before the first manifest sync completes) only updates
+        // whatever it actually knows this tick, instead of zeroing out the rest.
+        ...(telemetry?.syncState !== undefined ? { syncState: telemetry.syncState } : {}),
+        ...(telemetry?.assetsTotal !== undefined ? { assetsTotal: telemetry.assetsTotal } : {}),
+        ...(telemetry?.assetsReady !== undefined ? { assetsReady: telemetry.assetsReady } : {}),
+        ...(telemetry?.assetsDownloading !== undefined
+          ? { assetsDownloading: telemetry.assetsDownloading } : {}),
+        ...(telemetry?.assetsFailed !== undefined ? { assetsFailed: telemetry.assetsFailed } : {}),
+        ...(telemetry?.cacheBytes !== undefined ? { cacheBytes: BigInt(telemetry.cacheBytes) } : {}),
+        ...(telemetry?.freeStorageBytes !== undefined
+          ? { freeStorageBytes: BigInt(telemetry.freeStorageBytes) } : {}),
+        ...(telemetry?.storagePersistent !== undefined
+          ? { storagePersistent: telemetry.storagePersistent } : {}),
+        ...(telemetry?.lastSuccessfulSyncAt !== undefined
+          ? { lastSuccessfulSyncAt: new Date(telemetry.lastSuccessfulSyncAt) } : {}),
       },
     });
     if (screen.organizationId) {
@@ -500,6 +656,7 @@ export class PlayerService {
     transitionStyle: string;
     transitionDurationMs: number;
     playbackOrder: string;
+    scaleSettings?: unknown;
     items: {
       id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
       cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null;
@@ -625,6 +782,7 @@ export class PlayerService {
       transitionStyle: playlist.transitionStyle,
       transitionDurationMs: playlist.transitionDurationMs,
       playbackOrder: playlist.playbackOrder,
+      scaleSettings: playlist.scaleSettings ?? null,
       items,
     };
   }
@@ -666,7 +824,7 @@ export class PlayerService {
       background:
         scene.background.type === 'color'
           ? { type: 'color' as const, color: scene.background.color }
-          : { type: scene.background.type, resolvedSrc: urlMap.get(scene.background.assetId) },
+          : { type: scene.background.type, assetId: scene.background.assetId, resolvedSrc: urlMap.get(scene.background.assetId) },
       elements: await Promise.all(
         scene.elements.map(element => this.resolveDesignElement(resolveElementBindings(element, variables), urlMap)),
       ),
@@ -750,4 +908,11 @@ export class PlayerService {
       this.storage.publicUrl(storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
     );
   }
+}
+
+function manifestAssetType(type: string): PlayerManifestAssetType {
+  if (type === 'VIDEO') return 'video';
+  if (type === 'IMAGE') return 'image';
+  if (type === 'AUDIO') return 'audio';
+  return 'other';
 }

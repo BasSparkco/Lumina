@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type TickerItem } from '../lib/api';
 import { cache } from '../lib/db';
+import { shouldAttemptNetwork } from '../lib/connectivity';
 
 interface Props {
   // Exactly one of these is expected to be set — feedUrl for the RSS source, staticText for
@@ -32,6 +33,7 @@ export default function TickerWidget({ feedUrl, staticText, direction = 'horizon
       if (alive && cached?.length) setFeedItems(prev => (prev.length ? prev : cached));
     });
     const load = async () => {
+      if (!shouldAttemptNetwork()) return;
       try {
         const result = await api.getTicker(feedUrl);
         if (alive && result) setFeedItems(result.items);
@@ -39,8 +41,14 @@ export default function TickerWidget({ feedUrl, staticText, direction = 'horizon
       } catch { /* keep previous */ }
     };
     void load();
+    const handleOnline = () => { void load(); };
+    window.addEventListener('online', handleOnline);
     const interval = setInterval(() => { void load(); }, 5 * 60 * 1000); // refresh every 5m
-    return () => { alive = false; clearInterval(interval); };
+    return () => {
+      alive = false;
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
   }, [feedUrl]);
 
   // Static text takes priority when both are somehow set — one item per non-empty line.

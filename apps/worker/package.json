@@ -6,6 +6,8 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main",
+    "backfill:asset-integrity": "node dist/backfill-asset-integrity.js",
+    "reprocess:video": "node dist/reprocess-video.js",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests"

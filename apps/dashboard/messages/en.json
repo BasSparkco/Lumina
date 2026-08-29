@@ -242,6 +242,7 @@
       "noFloor": "— Select a floor —",
       "location": "\"You are here\" location",
       "noFloorPlan": "This floor has no floor plan uploaded yet — add one from the Wayfinding section to place the pin precisely.",
+      "notConfiguredWarning": "This screen is set to Wayfinding but has no location yet — the player will show a blank \"no content\" message until you place a pin below.",
       "clear": "Clear location",
       "noBuildings": "No buildings set up yet — add one from the Wayfinding section first.",
       "attract": {
@@ -495,7 +496,31 @@
     "itemCount": "{count, plural, one {# item} other {# items}}",
     "deleteConfirm": "Delete this playlist?",
     "duplicate": "Duplicate playlist",
-    "duplicating": "Duplicating…"
+    "duplicating": "Duplicating…",
+    "dragToReorder": "Drag to reorder",
+    "settings": "Playlist settings",
+    "preview": "Preview playlist"
+  },
+  "playlistSettings": {
+    "title": "Settings — {name}",
+    "scaleSettings": {
+      "heading": "Scale settings",
+      "description": "How each asset type fills its frame when played.",
+      "types": {
+        "IMAGE": "Images",
+        "VIDEO": "Videos",
+        "DOCUMENT": "Documents"
+      },
+      "modes": {
+        "contain": "Contain",
+        "cover": "Cover",
+        "fill": "Fill"
+      },
+      "default": "Default"
+    },
+    "transition": {
+      "heading": "Transition"
+    }
   },
   "playlistDetail": {
     "backToPlaylists": "Back to playlists",

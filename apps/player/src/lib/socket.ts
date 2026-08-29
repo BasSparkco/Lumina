@@ -4,7 +4,7 @@ const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:4000';
 
 let socket: Socket | null = null;
 
-export function connectSocket(token: string): Socket {
+export function connectSocket(token: string, autoConnect = true): Socket {
   if (socket?.connected) return socket;
 
   socket = io(WS_URL, {
@@ -13,6 +13,7 @@ export function connectSocket(token: string): Socket {
     reconnection: true,
     reconnectionDelay: 2000,
     reconnectionDelayMax: 30_000,
+    autoConnect,
   });
 
   return socket;

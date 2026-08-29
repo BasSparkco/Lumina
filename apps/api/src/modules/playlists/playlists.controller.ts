@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, Min } from 'class-validator';
 import type { TransitionStyle, PlaybackOrder } from '@lumina/db';
 import { PlaylistsService } from './playlists.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -41,6 +41,10 @@ class UpdateConfigDto {
   // silently clamp or reject — keep these in sync if that range changes.
   @IsOptional() @IsInt() @Min(100) @Max(3000) transitionDurationMs?: number;
   @IsOptional() @IsIn(['SEQUENTIAL', 'SHUFFLE']) playbackOrder?: PlaybackOrder;
+  // playsetting.md Phase 1 — { [assetType]: 'contain' | 'cover' | 'fill' }. Keys/values are
+  // validated against AssetType and the known fit modes in the service, not here, since
+  // class-validator has no clean way to validate a dynamic-key map.
+  @IsOptional() @IsObject() scaleSettings?: Record<string, string>;
 }
 
 @ApiTags('playlists')
@@ -63,6 +67,13 @@ export class PlaylistsController {
   @Get(':id')
   findOne(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.playlists.findOne(user.orgId, id);
+  }
+
+  // Must come before @Put(':id') — otherwise Nest matches "reorder" as the :id param and routes
+  // this to rename() instead.
+  @Put('reorder')
+  reorderPlaylists(@CurrentUser() user: JwtUser, @Body() dto: ReorderDto) {
+    return this.playlists.reorderPlaylists(user.orgId, dto.ids);
   }
 
   @Put(':id')
@@ -116,6 +127,15 @@ export class PlaylistsController {
     return this.playlists.updateConfig(user.orgId, id, dto);
   }
 
+  // playsetting.md Phase 1 — issues a short-lived token the dashboard hands to the (separately
+  // authenticated, device-paired) player app so it can open a read-only preview of this one
+  // playlist. Requires the normal dashboard session; the token itself is what authorizes the
+  // player app's follow-up request handled by PlaylistsPreviewController below.
+  @Post(':id/preview-token')
+  createPreviewToken(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.playlists.createPreviewToken(user.orgId, id);
+  }
+
   @Post(':id/submit')
   submit(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.playlists.submit(user.orgId, id);
@@ -131,5 +151,23 @@ export class PlaylistsController {
   @Roles('OWNER', 'ADMIN')
   reject(@CurrentUser() user: JwtUser, @Param('id') id: string) {
     return this.playlists.reject(user.orgId, id);
+  }
+}
+
+// playsetting.md Phase 1/4 — a separate controller (not a route on PlaylistsController above)
+// specifically because that controller carries a class-level @UseGuards(JwtAuthGuard,
+// RolesGuard): the player app calling this route has neither a dashboard session nor a paired-
+// screen credential, only the short-lived token minted by POST :id/preview-token above, so it
+// must not go through either guard at all. This codebase has no `@Public()`-style per-route
+// guard bypass yet, so a dedicated unguarded controller is the smallest correct fix rather than
+// introducing that pattern for a single route.
+@ApiTags('playlists')
+@Controller('playlists')
+export class PlaylistsPreviewController {
+  constructor(private readonly playlists: PlaylistsService) {}
+
+  @Get(':id/preview')
+  getForPreview(@Param('id') id: string, @Query('token') token: string) {
+    return this.playlists.getForPreview(id, token);
   }
 }

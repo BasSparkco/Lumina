@@ -44,7 +44,22 @@ export function useScreenSocket() {
       setPlaybackProgress(prev => ({ ...prev, [event.screenId]: event }));
     });
 
-    return () => { socket.disconnect(); };
+    // Navigating away makes the page bfcache-eligible: the browser freezes all JS and force-
+    // closes any open WebSocket (the "Page entered Back-Forward Cache" console message is just
+    // that, expected and harmless). React doesn't remount on a bfcache restore though — this
+    // effect never re-runs — so without an explicit nudge here, reconnecting depends entirely on
+    // socket.io's own backoff timer picking back up after the freeze, which can leave screen
+    // status/playback data stale for longer than necessary. `pageshow` with `persisted: true`
+    // fires exactly on that restore, so force a reconnect immediately instead of waiting on it.
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && !socket.connected) socket.connect();
+    };
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+      socket.disconnect();
+    };
   }, []);
 
   return { statuses, playbackProgress };

@@ -14,6 +14,8 @@ export interface MediaObject {
   contentType?: string;
   contentLength?: number;
   contentRange?: string;
+  etag?: string;
+  lastModified?: Date;
   statusCode: number;
 }
 
@@ -83,6 +85,8 @@ export class StorageService {
       contentType: res.ContentType,
       contentLength: res.ContentLength,
       contentRange: res.ContentRange,
+      etag: res.ETag,
+      lastModified: res.LastModified,
       statusCode: res.ContentRange ? 206 : 200,
     };
   }

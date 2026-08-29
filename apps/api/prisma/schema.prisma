@@ -151,6 +151,18 @@ model Screen {
   // (unconfirmed) rather than true, so a freshly paired screen reads as "awaiting content" until
   // its first heartbeat says otherwise, instead of silently looking fine.
   hasContent          Boolean       @default(false)
+  // Phase 12 (update_payer.md) sync telemetry — reported by the player on each heartbeat
+  // alongside hasContent above. syncState defaults to UNKNOWN (not READY) so a freshly paired
+  // screen that hasn't sent one yet doesn't silently read as healthy; assets* default to 0.
+  syncState            SyncState @default(UNKNOWN)
+  assetsTotal          Int       @default(0)
+  assetsReady          Int       @default(0)
+  assetsDownloading    Int       @default(0)
+  assetsFailed         Int       @default(0)
+  cacheBytes           BigInt    @default(0)
+  freeStorageBytes     BigInt?
+  storagePersistent    Boolean   @default(false)
+  lastSuccessfulSyncAt DateTime?
   // Live-preview screenshot: stored at a deterministic storage key (see StorageService screenshot
   // helpers), overwritten in place on every upload — this is a single "latest" preview, not a
   // history, so no key/id needs to live in the DB, just whether/when one has ever landed.
@@ -199,6 +211,17 @@ model Screen {
 enum ScreenStatus {
   ONLINE
   OFFLINE
+}
+
+// Phase 12 (update_payer.md) — distinct from ScreenStatus (network reachability): a screen can be
+// ONLINE while its local content is still SYNCING, DEGRADED (playing stale local content because
+// the latest sync failed), or FAILED (never got a playable local presentation at all).
+enum SyncState {
+  UNKNOWN
+  SYNCING
+  READY
+  DEGRADED
+  FAILED
 }
 
 enum StreamingType {
@@ -383,8 +406,36 @@ model Asset {
   poiIconFor                 Poi[]            @relation("PoiIconAsset")
   designTemplateThumbnailFor DesignTemplate[]
   designAssetThumbnailFor    DesignAsset[]
+  binaries                   AssetBinary[]
 
   @@index([organizationId, category])
+}
+
+// Immutable metadata for every object the player can persist locally. Asset.sizeBytes remains
+// the legacy/listing summary; this table is the authoritative binary identity used by the player
+// manifest. A DOCUMENT has one DOCUMENT_PAGE row per rasterized page because those page images,
+// not the uploaded PDF/Office source, are what the player actually downloads and renders.
+model AssetBinary {
+  id         String          @id @default(cuid())
+  kind       AssetBinaryKind
+  ordinal    Int             @default(0)
+  storageKey String
+  mimeType   String
+  sizeBytes  BigInt
+  sha256     String
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, kind, ordinal])
+  @@index([sha256])
+}
+
+enum AssetBinaryKind {
+  PRIMARY
+  DOCUMENT_PAGE
 }
 
 enum AssetType {
@@ -438,6 +489,14 @@ model Playlist {
   transitionStyle      TransitionStyle @default(NONE)
   transitionDurationMs Int             @default(500)
   playbackOrder        PlaybackOrder   @default(SEQUENTIAL)
+  // playsetting.md Phase 1 — how each asset type fills its frame, e.g. { "IMAGE": "cover" }.
+  // Keys are AssetType values, values are 'contain' | 'cover' | 'fill'. Null/missing key means
+  // "use the player's hardcoded default for that type" so existing playlists render unchanged
+  // until an admin opens Settings and picks something.
+  scaleSettings        Json?
+  // Manual drag-and-drop order in the playlists list. Defaults to 0 for every existing row (the
+  // list falls back to updatedAt as a tiebreak until each playlist is dragged at least once).
+  sortOrder            Int             @default(0)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
@@ -451,6 +510,7 @@ model Playlist {
   schedules        Schedule[]
   kioskAttractFor  KioskLocation[]
 
+  @@index([organizationId, sortOrder])
   @@index([organizationId, updatedAt])
 }
 

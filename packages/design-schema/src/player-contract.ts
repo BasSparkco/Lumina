@@ -33,5 +33,7 @@ export type ResolvedElement = DesignElement & { resolvedSrc?: string; posterReso
 export interface ResolvedBackground {
   type: 'color' | 'image' | 'video';
   color?: string;
+  // Retained alongside resolvedSrc so the player manifest can preserve stable media identity.
+  assetId?: string;
   resolvedSrc?: string;
 }

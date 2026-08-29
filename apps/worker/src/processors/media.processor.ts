@@ -10,6 +10,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { StorageService } from '../storage/storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -35,8 +36,8 @@ interface MediaJob {
   assetId: string;
   key: string;
   type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
-  // Only meaningful (and only sent) for DOCUMENT — decides whether LibreOffice needs to convert
-  // to PDF first, or pdftoppm can rasterize the upload directly.
+  // Preserved in authoritative binary metadata for IMAGE/AUDIO; for DOCUMENT it also decides
+  // whether LibreOffice must convert to PDF before rasterization.
   mimeType?: string;
 }
 
@@ -81,13 +82,14 @@ export class MediaProcessor extends WorkerHost {
 
     try {
       if (type === 'IMAGE') {
-        await this.processImage(assetId, key);
+        await this.processImage(assetId, key, mimeType ?? 'application/octet-stream');
       } else if (type === 'VIDEO') {
         await this.processVideo(assetId, key);
       } else if (type === 'DOCUMENT') {
         await this.processDocument(assetId, key, mimeType ?? 'application/pdf');
+      } else if (type === 'AUDIO') {
+        await this.processAudio(assetId, key, mimeType ?? 'application/octet-stream');
       }
-      // AUDIO: just mark ready — no thumbnail needed
 
       await this.prisma.asset.update({
         where: { id: assetId },
@@ -103,7 +105,7 @@ export class MediaProcessor extends WorkerHost {
     }
   }
 
-  private async processImage(assetId: string, key: string) {
+  private async processImage(assetId: string, key: string, mimeType: string) {
     const original = await this.storage.download(key);
 
     // fit: 'inside' (not 'cover') so a tall/portrait source is never cropped to fit this
@@ -120,10 +122,11 @@ export class MediaProcessor extends WorkerHost {
     await this.storage.upload(thumbKey, thumbnail, 'image/webp');
 
     const meta = await sharp(original).metadata();
+    await this.upsertBinary(assetId, 'PRIMARY', 0, key, mimeType, original);
 
     await this.prisma.asset.update({
       where: { id: assetId },
-      data: { thumbnailKey: thumbKey, width: meta.width, height: meta.height },
+      data: { thumbnailKey: thumbKey, width: meta.width, height: meta.height, sizeBytes: original.length },
     });
   }
 
@@ -146,11 +149,13 @@ export class MediaProcessor extends WorkerHost {
       const transcodedKey = key.replace(/(\.[^.]+)$/, '_transcoded.mp4');
       const thumbKey = key.replace(/(\.[^.]+)$/, '_thumb.webp');
 
-      await this.storage.upload(transcodedKey, fs.readFileSync(transcodedPath), 'video/mp4');
+      const transcoded = fs.readFileSync(transcodedPath);
+      await this.storage.upload(transcodedKey, transcoded, 'video/mp4');
       await this.storage.upload(thumbKey, fs.readFileSync(thumbPath), 'image/webp');
 
       // Probe dimensions from the transcoded file
       const probe = await this.probeVideo(transcodedPath);
+      await this.upsertBinary(assetId, 'PRIMARY', 0, transcodedKey, 'video/mp4', transcoded);
 
       await this.prisma.asset.update({
         where: { id: assetId },
@@ -161,6 +166,8 @@ export class MediaProcessor extends WorkerHost {
           height: probe.height,
           durationSecs: probe.durationSecs,
           hasAudioTrack: probe.hasAudioTrack,
+          mimeType: 'video/mp4',
+          sizeBytes: transcoded.length,
         },
       });
     } finally {
@@ -187,6 +194,7 @@ export class MediaProcessor extends WorkerHost {
       const output = fs.readFileSync(outputPath);
 
       await this.storage.upload(targetKey, output, 'audio/mp4');
+      await this.upsertBinary(assetId, 'PRIMARY', 0, targetKey, 'audio/mp4', output);
 
       await this.prisma.asset.update({
         where: { id: assetId },
@@ -203,6 +211,15 @@ export class MediaProcessor extends WorkerHost {
         await this.storage.delete(deleteSourceKey).catch(err => this.logger.warn(`Failed to clean up tmp source ${deleteSourceKey}`, err));
       }
     }
+  }
+
+  private async processAudio(assetId: string, key: string, mimeType: string) {
+    const audio = await this.storage.download(key);
+    await this.upsertBinary(assetId, 'PRIMARY', 0, key, mimeType, audio);
+    await this.prisma.asset.update({
+      where: { id: assetId },
+      data: { sizeBytes: audio.length },
+    });
   }
 
   private extractAudioTrack(input: string, output: string): Promise<void> {
@@ -248,6 +265,9 @@ export class MediaProcessor extends WorkerHost {
 
       let width: number | undefined;
       let height: number | undefined;
+      // A reprocess can produce a different page count. Remove the old authoritative page list
+      // before recording the new completed renditions so stale pages never enter a manifest.
+      await this.prisma.assetBinary.deleteMany({ where: { assetId, kind: 'DOCUMENT_PAGE' } });
       for (let i = 0; i < pagePaths.length; i++) {
         const page = i + 1;
         const { data, info } = await sharp(pagePaths[i])
@@ -257,7 +277,9 @@ export class MediaProcessor extends WorkerHost {
           width = info.width;
           height = info.height;
         }
-        await this.storage.upload(this.documentPageKey(key, page), data, 'image/webp');
+        const pageKey = this.documentPageKey(key, page);
+        await this.storage.upload(pageKey, data, 'image/webp');
+        await this.upsertBinary(assetId, 'DOCUMENT_PAGE', page, pageKey, 'image/webp', data);
       }
 
       await this.prisma.asset.update({
@@ -274,6 +296,27 @@ export class MediaProcessor extends WorkerHost {
   // keys from `storageKey` + `pageCount` to build the URLs the player actually loads.
   private documentPageKey(key: string, page: number): string {
     return key.replace(/(\.[^.]+)$/, `_p${page}.webp`);
+  }
+
+  private async upsertBinary(
+    assetId: string,
+    kind: 'PRIMARY' | 'DOCUMENT_PAGE',
+    ordinal: number,
+    storageKey: string,
+    mimeType: string,
+    bytes: Buffer,
+  ) {
+    const integrity = {
+      storageKey,
+      mimeType,
+      sizeBytes: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    };
+    await this.prisma.assetBinary.upsert({
+      where: { assetId_kind_ordinal: { assetId, kind, ordinal } },
+      create: { assetId, kind, ordinal, ...integrity },
+      update: integrity,
+    });
   }
 
   private async convertToPdf(inputPath: string, tmpDir: string): Promise<string> {
@@ -325,7 +368,17 @@ export class MediaProcessor extends WorkerHost {
           '-crf 23',
           '-preset fast',
           '-movflags +faststart',
-          '-vf scale=\'min(1920,iw)\':-2',
+          '-vf scale=\'min(1920,iw)\':-2,fps=30',
+          // Phase 9A (update_payer.md) — CRF alone bounds *average* quality, not worst-case
+          // decode load. A 4K/high-fps source (uploads observed at 3840x2160 60fps) previously
+          // came out of `scale` still at its original frame rate — resolution-capped but not
+          // frame-rate-capped — which is real, confirmed decode-stutter on signage hardware, not
+          // a caching problem (local blob playback still stalled: see the repeated `playing`
+          // events for the same asset in the player console). 30fps covers ordinary signage
+          // content; -maxrate/-bufsize bounds worst-case bitrate for high-motion footage that CRF
+          // 23 alone would otherwise let spike. Revisit against real lowest-tier hardware (§29.5).
+          '-maxrate 8M',
+          '-bufsize 16M',
           '-max_muxing_queue_size 1024',
         ])
         .output(output)

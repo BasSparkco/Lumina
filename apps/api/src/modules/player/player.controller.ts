@@ -2,9 +2,9 @@ import { Body, Controller, Get, Post, Query, UploadedFile, UseGuards, UseInterce
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { memoryStorage } from 'multer';
-import { PlayerService } from './player.service';
+import { PlayerService, type HeartbeatTelemetry } from './player.service';
 import { ProofOfPlayService } from '../proof-of-play/proof-of-play.service';
 import { IngestProofOfPlayDto } from '../proof-of-play/dto/ingest-proof-of-play.dto';
 import { KioskAnalyticsService } from '../kiosk-analytics/kiosk-analytics.service';
@@ -13,6 +13,8 @@ import { IngestCrashReportsDto } from './dto/ingest-crash-reports.dto';
 import { PlayerJwtGuard } from '../../common/guards/player-jwt.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { ScreenJwtUser } from '../../common/types/jwt-user';
+
+const SYNC_STATES = ['UNKNOWN', 'SYNCING', 'READY', 'DEGRADED', 'FAILED'] as const;
 
 class HeartbeatDto {
   @IsString()
@@ -25,6 +27,24 @@ class HeartbeatDto {
   @IsBoolean()
   @IsOptional()
   hasContent?: boolean;
+
+  // Phase 12 (update_payer.md) sync telemetry — every field below is optional so an older
+  // player build that doesn't send them yet leaves the screen's stored telemetry unchanged
+  // rather than getting zeroed out on every heartbeat.
+  @IsIn(SYNC_STATES)
+  @IsOptional()
+  syncState?: (typeof SYNC_STATES)[number];
+
+  @IsInt() @Min(0) @IsOptional() assetsTotal?: number;
+  @IsInt() @Min(0) @IsOptional() assetsReady?: number;
+  @IsInt() @Min(0) @IsOptional() assetsDownloading?: number;
+  @IsInt() @Min(0) @IsOptional() assetsFailed?: number;
+  @IsInt() @Min(0) @IsOptional() cacheBytes?: number;
+  @IsInt() @Min(0) @IsOptional() freeStorageBytes?: number;
+  @IsBoolean() @IsOptional() storagePersistent?: boolean;
+  // Set by the player only when it just completed a successful sync check (ACTIVE/unchanged) —
+  // absent means "no change this heartbeat," not "never synced."
+  @IsDateString() @IsOptional() lastSuccessfulSyncAt?: string;
 }
 
 @ApiTags('player')
@@ -69,11 +89,30 @@ export class PlayerController {
     return this.player.getState(screen.sub);
   }
 
+  // Versioned, dependency-closed synchronization contract. Existing players stay on /state
+  // until persistent storage and atomic activation can consume the manifest safely.
+  @Get('manifest')
+  @UseGuards(PlayerJwtGuard)
+  getManifest(@CurrentUser() screen: ScreenJwtUser) {
+    return this.player.getManifest(screen.sub);
+  }
+
   // Periodic heartbeat from player
   @Post('heartbeat')
   @UseGuards(PlayerJwtGuard)
   heartbeat(@CurrentUser() screen: ScreenJwtUser, @Body() dto: HeartbeatDto) {
-    return this.player.heartbeat(screen.sub, dto.currentAssetId ?? null, dto.hasContent);
+    const telemetry: HeartbeatTelemetry = {
+      syncState: dto.syncState,
+      assetsTotal: dto.assetsTotal,
+      assetsReady: dto.assetsReady,
+      assetsDownloading: dto.assetsDownloading,
+      assetsFailed: dto.assetsFailed,
+      cacheBytes: dto.cacheBytes,
+      freeStorageBytes: dto.freeStorageBytes,
+      storagePersistent: dto.storagePersistent,
+      lastSuccessfulSyncAt: dto.lastSuccessfulSyncAt,
+    };
+    return this.player.heartbeat(screen.sub, dto.currentAssetId ?? null, dto.hasContent, telemetry);
   }
 
   // Batched flush of the player's local proof-of-play buffer

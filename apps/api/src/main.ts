@@ -7,6 +7,19 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RedisIoAdapter } from './redis-io.adapter';
 
+// Phase 12 (update_payer.md) added BigInt Screen columns (cacheBytes/freeStorageBytes) — Prisma
+// returns those as native `bigint`, which JSON.stringify throws on by default, 500ing every
+// endpoint that serializes a Screen row (e.g. GET /v1/screens). Serialize as a string once,
+// globally, before anything else runs, rather than converting at every query site individually.
+declare global {
+  interface BigInt {
+    toJSON(): string;
+  }
+}
+BigInt.prototype.toJSON = function (this: bigint) {
+  return this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
 
@@ -36,7 +49,14 @@ async function bootstrap() {
   // base64 PNG) rides along in the elements array — bump it for both bodies Nest parses.
   app.useBodyParser('json', { limit: '20mb' });
   app.useBodyParser('urlencoded', { limit: '20mb', extended: true });
-  app.enableCors({ origin: allowedOrigins });
+  // The persistent player download manager needs these response validators to resume a staged
+  // Range transfer safely across retries/restarts. ETag/Content-Range/Accept-Ranges are not all
+  // CORS-safelisted response headers, so a player hosted on its own origin cannot read them unless
+  // they are exposed explicitly.
+  app.enableCors({
+    origin: allowedOrigins,
+    exposedHeaders: ['ETag', 'Last-Modified', 'Accept-Ranges', 'Content-Range', 'Content-Length'],
+  });
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(
     new ValidationPipe({

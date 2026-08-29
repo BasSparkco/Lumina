@@ -4,10 +4,12 @@
 // buffering/flush pipeline like proof-of-play's, and a lost event on a flaky connection isn't
 // worth retry complexity for a "popular searches" chart.
 import { api } from './api';
+import { shouldAttemptNetwork } from './connectivity';
 
 export type KioskEventType = 'SESSION_START' | 'SEARCH' | 'POI_VIEW';
 
 export function logKioskEvent(type: KioskEventType, extra?: { query?: string; poiId?: string; poiName?: string }) {
+  if (!shouldAttemptNetwork()) return;
   api.logWayfindingEvents([{ type, ...extra }]).catch(() => {
     /* best-effort — analytics gaps aren't worth surfacing to the kiosk UI */
   });

@@ -104,7 +104,7 @@ async function main() {
         },
       });
 
-      await mediaQueue.add('generate-thumbnail', { assetId: asset.id, key, type: assetType });
+      await mediaQueue.add('generate-thumbnail', { assetId: asset.id, key, type: assetType, mimeType });
       created++;
       console.log(`Queued ${category}/${filename} -> asset ${asset.id}`);
     }

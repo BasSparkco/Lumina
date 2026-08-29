@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type CurrencyData } from '../lib/api';
 import { cache } from '../lib/db';
+import { shouldAttemptNetwork } from '../lib/connectivity';
 
 const DISPLAY_PAIRS = ['USD', 'EUR', 'GBP', 'SAR', 'AED', 'KWD', 'QAR', 'BHD', 'OMR'];
 
@@ -22,6 +23,7 @@ export default function CurrencyWidget({ base = 'USD', currencies = DISPLAY_PAIR
       if (alive && cached) setData(prev => prev ?? cached);
     });
     const load = async () => {
+      if (!shouldAttemptNetwork()) return;
       try {
         const result = await api.getCurrency(base);
         if (alive) setData(result);
@@ -29,8 +31,14 @@ export default function CurrencyWidget({ base = 'USD', currencies = DISPLAY_PAIR
       } catch { /* keep previous */ }
     };
     void load();
+    const handleOnline = () => { void load(); };
+    window.addEventListener('online', handleOnline);
     const interval = setInterval(() => { void load(); }, 60 * 60 * 1000); // refresh hourly
-    return () => { alive = false; clearInterval(interval); };
+    return () => {
+      alive = false;
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
   }, [base]);
 
   const pairs = currencies.filter(c => c !== base);

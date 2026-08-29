@@ -419,7 +419,7 @@ export class AssetsService {
   /** Copies a library asset into the org's own asset collection — same storageKey (no re-upload), new row so rename/delete/playlist references work exactly like any other org asset. */
   async copyFromLibrary(orgId: string, id: string) {
     const source = await this.orgScoped.assertOwns(
-      () => this.prisma.asset.findFirst({ where: { id, organizationId: null } }),
+      () => this.prisma.asset.findFirst({ where: { id, organizationId: null }, include: { binaries: true } }),
       'Library asset not found',
     );
 
@@ -439,6 +439,16 @@ export class AssetsService {
         tags: source.tags,
         status: 'READY',
         organizationId: orgId,
+        binaries: {
+          create: source.binaries.map(binary => ({
+            kind: binary.kind,
+            ordinal: binary.ordinal,
+            storageKey: binary.storageKey,
+            mimeType: binary.mimeType,
+            sizeBytes: binary.sizeBytes,
+            sha256: binary.sha256,
+          })),
+        },
       },
     });
 

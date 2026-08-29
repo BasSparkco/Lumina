@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, GripVertical, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, LayoutTemplate, Smartphone, Volume2, VolumeX } from 'lucide-react';
+import { List, Plus, Trash2, ChevronRight, ChevronDown, Copy, ClipboardCheck, Check, X, ImageIcon, Film, Music, Type, FileText, GripVertical, RefreshCw, Send, Shuffle, Sparkles, Crop, Search, Palette, LayoutGrid, LayoutTemplate, Smartphone, Volume2, VolumeX, Settings, Eye } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -18,7 +18,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, PLAYER_URL, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
@@ -31,6 +31,7 @@ import { useAuditLog } from '@/hooks/useAuditLog';
 import { Toggle } from '@/components/Toggle';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { CropEditor, type MediaCrop } from '@/components/CropEditor';
+import { PlaylistSettingsModal } from '@/components/PlaylistSettingsModal';
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -634,6 +635,20 @@ function PlaylistDetail({ id }: { id: string }) {
   );
 }
 
+type SortableRowRenderProps = Pick<ReturnType<typeof useSortable>, 'attributes' | 'listeners' | 'setNodeRef' | 'isDragging'> & { style: React.CSSProperties };
+
+/** Same reasoning as PlaylistItemRow above — useSortable is a hook, so each row's drag state
+ * needs its own component. A render-prop here (instead of duplicating the whole row's markup
+ * into a new component) lets the existing row JSX below stay put. */
+function SortablePlaylistRow({ id, disabled, children }: {
+  id: string;
+  disabled: boolean;
+  children: (props: SortableRowRenderProps) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  return <>{children({ attributes, listeners, setNodeRef, isDragging, style: { transform: CSS.Transform.toString(transform), transition } })}</>;
+}
+
 export default function PlaylistsPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -653,6 +668,8 @@ export default function PlaylistsPage() {
   const [rejectComment, setRejectComment] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [settingsPlaylist, setSettingsPlaylist] = useState<{ id: string; name: string } | null>(null);
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const { data: playlists = [], isLoading } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: approvals = {}, isLoading: approvalsLoading } = useQuery({ queryKey: ['approvals'], queryFn: approvalsApi.listAll });
@@ -760,6 +777,31 @@ export default function PlaylistsPage() {
     },
     onError: (e: Error) => setDeleteError(e.message),
   });
+
+  const reorderPlaylistsMut = useMutation({
+    mutationFn: (ids: string[]) => playlistsApi.reorderPlaylists(ids),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlists'] }); },
+  });
+
+  // playsetting.md Phase 4 — mints a short-lived token and opens the player app's read-only
+  // preview in a new tab. Not gated behind canEditContent: Preview mutates nothing, so it's
+  // available to any role that can see this playlist at all (same as expanding its row).
+  const previewMut = useMutation({
+    mutationFn: (id: string) => playlistsApi.previewToken(id),
+    onSuccess: ({ token }, id) => {
+      window.open(`${PLAYER_URL}/preview?playlistId=${id}&token=${token}`, '_blank', 'noopener,noreferrer');
+    },
+    onError: (e: Error) => setDeleteError(e.message),
+  });
+
+  function handlePlaylistDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const orderedIds = playlists.map((pl: PlaylistSummary) => pl.id);
+    const oldIndex = orderedIds.indexOf(String(active.id));
+    const newIndex = orderedIds.indexOf(String(over.id));
+    reorderPlaylistsMut.mutate(arrayMove(orderedIds, oldIndex, newIndex));
+  }
 
   function startRename(playlist: PlaylistSummary) {
     if (!canEditContent) return;
@@ -919,73 +961,115 @@ export default function PlaylistsPage() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {playlists.filter((pl: PlaylistSummary) => pl.name.toLowerCase().includes(search.toLowerCase())).map((pl: PlaylistSummary) => {
-          const isExpanded = expandedId === pl.id;
-          return (
-            <div key={pl.id} id={`playlist-row-${pl.id}`}
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden transition-colors hover:border-indigo-200 dark:hover:border-indigo-800">
-              <div
-                onClick={() => { if (renamingId !== pl.id) toggleExpanded(pl.id); }}
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer group">
-                <List className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {renamingId === pl.id ? (
-                      <input
-                        autoFocus
-                        value={renameValue}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => setRenameValue(e.target.value)}
-                        onBlur={() => commitRename(pl)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') commitRename(pl);
-                          if (e.key === 'Escape') setRenamingId(null);
-                        }}
-                        disabled={renameMut.isPending}
-                        className="text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    ) : (
-                      <p
-                        onClick={e => { if (canEditContent) { e.stopPropagation(); startRename(pl); } }}
-                        title={canEditContent ? tc('clickToRename') : undefined}
-                        className={`text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
-                        {pl.name}
-                      </p>
-                    )}
-                    {!approvalsLoading && !settingsLoading && (
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${APPROVAL_STATUS_STYLES[statusOf(approvals[pl.id], approvalSettings)]}`}>
-                        {tc(`approvalStatus.${statusOf(approvals[pl.id], approvalSettings)}`)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {t('itemCount', { count: pl._count.items })}
-                    {pl._count.items > 0 && ` · ${formatDuration(pl.totalDurationSecs)} · ${formatBytes(pl.totalSizeBytes)}`}
-                  </p>
-                </div>
-                {canEditContent && (
-                  <button onClick={e => { e.stopPropagation(); duplicateMut.mutate(pl); }} disabled={duplicateMut.isPending}
-                    title={t('duplicate')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors disabled:opacity-50">
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {canEditContent && (
-                  <button onClick={e => { e.stopPropagation(); if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(pl); }}
-                    className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {isExpanded
-                  ? <ChevronDown className="w-4 h-4 text-indigo-500 shrink-0" />
-                  : <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-500 group-hover:text-indigo-400 transition-colors shrink-0" />}
-              </div>
+      {(() => {
+        // Dragging reorders the *unfiltered* list by array index, which doesn't map cleanly onto
+        // a filtered subset — so only enable it with the search box empty.
+        const canDragPlaylists = canEditContent && !search.trim();
+        const visiblePlaylists = playlists.filter((pl: PlaylistSummary) => pl.name.toLowerCase().includes(search.toLowerCase()));
+        return (
+          <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handlePlaylistDragEnd}>
+            <SortableContext items={visiblePlaylists.map((pl: PlaylistSummary) => pl.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {visiblePlaylists.map((pl: PlaylistSummary) => {
+                  const isExpanded = expandedId === pl.id;
+                  return (
+                    <SortablePlaylistRow key={pl.id} id={pl.id} disabled={!canDragPlaylists}>
+                      {({ attributes, listeners, setNodeRef, style, isDragging }) => (
+                        <div ref={setNodeRef} style={style} id={`playlist-row-${pl.id}`}
+                          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden transition-colors hover:border-indigo-200 dark:hover:border-indigo-800 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
+                          <div
+                            onClick={() => { if (renamingId !== pl.id) toggleExpanded(pl.id); }}
+                            className="flex items-center gap-3 px-4 py-3 cursor-pointer group">
+                            {canDragPlaylists && (
+                              <button type="button" {...attributes} {...listeners} onClick={e => e.stopPropagation()} title={t('dragToReorder')}
+                                className="cursor-grab touch-none p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:cursor-grabbing shrink-0">
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <List className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                {renamingId === pl.id ? (
+                                  <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onClick={e => e.stopPropagation()}
+                                    onChange={e => setRenameValue(e.target.value)}
+                                    onBlur={() => commitRename(pl)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') commitRename(pl);
+                                      if (e.key === 'Escape') setRenamingId(null);
+                                    }}
+                                    disabled={renameMut.isPending}
+                                    className="text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  />
+                                ) : (
+                                  <p
+                                    onClick={e => { if (canEditContent) { e.stopPropagation(); startRename(pl); } }}
+                                    title={canEditContent ? tc('clickToRename') : undefined}
+                                    className={`text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                                    {pl.name}
+                                  </p>
+                                )}
+                                {!approvalsLoading && !settingsLoading && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${APPROVAL_STATUS_STYLES[statusOf(approvals[pl.id], approvalSettings)]}`}>
+                                    {tc(`approvalStatus.${statusOf(approvals[pl.id], approvalSettings)}`)}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 dark:text-gray-500">
+                                {t('itemCount', { count: pl._count.items })}
+                                {pl._count.items > 0 && ` · ${formatDuration(pl.totalDurationSecs)} · ${formatBytes(pl.totalSizeBytes)}`}
+                              </p>
+                            </div>
+                            {canEditContent && (
+                              <button onClick={e => { e.stopPropagation(); duplicateMut.mutate(pl); }} disabled={duplicateMut.isPending}
+                                title={t('duplicate')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors disabled:opacity-50">
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canEditContent && (
+                              <button onClick={e => { e.stopPropagation(); if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(pl); }}
+                                className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button onClick={e => { e.stopPropagation(); previewMut.mutate(pl.id); }}
+                              disabled={previewMut.isPending}
+                              title={t('preview')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors disabled:opacity-50">
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            {canEditContent && (
+                              <button onClick={e => { e.stopPropagation(); setSettingsPlaylist({ id: pl.id, name: pl.name }); }}
+                                title={t('settings')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors">
+                                <Settings className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {isExpanded
+                              ? <ChevronDown className="w-4 h-4 text-indigo-500 shrink-0" />
+                              : <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-500 group-hover:text-indigo-400 transition-colors shrink-0" />}
+                          </div>
 
-              {isExpanded && <PlaylistDetail id={pl.id} />}
-            </div>
-          );
-        })}
-      </div>
+                          {isExpanded && <PlaylistDetail id={pl.id} />}
+                        </div>
+                      )}
+                    </SortablePlaylistRow>
+                  );
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
+        );
+      })()}
+
+      {settingsPlaylist && (
+        <PlaylistSettingsModal
+          id={settingsPlaylist.id}
+          name={settingsPlaylist.name}
+          canEdit={canEditContent}
+          onClose={() => setSettingsPlaylist(null)}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,9 @@ import Cookies from 'js-cookie';
 import type { DesignDocument } from '@lumina/design-schema';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/v1';
+// playsetting.md Phase 4 — the player PWA's own origin (a separate deployment, see
+// PLAYER_DOMAIN in .env.prod.example), used only to open the Preview link.
+export const PLAYER_URL = process.env.NEXT_PUBLIC_PLAYER_URL ?? 'http://localhost:5000';
 const TOKEN_KEY = 'lumina_token';
 const LOCALES = ['en', 'ar'];
 
@@ -373,8 +376,18 @@ export const playlistsApi = {
     req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted, playFullVideo, ...crop }) }),
   removeItem: (id: string, itemId: string) => req<void>(`/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
   reorder: (id: string, ids: string[]) => req<void>(`/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
-  updateConfig: (id: string, config: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder }) =>
+  reorderPlaylists: (ids: string[]) => req<void>('/playlists/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
+  updateConfig: (
+    id: string,
+    config: {
+      transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder;
+      scaleSettings?: Partial<Record<AssetType, ScaleFitMode>>;
+    },
+  ) =>
     req<Playlist>(`/playlists/${id}/config`, { method: 'PUT', body: JSON.stringify(config) }),
+  // playsetting.md Phase 1/4 — short-lived token the Preview button hands to the player app so
+  // it can open a read-only preview without a device pairing.
+  previewToken: (id: string) => req<{ token: string; expiresAt: string }>(`/playlists/${id}/preview-token`, { method: 'POST' }),
 };
 
 // ── Layouts ─────────────────────────────────────────────────────────────────
@@ -737,6 +750,10 @@ export interface PlaylistItem {
 }
 export type TransitionStyle = 'NONE' | 'CROSSFADE';
 export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
+// playsetting.md — same six kinds as Asset['type'], kept as its own alias here since
+// scaleSettings is keyed by asset type but lives on Playlist, not Asset.
+export type AssetType = Asset['type'];
+export type ScaleFitMode = 'contain' | 'cover' | 'fill';
 export interface PlaylistSummary {
   id: string; name: string; _count: { items: number }; updatedAt: string;
   totalDurationSecs: number; totalSizeBytes: number;
@@ -744,6 +761,9 @@ export interface PlaylistSummary {
 export interface Playlist extends PlaylistSummary {
   items: PlaylistItem[];
   transitionStyle: TransitionStyle; transitionDurationMs: number; playbackOrder: PlaybackOrder;
+  // Per-asset-type contain/cover/fill override; a missing key means "use the player's default
+  // for that type." Null until an admin opens Settings and saves at least one.
+  scaleSettings: Partial<Record<AssetType, ScaleFitMode>> | null;
 }
 
 // ── Themes ──────────────────────────────────────────────────────────────────

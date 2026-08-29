@@ -3,6 +3,7 @@ import { PlaylistsService } from './playlists.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { StorageService } from '../storage/storage.service';
+import type { JwtService } from '@nestjs/jwt';
 
 // Regression coverage for the cross-tenant IDOR fixed this audit: updateItem/removeItem/
 // reorderItems used to only verify the *playlist* belonged to the caller's org, never that the
@@ -27,7 +28,8 @@ describe('PlaylistsService — cross-tenant item ownership', () => {
     } as unknown as PrismaService;
     const storage = { publicUrl: jest.fn((key: string) => `https://cdn.example/${key}`) } as unknown as StorageService;
     const orgScoped = new OrgScopedService();
-    return { service: new PlaylistsService(prisma, storage, orgScoped), prisma };
+    const jwt = { sign: jest.fn(), verify: jest.fn() } as unknown as JwtService;
+    return { service: new PlaylistsService(prisma, storage, orgScoped, jwt), prisma };
   }
 
   it('updateItem rejects an itemId that belongs to a different playlist, without writing', async () => {

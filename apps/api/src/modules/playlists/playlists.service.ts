@@ -1,8 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import type { UserRole, TransitionStyle, PlaybackOrder } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
+
+// playsetting.md — the six AssetType values that Scale Settings can be configured for, and the
+// fit modes the player already understands (ZonePlayer/ThemeRenderer's objectFit).
+const SCALABLE_ASSET_TYPES = ['IMAGE', 'VIDEO', 'AUDIO', 'TEXT', 'DOCUMENT', 'APP'] as const;
+const SCALE_FIT_MODES = ['contain', 'cover', 'fill'] as const;
+
+const PREVIEW_TOKEN_TTL = '10m';
+const PREVIEW_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+interface PlaylistPreviewJwt {
+  sub: string; // playlistId
+  orgId: string;
+  type: 'playlist-preview';
+}
 
 @Injectable()
 export class PlaylistsService {
@@ -10,6 +25,7 @@ export class PlaylistsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly orgScoped: OrgScopedService,
+    private readonly jwt: JwtService,
   ) {}
 
   async create(orgId: string, name: string, creatorRole: UserRole) {
@@ -21,7 +37,7 @@ export class PlaylistsService {
   async list(orgId: string) {
     const playlists = await this.prisma.playlist.findMany({
       where: { organizationId: orgId },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
       include: {
         _count: { select: { items: true } },
         items: { select: { durationSecs: true, asset: { select: { sizeBytes: true } } } },
@@ -96,10 +112,61 @@ export class PlaylistsService {
   async updateConfig(
     orgId: string,
     id: string,
-    dto: { transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder },
+    dto: {
+      transitionStyle?: TransitionStyle; transitionDurationMs?: number; playbackOrder?: PlaybackOrder;
+      scaleSettings?: Record<string, string>;
+    },
   ) {
     await this.assertOwns(orgId, id);
-    return this.prisma.playlist.update({ where: { id }, data: dto });
+    const { scaleSettings, ...rest } = dto;
+    return this.prisma.playlist.update({
+      where: { id },
+      data: { ...rest, ...(scaleSettings !== undefined && { scaleSettings: this.sanitizeScaleSettings(scaleSettings) }) },
+    });
+  }
+
+  // class-validator has no clean way to validate a dynamic-key map (see UpdateConfigDto), so an
+  // unknown asset-type key or fit value is rejected here instead of silently stored — a typo'd
+  // key would otherwise sit in the DB forever, ignored by every reader.
+  private sanitizeScaleSettings(input: Record<string, string>) {
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (!(SCALABLE_ASSET_TYPES as readonly string[]).includes(key)) {
+        throw new BadRequestException(`Unknown asset type in scaleSettings: ${key}`);
+      }
+      if (!(SCALE_FIT_MODES as readonly string[]).includes(value)) {
+        throw new BadRequestException(`Unknown scale mode for ${key}: ${value}`);
+      }
+      out[key] = value;
+    }
+    return out;
+  }
+
+  // playsetting.md Phase 1 — dashboard-authenticated: mints a short-lived token the caller then
+  // hands to the player app's preview route (getForPreview below), which has no dashboard
+  // session to check against.
+  async createPreviewToken(orgId: string, id: string) {
+    await this.assertOwns(orgId, id);
+    const token = this.jwt.sign(
+      { sub: id, orgId, type: 'playlist-preview' } satisfies PlaylistPreviewJwt,
+      { expiresIn: PREVIEW_TOKEN_TTL },
+    );
+    return { token, expiresAt: new Date(Date.now() + PREVIEW_TOKEN_TTL_MS).toISOString() };
+  }
+
+  // Deliberately not reusing JwtAuthGuard/PlayerJwtGuard — this token is neither a dashboard
+  // user session nor a paired-screen credential, it's a one-off capability scoped to exactly one
+  // playlist. Manual verify here keeps that distinction explicit instead of overloading an
+  // existing guard's meaning.
+  async getForPreview(id: string, token: string) {
+    let payload: PlaylistPreviewJwt;
+    try {
+      payload = this.jwt.verify<PlaylistPreviewJwt>(token);
+    } catch {
+      throw new UnauthorizedException('Preview link has expired or is invalid');
+    }
+    if (payload.type !== 'playlist-preview' || payload.sub !== id) throw new UnauthorizedException();
+    return this.findOne(payload.orgId, id);
   }
 
   async remove(orgId: string, id: string) {
@@ -267,6 +334,18 @@ export class PlaylistsService {
       await Promise.all(orderedIds.map((id, i) => tx.playlistItem.update({ where: { id }, data: { position: -(i + 1) } })));
       await Promise.all(orderedIds.map((id, i) => tx.playlistItem.update({ where: { id }, data: { position: i } })));
     });
+  }
+
+  async reorderPlaylists(orgId: string, orderedIds: string[]) {
+    const ownedCount = await this.prisma.playlist.count({
+      where: { id: { in: orderedIds }, organizationId: orgId },
+    });
+    if (ownedCount !== orderedIds.length) throw new NotFoundException('Playlist not found');
+    // No unique constraint on sortOrder (unlike PlaylistItem.position), so a single-pass update
+    // can't collide mid-transaction — just write final values directly.
+    await this.prisma.$transaction(
+      orderedIds.map((id, i) => this.prisma.playlist.update({ where: { id }, data: { sortOrder: i } })),
+    );
   }
 
   async submit(orgId: string, id: string) {

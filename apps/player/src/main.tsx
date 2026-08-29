@@ -6,12 +6,14 @@ import { installGlobalCrashWatchdog } from './lib/crashRecovery';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import PairingPage from './pages/PairingPage';
 import PlayerPage from './pages/PlayerPage';
+import PlaylistPreviewPage from './pages/PlaylistPreviewPage';
 
 installGlobalCrashWatchdog();
 
 const router = createBrowserRouter([
   { path: '/', element: <PairingPage /> },
   { path: '/play', element: <PlayerPage /> },
+  { path: '/preview', element: <PlaylistPreviewPage /> },
 ]);
 
 const root = document.getElementById('root');

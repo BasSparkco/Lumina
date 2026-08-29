@@ -64,6 +64,8 @@ export class MediaController {
     if (object.contentType) res.setHeader('Content-Type', object.contentType);
     if (object.contentLength != null) res.setHeader('Content-Length', String(object.contentLength));
     if (object.contentRange) res.setHeader('Content-Range', object.contentRange);
+    if (object.etag) res.setHeader('ETag', object.etag);
+    if (object.lastModified) res.setHeader('Last-Modified', object.lastModified.toUTCString());
     if (download) {
       res.setHeader('Content-Disposition', `attachment; filename="${download.replace(/[\r\n"]/g, '')}"`);
     }

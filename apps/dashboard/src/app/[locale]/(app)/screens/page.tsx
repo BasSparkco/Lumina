@@ -197,6 +197,9 @@ function KioskLocationPanel({ screen }: { screen: Screen }) {
         <p className="text-sm text-gray-400 dark:text-gray-500 py-2">{t('kiosk.noBuildings')}</p>
       ) : (
         <>
+          {!screen.kioskLocation && (
+            <p className="text-sm text-amber-700 dark:text-amber-400 mb-2">{t('kiosk.notConfiguredWarning')}</p>
+          )}
           <select
             value={floorId} disabled={!canEditContent}
             onChange={e => setFloorId(e.target.value)}

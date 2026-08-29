@@ -41,11 +41,14 @@ export default defineConfig({
     alias: { '@': '/src' },
   },
   optimizeDeps: {
-    // @lumina/types is a symlinked workspace package, so Vite skips it in dep pre-bundling
-    // by default (it assumes linked packages are already ESM source). Its dist build is
-    // CommonJS, though, so it must be force-included to get the CJS->ESM interop transform
-    // — otherwise named imports of runtime values (schemas, resolveThemeColor) fail because
-    // the raw CJS file gets served to the browser as-is with no real `export` statements.
-    include: ['@lumina/types'],
+    // @lumina/types and @lumina/design-schema are symlinked workspace packages, so Vite skips
+    // them in dep pre-bundling by default (it assumes linked packages are already ESM source).
+    // Their dist builds are CommonJS, though, so both must be force-included to get the
+    // CJS->ESM interop transform — otherwise named imports of runtime values (schemas,
+    // resolveThemeColor, ANIMATION_MOTION) fail because the raw CJS file gets served to the
+    // browser as-is with no real `export` statements. design-schema's absence here broke
+    // `vite dev` for this whole app (DesignRenderer.tsx imports it, and ZonePlayer imports
+    // DesignRenderer unconditionally) — found while verifying playsetting.md Phase 3.
+    include: ['@lumina/types', '@lumina/design-schema'],
   },
 });

@@ -1,4 +1,5 @@
 import type { ResolvedDesignPayload } from '@lumina/design-schema';
+import type { PlayerContentManifest } from '@lumina/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
@@ -31,6 +32,56 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export interface PairingInitResponse {
   pairingCode: string;
   screenId: string;
+}
+
+// playsetting.md Phase 4 — the dashboard-triggered playlist preview. This hits
+// GET /playlists/:id/preview?token=..., a route deliberately outside both the dashboard-session
+// and player-device auth guards (see PlaylistsService.getForPreview on the API side); it's
+// authorized by the short-lived `token` alone, not the player_token every other call here uses.
+// The response reuses the *dashboard's* PlaylistsService.findOne shaping, not this app's own
+// fully-hydrated Playlist/PlaylistItem types further down — THEME/LAYOUT/DESIGN items only carry
+// a light {id, name} reference there (no elements/zones/resolved payload), so PlaylistPreviewPage
+// renders those kinds as a placeholder instead of feeding them into ZonePlayer.
+export interface PreviewAsset {
+  id: string;
+  name: string;
+  type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT' | 'APP';
+  mimeType: string;
+  url: string | null;
+  thumbnailUrl: string | null;
+  pageUrls: string[];
+  textContent: string | null;
+  textFontFamily: string | null;
+  textColor: string | null;
+  textSize: 'SMALL' | 'MEDIUM' | 'LARGE' | 'XLARGE' | null;
+  textBackgroundColor: string | null;
+  textTickerEnabled: boolean;
+  textTickerDirection: TickerDirection;
+  textTickerSpeed: number | null;
+  textTickerCrossOffset: number | null;
+  appProviderId: string | null;
+  appConfig: AppConfig | null;
+}
+export interface PreviewPlaylistItem {
+  id: string;
+  position: number;
+  durationSecs: number;
+  muted: boolean;
+  playFullVideo: boolean;
+  cropZoom: number | null;
+  cropOffsetX: number | null;
+  cropOffsetY: number | null;
+  kind: PlaylistItemKind;
+  asset: PreviewAsset | null;
+  theme: { id: string; name: string } | null;
+  layout: { id: string; name: string } | null;
+  design: { id: string; name: string } | null;
+}
+export interface PreviewPlaylist {
+  id: string;
+  name: string;
+  scaleSettings?: ScaleSettings | null;
+  items: PreviewPlaylistItem[];
 }
 
 export type CheckResponse = { paired: false } | { paired: true; token: string };
@@ -83,9 +134,15 @@ export interface PlaylistItem {
   design: ResolvedDesignPayload | null;
 }
 
+// playsetting.md Phase 1 — per-asset-type contain/cover/fill override; a missing key (or a
+// null/absent map) means "use the hardcoded per-kind default" (see ZonePlayer/ThemeRenderer).
+// Not yet read anywhere — wiring this into rendering is Phase 3.
+export type ScaleSettings = Partial<Record<'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' | 'DOCUMENT' | 'APP', 'contain' | 'cover' | 'fill'>>;
+
 export interface Playlist {
   id: string;
   name: string;
+  scaleSettings?: ScaleSettings | null;
   items: PlaylistItem[];
 }
 
@@ -292,6 +349,7 @@ export interface WayfindingPoi {
   floorId: string;
   floorLabel: string;
   category: WayfindingPoiCategory;
+  iconAssetId: string | null;
   iconUrl: string | null;
 }
 
@@ -302,7 +360,7 @@ export interface WayfindingRouteEdge { id: string; fromNodeId: string; toNodeId:
 export interface WayfindingDirectory {
   kiosk: { floorId: string; x: number; y: number };
   building: { id: string; name: string };
-  floors: { id: string; level: number; label: string; floorPlanUrl: string | null }[];
+  floors: { id: string; level: number; label: string; floorPlanAssetId: string | null; floorPlanUrl: string | null }[];
   pois: WayfindingPoi[];
   // Route graph (Phase 7.3) — the whole building's nodes/edges, enough for the player to compute
   // a shortest path to any POI on any floor entirely on-device, offline-capable.
@@ -339,17 +397,38 @@ export interface PlayerState {
   volume: number;
 }
 
+// Phase 12 (update_payer.md) sync telemetry — mirrors player.service.ts's HeartbeatTelemetry.
+export interface HeartbeatTelemetry {
+  syncState?: 'UNKNOWN' | 'SYNCING' | 'READY' | 'DEGRADED' | 'FAILED';
+  assetsTotal?: number;
+  assetsReady?: number;
+  assetsDownloading?: number;
+  assetsFailed?: number;
+  cacheBytes?: number;
+  freeStorageBytes?: number;
+  storagePersistent?: boolean;
+  lastSuccessfulSyncAt?: string;
+}
+
 export const api = {
   init: () => request<PairingInitResponse>('/player/init', { method: 'POST' }),
   checkPairing: (screenId: string) => request<{ paired: false } | { paired: true; token: string }>(`/player/check?screenId=${screenId}`),
   getPlaylist: () => request<Playlist | null>('/player/playlist'),
   getState: () => request<PlayerState>('/player/state'),
-  heartbeat: (currentAssetId: string | null, hasContent?: boolean) =>
-    request('/player/heartbeat', { method: 'POST', body: JSON.stringify({ currentAssetId, hasContent }) }),
+  // Authoritative Phase 6 player contract. PlayerPage activates desiredState only after every
+  // local dependency in this manifest is downloaded, verified, leased, and durably committed.
+  getManifest: (signal?: AbortSignal) => request<PlayerContentManifest<PlayerState>>('/player/manifest', { signal }),
+  // Phase 12 (update_payer.md) sync telemetry — every field is independently optional, see
+  // player.controller.ts's HeartbeatDto; older callers can still pass just the first two args.
+  heartbeat: (currentAssetId: string | null, hasContent?: boolean, telemetry?: HeartbeatTelemetry) =>
+    request('/player/heartbeat', { method: 'POST', body: JSON.stringify({ currentAssetId, hasContent, ...telemetry }) }),
   // Kiosk analytics (7.4) — see apps/player/src/lib/kioskAnalytics.ts for the fire-and-forget
   // wrapper callers actually use.
   logWayfindingEvents: (events: { type: 'SESSION_START' | 'SEARCH' | 'POI_VIEW'; query?: string; poiId?: string; poiName?: string }[]) =>
     request('/player/wayfinding-events', { method: 'POST', body: JSON.stringify({ events }) }),
+  // playsetting.md Phase 4 — authorized by `token` alone, not player_token; see PreviewPlaylist.
+  previewPlaylist: (playlistId: string, token: string) =>
+    request<PreviewPlaylist>(`/playlists/${playlistId}/preview?token=${encodeURIComponent(token)}`),
   getWeather: (lat: number, lon: number) =>
     request<WeatherData | null>(`/feeds/weather?lat=${lat}&lon=${lon}`),
   getCurrency: (base = 'USD') =>
