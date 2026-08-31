@@ -115,6 +115,14 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(`org:${orgId}`).emit('screen-status', { screenId, status });
   }
 
+  // Push a live "this screen just left the paired fleet" nudge to every dashboard client in the
+  // org — not just the tab that clicked Unpair (a second admin's open Screens tab otherwise only
+  // finds out on its next manual refresh), and the *only* signal at all when the unpair was
+  // initiated from the device itself, since that path has no dashboard mutation to invalidate off.
+  sendUnpairedToOrg(orgId: string, screenId: string) {
+    this.server.to(`org:${orgId}`).emit('screen-unpaired', { screenId });
+  }
+
   // Player can ack a command
   @SubscribeMessage('ack')
   handleAck(@ConnectedSocket() client: AppSocket, @MessageBody() data: { type: string }) {

@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
 import { clearLocalPlayerData } from '../lib/local-player-data';
 import {
   getMediaStorageDiagnostic,
@@ -25,7 +26,7 @@ function closeTab() {
 export default function PlayerControlPanel() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { forget } = usePlayerStore();
+  const { forget, unpair } = usePlayerStore();
   const { autoStart, muted, setAutoStart, setMuted } = useDeviceSettingsStore();
   const storage = useSyncExternalStore(
     subscribeMediaStorageDiagnostic,
@@ -41,8 +42,19 @@ export default function PlayerControlPanel() {
   async function handleUnpair() {
     if (!window.confirm('Unpair this device? It will need a new pairing code to reconnect.')) return;
     disconnectSocket();
+    // Tell the backend first (so the Dashboard's Screens tab flips this screen to "unpaired"
+    // live instead of staying stuck showing it as connected) and recover the fresh pairing code
+    // it hands back — mirrors what a dashboard-initiated unpair pushes over the socket, so this
+    // device resumes polling on the *same* screen entity rather than orphaning a new one.
+    let pairingCode: string | null = null;
+    try {
+      pairingCode = (await api.unpair()).pairingCode;
+    } catch {
+      // Offline or server unreachable — fall through to a local-only reset below. The stored
+      // token is dead to the operator either way, so we shouldn't keep authenticating with it.
+    }
     await clearLocalPlayerData();
-    forget();
+    if (pairingCode) unpair(pairingCode); else forget();
     void navigate('/');
   }
 

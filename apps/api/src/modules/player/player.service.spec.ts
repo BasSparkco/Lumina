@@ -4,6 +4,7 @@ import type { StorageService } from '../storage/storage.service';
 import type { ScreenGateway } from '../ws/screen.gateway';
 import type { SchedulesService } from '../schedules/schedules.service';
 import type { PowerSchedulesService } from '../power-schedules/power-schedules.service';
+import type { ScreensService } from '../screens/screens.service';
 
 // Covers the player's pairing/heartbeat path — the one every physical screen depends on to go
 // from "just unboxed" to "showing content," and to be reported online. These are deliberately
@@ -22,8 +23,9 @@ describe('PlayerService — pairing and heartbeat', () => {
     const gateway = { sendStatusToOrg: jest.fn() } as unknown as ScreenGateway;
     const schedules = {} as SchedulesService;
     const powerSchedules = {} as PowerSchedulesService;
+    const screens = {} as ScreensService;
     return {
-      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules),
+      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens),
       prisma,
       gateway,
     };

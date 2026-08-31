@@ -171,7 +171,7 @@ services:
       - "traefik.http.routers.lumina-dashboard.tls=true"
       - "traefik.http.routers.lumina-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.services.lumina-dashboard.loadbalancer.server.port=3000"
-
+  
   player:
     build:
       context: .

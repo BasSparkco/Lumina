@@ -9,9 +9,22 @@ import { SchedulesModule } from '../schedules/schedules.module';
 import { PowerSchedulesModule } from '../power-schedules/power-schedules.module';
 import { ProofOfPlayModule } from '../proof-of-play/proof-of-play.module';
 import { KioskAnalyticsModule } from '../kiosk-analytics/kiosk-analytics.module';
+import { ScreensModule } from '../screens/screens.module';
 
 @Module({
-  imports: [PassportModule, AuthModule, WsModule, SchedulesModule, PowerSchedulesModule, ProofOfPlayModule, KioskAnalyticsModule],
+  imports: [
+    PassportModule,
+    AuthModule,
+    WsModule,
+    SchedulesModule,
+    PowerSchedulesModule,
+    ProofOfPlayModule,
+    KioskAnalyticsModule,
+    // Device-initiated unpair (PlayerController.selfUnpair) delegates to ScreensService.unpair
+    // so both directions share one reset/audit/broadcast implementation instead of two drifting
+    // copies of the pairing-code regeneration logic.
+    ScreensModule,
+  ],
   providers: [PlayerService, PlayerJwtStrategy],
   controllers: [PlayerController],
 })

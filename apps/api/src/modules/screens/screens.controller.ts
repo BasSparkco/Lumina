@@ -68,7 +68,7 @@ export class ScreensController {
 
   @Post(':id/unpair')
   unpair(@CurrentUser() user: JwtUser, @Param('id') id: string) {
-    return this.screens.unpair(user.orgId, id);
+    return this.screens.unpair(user.orgId, id, { type: 'DASHBOARD', userId: user.sub });
   }
 
   @Put(':id')

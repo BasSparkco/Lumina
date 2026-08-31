@@ -413,6 +413,10 @@ export interface HeartbeatTelemetry {
 export const api = {
   init: () => request<PairingInitResponse>('/player/init', { method: 'POST' }),
   checkPairing: (screenId: string) => request<{ paired: false } | { paired: true; token: string }>(`/player/check?screenId=${screenId}`),
+  // Device-initiated unpair (Player Controls panel) — mirrors the dashboard's own Unpair button
+  // server-side (same reset/audit/broadcast), returning the fresh pairing code so PairingPage can
+  // resume polling on this same screen entity instead of minting an orphan one.
+  unpair: () => request<{ pairingCode: string }>('/player/unpair', { method: 'POST' }),
   getPlaylist: () => request<Playlist | null>('/player/playlist'),
   getState: () => request<PlayerState>('/player/state'),
   // Authoritative Phase 6 player contract. PlayerPage activates desiredState only after every

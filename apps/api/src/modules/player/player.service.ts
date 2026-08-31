@@ -7,6 +7,8 @@ import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import { SchedulesService } from '../schedules/schedules.service';
 import { PowerSchedulesService } from '../power-schedules/power-schedules.service';
+import { ScreensService } from '../screens/screens.service';
+import type { ScreenJwtUser } from '../../common/types/jwt-user';
 import { collectManifestReferences, manifestRevision } from './player-manifest';
 
 // Phase 12 (update_payer.md) sync telemetry — every field independently optional, see heartbeat().
@@ -76,7 +78,21 @@ export class PlayerService {
     private readonly gateway: ScreenGateway,
     private readonly schedules: SchedulesService,
     private readonly powerSchedules: PowerSchedulesService,
+    private readonly screens: ScreensService,
   ) {}
+
+  // Device-initiated unpair (PlayerControlPanel's "Unpair" button) — delegates to
+  // ScreensService.unpair with origin DEVICE so the reset (paired/playerToken/pairingCode/
+  // status), the live 'screen-unpaired' nudge to the org's dashboard clients, and the audit log
+  // entry are all the exact same code path the dashboard's own Unpair button uses, just without
+  // re-pushing the WS 'unpair' command back at the device that's already tearing itself down.
+  // Returns the freshly generated pairing code so the device can resume polling on this same
+  // screen entity instead of minting an orphan one.
+  async selfUnpair(screen: ScreenJwtUser, deviceInfo?: string): Promise<{ pairingCode: string }> {
+    const updated = await this.screens.unpair(screen.orgId, screen.sub, { type: 'DEVICE', deviceInfo });
+    if (!updated.pairingCode) throw new NotFoundException();
+    return { pairingCode: updated.pairingCode };
+  }
 
   async requestPairingCode(): Promise<{ pairingCode: string; screenId: string }> {
     let code: string;

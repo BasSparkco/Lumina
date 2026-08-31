@@ -5,6 +5,7 @@ import type { StorageService } from '../storage/storage.service';
 import type { ScreenGateway } from '../ws/screen.gateway';
 import type { SchedulesService } from '../schedules/schedules.service';
 import type { PowerSchedulesService } from '../power-schedules/power-schedules.service';
+import type { ScreensService } from '../screens/screens.service';
 
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
@@ -51,6 +52,7 @@ function makeService(records: unknown[]) {
     {} as ScreenGateway,
     {} as SchedulesService,
     {} as PowerSchedulesService,
+    {} as ScreensService,
   );
   return { service, prisma };
 }

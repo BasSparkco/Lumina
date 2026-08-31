@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiTags } from '@nestjs/swagger';
@@ -95,6 +95,15 @@ export class PlayerController {
   @UseGuards(PlayerJwtGuard)
   getManifest(@CurrentUser() screen: ScreenJwtUser) {
     return this.player.getManifest(screen.sub);
+  }
+
+  // Device-initiated unpair (the Player Controls panel's "Unpair" button) — the counterpart to
+  // ScreensController's dashboard-initiated POST :id/unpair. Same reset/audit/broadcast, just
+  // triggered from the screen's own credentials instead of an org user's.
+  @Post('unpair')
+  @UseGuards(PlayerJwtGuard)
+  selfUnpair(@CurrentUser() screen: ScreenJwtUser, @Headers('user-agent') userAgent?: string) {
+    return this.player.selfUnpair(screen, userAgent);
   }
 
   // Periodic heartbeat from player

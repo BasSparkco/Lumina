@@ -5,8 +5,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import { OrgScopedService } from '../../common/org-scoped.service';
+import { AuditService } from '../audit/audit.service';
 import type { CreateScreenDto } from './dto/create-screen.dto';
 import type { UpdatePrayerDto } from './dto/update-prayer.dto';
+
+// Who triggered an unpair — carried through to both the audit log entry and which side-effects
+// fire: DASHBOARD hands the still-connected device its fresh code over the socket (the device
+// doesn't know yet); DEVICE already knows and is tearing down its own session, so that push
+// would just be a wasted echo back to the same socket that's mid-disconnect.
+export type UnpairOrigin =
+  | { type: 'DASHBOARD'; userId: string }
+  | { type: 'DEVICE'; deviceInfo?: string };
 
 const CRASH_ROLLUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -18,6 +27,7 @@ export class ScreensService {
     private readonly gateway: ScreenGateway,
     private readonly storage: StorageService,
     private readonly orgScoped: OrgScopedService,
+    private readonly audit: AuditService,
   ) {}
 
   // Screen setting changes push to the screen immediately only when the org has opted into
@@ -99,8 +109,8 @@ export class ScreensService {
   // revocation, so a still-online player is told over the socket to drop its stored credentials
   // and go back to the pairing screen; a fresh pairing code is generated for whatever device
   // re-pairs into this screen next (the same one, or a swapped-in replacement).
-  async unpair(orgId: string, id: string) {
-    await this.findOne(orgId, id);
+  async unpair(orgId: string, id: string, origin: UnpairOrigin) {
+    const screen = await this.findOne(orgId, id);
 
     let code: string;
     let attempts = 0;
@@ -113,10 +123,37 @@ export class ScreensService {
       where: { id },
       data: { paired: false, playerToken: null, pairingCode: code, status: 'OFFLINE' },
     });
-    // Hands the new code straight to the still-connected device rather than making it request
-    // its own via /player/init — that would mint an unrelated orphan screen row instead of
-    // re-pairing back into this one, losing its name/history/settings in the dashboard.
-    this.gateway.sendToScreen(id, { type: 'unpair', pairingCode: code });
+
+    if (origin.type === 'DASHBOARD') {
+      // Hands the new code straight to the still-connected device rather than making it request
+      // its own via /player/init — that would mint an unrelated orphan screen row instead of
+      // re-pairing back into this one, losing its name/history/settings in the dashboard. Skipped
+      // for a DEVICE-origin unpair: that device already knows and is tearing its own session down
+      // via the direct HTTP response instead, so this would just echo the command back into the
+      // same socket it's in the middle of disconnecting.
+      this.gateway.sendToScreen(id, { type: 'unpair', pairingCode: code });
+    }
+    // Either way, nudge every dashboard client in the org live — the tab that just called this
+    // (if any) already gets the fresh row back in its own response, but this is what a *second*
+    // open Screens tab, or the dashboard after a DEVICE-origin unpair, has to go on instead of
+    // sitting stale until a manual refresh.
+    this.gateway.sendUnpairedToOrg(orgId, id);
+
+    await this.audit.log({
+      organizationId: orgId,
+      userId: origin.type === 'DASHBOARD' ? origin.userId : undefined,
+      action: 'unpair',
+      resourceType: 'screen-pairing',
+      resourceId: id,
+      metadata: {
+        origin: origin.type,
+        screenId: id,
+        screenName: screen.name,
+        ...(origin.type === 'DEVICE' ? { deviceUserAgent: origin.deviceInfo ?? null } : {}),
+        timestamp: new Date().toISOString(),
+      },
+    });
+
     return updated;
   }
 
