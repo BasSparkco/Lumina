@@ -19,7 +19,7 @@ import {
 import { DesignerTopBar, type SaveResult } from './DesignerTopBar';
 import { DesignerSidebar } from './DesignerSidebar';
 import { CanvasViewport } from './CanvasViewport';
-import { PropertiesPanel } from './PropertiesPanel';
+import { InspectorPanel, type InspectorTab } from './InspectorPanel';
 import { LayersPanel } from './LayersPanel';
 import { SceneStrip } from './SceneStrip';
 import { VariablesPanel } from './VariablesPanel';
@@ -78,6 +78,10 @@ export function DesignerShell({
   const [layersPanelOpen, setLayersPanelOpen] = useState(false);
   const [variablesPanelOpen, setVariablesPanelOpen] = useState(false);
   const [versionsPanelOpen, setVersionsPanelOpen] = useState(false);
+  // Merged Templates/Properties sidebar (InspectorPanel) state lives here since both the
+  // DesignerSidebar's Templates button and canvas selection need to drive `inspectorTab`.
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('properties');
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   // designer.md §26 — Template authoring keeps its own simpler explicit-save-only flow (Phase 5);
   // autosave drafts are a plain-designer2 concern, so the hook gets `null` in Template mode and
   // its effect never fires.
@@ -118,6 +122,19 @@ export function DesignerShell({
   }
 
   const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
+
+  // Auto-switch the InspectorPanel to Properties whenever a selection is made on the canvas.
+  // Adjusting state during render (not an effect) mirrors AppShell's own prevPath pattern — it
+  // fires exactly once per selection change, not on every render while a selection persists, so
+  // a user who manually flips back to Templates mid-session (while something stays selected)
+  // doesn't get yanked back to Properties on the next unrelated re-render. Deselecting (clicking
+  // empty canvas) intentionally leaves whatever tab is active alone.
+  const selectionKey = selectedElementIds.join(',');
+  const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
+  if (selectionKey !== prevSelectionKey) {
+    setPrevSelectionKey(selectionKey);
+    if (selectedElementIds.length > 0) setInspectorTab('properties');
+  }
 
   // designer.md Phase 10 — Manual Save. `document` is already validated DesignDocument state, so
   // no re-validation here — the API re-validates it against DesignDocumentSchema (and, for plain
@@ -266,6 +283,11 @@ export function DesignerShell({
       <div className="flex min-h-0 flex-1">
         {!previewing && (
           <DesignerSidebar
+            onShowTemplates={() => {
+              setInspectorTab('templates');
+              setInspectorCollapsed(false);
+            }}
+            isTemplatesActive={inspectorTab === 'templates' && !inspectorCollapsed}
             onAddText={() => {
               if (document && activeScene) commit(() => addElement(createTextElement(document.canvas, activeScene.elements)));
             }}
@@ -307,7 +329,17 @@ export function DesignerShell({
             </div>
           )}
         </div>
-        {!previewing && <PropertiesPanel adapter={adapter} commit={commit} isTemplateMode={!!templateId} />}
+        {!previewing && (
+          <InspectorPanel
+            activeTab={inspectorTab}
+            onTabChange={setInspectorTab}
+            collapsed={inspectorCollapsed}
+            onCollapsedChange={setInspectorCollapsed}
+            adapter={adapter}
+            commit={commit}
+            isTemplateMode={!!templateId}
+          />
+        )}
       </div>
       {!previewing && <SceneStrip commit={commit} adapter={adapter} />}
       <LayersPanel

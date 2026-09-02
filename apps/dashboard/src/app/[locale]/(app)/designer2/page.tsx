@@ -141,7 +141,7 @@ function Designer2PageInner() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="flex h-full flex-col">
       <h1 className="sr-only">{t('designer2')}</h1>
       <DesignerShell
         templateId={templateId ?? undefined}

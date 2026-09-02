@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Copy, GripHorizontal, Image as ImageIcon, Plus, Trash2, Video } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, GripHorizontal, Image as ImageIcon, Plus, Trash2, Video } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -165,6 +165,10 @@ export function SceneStrip({ commit, adapter }: SceneStripProps) {
   const updateScene = useDesignerStore((s) => s.updateScene);
   const { confirmDelete } = useConfirmBeforeDelete();
 
+  // Hidden by default on open — most designs stay single-scene, so the strip only earns its
+  // space once someone actually adds a second scene. The toggle tab (bottom-full above the
+  // collapsing wrapper) keeps it discoverable either way.
+  const [collapsed, setCollapsed] = useState(true);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const thumbnailsRef = useRef(thumbnails);
@@ -244,35 +248,51 @@ export function SceneStrip({ commit, adapter }: SceneStripProps) {
   }
 
   return (
-    <div className="flex h-24 shrink-0 items-center gap-2 overflow-x-auto border-t border-gray-200 px-3 dark:border-gray-800">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={orderedIds} strategy={horizontalListSortingStrategy}>
-          {scenes.map((scene) => (
-            <SceneTile
-              key={scene.id}
-              scene={scene}
-              active={scene.id === activeSceneId}
-              thumbnailUrl={thumbnails[scene.id]}
-              onSelect={() => setActiveScene(scene.id)}
-              onRename={(name) => commit(() => updateScene(scene.id, { name }))}
-              onDurationChange={(durationMs) => commit(() => updateScene(scene.id, { durationMs }))}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setContextMenu({ x: e.clientX, y: e.clientY, actions: buildContextMenuActions(scene) });
-              }}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
-
+    // relative + shrink-0 so this wrapper's own bottom edge stays anchored at the true bottom of
+    // DesignerShell's column (nothing renders after it there) regardless of collapse — the toggle
+    // tab below sits at `bottom-full`, i.e. flush above whatever height this box currently has, so
+    // it tracks the slide instead of needing its position computed in JS.
+    <div className="relative shrink-0">
       <button
         type="button"
-        onClick={() => commit(() => addScene(createScene(document)))}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 dark:border-gray-700 dark:text-gray-600 dark:hover:border-gray-600 dark:hover:text-gray-400"
-        aria-label="Add scene"
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Show scenes' : 'Hide scenes'}
+        className="absolute bottom-full start-3 z-10 flex h-5 w-9 items-center justify-center rounded-t-md border border-b-0 border-gray-200 bg-white text-gray-400 shadow-sm hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500 dark:hover:text-gray-200"
       >
-        <Plus className="h-4 w-4" />
+        {collapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
+      <div className={`overflow-hidden transition-[height] duration-200 ease-in-out ${collapsed ? 'h-0' : 'h-24'}`}>
+        <div className="flex h-24 items-center gap-2 overflow-x-auto border-t border-gray-200 px-3 dark:border-gray-800">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={orderedIds} strategy={horizontalListSortingStrategy}>
+              {scenes.map((scene) => (
+                <SceneTile
+                  key={scene.id}
+                  scene={scene}
+                  active={scene.id === activeSceneId}
+                  thumbnailUrl={thumbnails[scene.id]}
+                  onSelect={() => setActiveScene(scene.id)}
+                  onRename={(name) => commit(() => updateScene(scene.id, { name }))}
+                  onDurationChange={(durationMs) => commit(() => updateScene(scene.id, { durationMs }))}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, actions: buildContextMenuActions(scene) });
+                  }}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+
+          <button
+            type="button"
+            onClick={() => commit(() => addScene(createScene(document)))}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 dark:border-gray-700 dark:text-gray-600 dark:hover:border-gray-600 dark:hover:text-gray-400"
+            aria-label="Add scene"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
 
       <ContextMenu state={contextMenu} onClose={() => setContextMenu(null)} />
     </div>

@@ -256,12 +256,7 @@ interface PropertiesPanelProps {
 }
 
 function Panel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="w-72 shrink-0 space-y-4 overflow-y-auto border-l border-gray-200 p-4 dark:border-gray-800">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-600">Properties</h3>
-      {children}
-    </div>
-  );
+  return <div className="space-y-4 p-4">{children}</div>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

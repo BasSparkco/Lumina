@@ -17,11 +17,14 @@ import {
 } from 'lucide-react';
 import type { ShapeKindSchema } from '@lumina/design-schema';
 import type { z } from 'zod';
-import { TemplatesGalleryPanel } from './TemplatesGalleryPanel';
 
 type ShapeKind = z.infer<typeof ShapeKindSchema>;
 
 interface DesignerSidebarProps {
+  // Opens (or re-focuses) the Templates tab in the merged InspectorPanel — DesignerShell owns
+  // that tab state since it's shared with the Properties tab (auto-switched on selection).
+  onShowTemplates: () => void;
+  isTemplatesActive?: boolean;
   onAddText: () => void;
   onAddShape: (shape: ShapeKind) => void;
   onAddImagePlaceholder: () => void;
@@ -44,6 +47,8 @@ const SHAPE_OPTIONS: { kind: ShapeKind; label: string; icon: typeof Square }[] =
 ];
 
 export function DesignerSidebar({
+  onShowTemplates,
+  isTemplatesActive,
   onAddText,
   onAddShape,
   onAddImagePlaceholder,
@@ -52,12 +57,10 @@ export function DesignerSidebar({
   onToggleVariables,
 }: DesignerSidebarProps) {
   const [shapesOpen, setShapesOpen] = useState(false);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   return (
-    <div className="flex shrink-0">
     <div className="relative flex w-16 shrink-0 flex-col items-center gap-1 border-r border-gray-200 py-3 dark:border-gray-800">
-      <button className={tabBtn} aria-pressed={templatesOpen} onClick={() => setTemplatesOpen((v) => !v)}>
+      <button className={tabBtn} aria-pressed={isTemplatesActive} onClick={onShowTemplates}>
         <LayoutTemplate className="h-4 w-4" />
         Templates
       </button>
@@ -121,12 +124,6 @@ export function DesignerSidebar({
         <Upload className="h-4 w-4" />
         Uploads
       </button>
-    </div>
-    {templatesOpen && (
-      <div className="flex w-80 shrink-0 flex-col border-r border-gray-200 dark:border-gray-800">
-        <TemplatesGalleryPanel onClose={() => setTemplatesOpen(false)} />
-      </div>
-    )}
     </div>
   );
 }

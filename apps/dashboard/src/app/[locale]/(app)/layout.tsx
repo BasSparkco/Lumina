@@ -77,6 +77,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // inheriting whatever icon-only state was left over from a desktop session.
   const effectiveCollapsed = collapsed && !mobileOpen;
 
+  // designer2 gets its own treatment below (an always-off-canvas hamburger drawer, regardless
+  // of viewport width) rather than the icon-collapse behavior, so it's excluded from the
+  // "/designer" checks here to avoid double-handling.
+  const isDesigner2 = path.includes('/designer2');
+
   // Close the mobile drawer whenever the route changes so picking a page doesn't leave it open,
   // and auto-collapse the sidebar on entering the canvas-heavy Designer so it has more room.
   // Adjusting state during render (rather than in an effect) avoids an extra post-navigation
@@ -87,8 +92,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const restoreOnExitRef = useRef(false);
   const [prevPath, setPrevPath] = useState(path);
   if (path !== prevPath) {
-    const wasInDesigner = prevPath.includes('/designer');
-    const isInDesigner = path.includes('/designer');
+    const wasInDesigner = prevPath.includes('/designer') && !prevPath.includes('/designer2');
+    const isInDesigner = path.includes('/designer') && !path.includes('/designer2');
     setPrevPath(path);
     setMobileOpen(false);
     if (isInDesigner && !wasInDesigner) {
@@ -120,32 +125,37 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
       {/* Mobile hamburger trigger — hidden once the drawer is open, since the drawer's own
-          close button takes over at that point. */}
+          close button takes over at that point. Stays live at desktop widths on designer2, since
+          that page always treats the sidebar as an off-canvas drawer rather than a static column. */}
       {!mobileOpen && (
         <button onClick={() => setMobileOpen(true)} title={t('openMenu')}
-          className="fixed top-4 end-4 z-20 md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 shadow-sm">
+          className={`fixed top-4 end-4 z-20 ${isDesigner2 ? '' : 'md:hidden'} inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 shadow-sm`}>
           <Menu className="w-5 h-5" />
         </button>
       )}
 
       {/* Mobile backdrop */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setMobileOpen(false)} />
+        <div className={`fixed inset-0 z-30 bg-black/40 ${isDesigner2 ? '' : 'md:hidden'}`} onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar. On designer2 it never joins the static desktop layout (no md:static) — it's
+          always an off-canvas drawer toggled by the hamburger, on any viewport width, so the
+          canvas gets the full page. */}
       <aside className={`fixed inset-y-0 start-0 z-40 transition-all duration-200 ease-in-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
-      } md:static md:translate-x-0 md:rtl:translate-x-0 ${effectiveCollapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-900 border-e border-gray-200 dark:border-gray-800 flex flex-col shrink-0`}>
+      } ${isDesigner2 ? '' : 'md:static md:translate-x-0 md:rtl:translate-x-0'} ${effectiveCollapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-900 border-e border-gray-200 dark:border-gray-800 flex flex-col shrink-0`}>
         <div className="flex items-center gap-2 px-5 py-5 border-b border-gray-100 dark:border-gray-800">
           <Tv className="w-5 h-5 text-indigo-600 shrink-0" />
           {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Novacore Signage</span>}
-          <button onClick={() => { restoreOnExitRef.current = false; setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
-            className="ms-auto hidden md:block text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
-            {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-          </button>
+          {!isDesigner2 && (
+            <button onClick={() => { restoreOnExitRef.current = false; setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
+              className="ms-auto hidden md:block text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
+              {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          )}
           <button onClick={() => setMobileOpen(false)} title={t('closeMenu')}
-            className="ms-auto md:hidden text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
+            className={`ms-auto ${isDesigner2 ? '' : 'md:hidden'} text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0`}>
             <X className="w-4 h-4" />
           </button>
         </div>
