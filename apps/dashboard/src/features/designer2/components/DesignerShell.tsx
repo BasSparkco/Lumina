@@ -20,9 +20,7 @@ import { DesignerTopBar, type SaveResult } from './DesignerTopBar';
 import { DesignerSidebar } from './DesignerSidebar';
 import { CanvasViewport } from './CanvasViewport';
 import { InspectorPanel, type InspectorTab } from './InspectorPanel';
-import { LayersPanel } from './LayersPanel';
 import { SceneStrip } from './SceneStrip';
-import { VariablesPanel } from './VariablesPanel';
 import { VersionsPanel } from './VersionsPanel';
 
 interface DesignerShellProps {
@@ -48,8 +46,8 @@ interface DesignerShellProps {
 //   Back | Name | Undo Redo | Canvas | Preview | Save
 //   Templates/Text/.../Uploads | CANVAS | Properties
 //   Scenes / Timeline
-// Layers is a toggled overlay (see LayersPanel), not a persistent row — matches the existing
-// Layout/Theme editors' own convention.
+// Templates/Properties/Layers/Variables share one tabbed InspectorPanel (see InspectorPanel.tsx)
+// rather than each being its own toggled overlay.
 export function DesignerShell({
   templateId,
   templateName,
@@ -75,11 +73,10 @@ export function DesignerShell({
   const reorderAll = useDesignerStore((s) => s.reorderAll);
   const copySelection = useDesignerStore((s) => s.copySelection);
   const pasteClipboard = useDesignerStore((s) => s.pasteClipboard);
-  const [layersPanelOpen, setLayersPanelOpen] = useState(false);
-  const [variablesPanelOpen, setVariablesPanelOpen] = useState(false);
   const [versionsPanelOpen, setVersionsPanelOpen] = useState(false);
-  // Merged Templates/Properties sidebar (InspectorPanel) state lives here since both the
-  // DesignerSidebar's Templates button and canvas selection need to drive `inspectorTab`.
+  // Merged Templates/Properties/Layers/Variables sidebar (InspectorPanel) state lives here since
+  // DesignerSidebar's Templates button, DesignerTopBar's Layers button, and canvas selection all
+  // need to drive `inspectorTab`.
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('properties');
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   // designer.md §26 — Template authoring keeps its own simpler explicit-save-only flow (Phase 5);
@@ -123,7 +120,9 @@ export function DesignerShell({
 
   const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
 
-  // Auto-switch the InspectorPanel to Properties whenever a selection is made on the canvas.
+  // Auto-switch the InspectorPanel to Properties whenever a selection is made on the canvas, and
+  // un-collapse it if it was hidden — a click on the canvas should always surface the properties
+  // it just switched to, not silently change tab behind a closed panel.
   // Adjusting state during render (not an effect) mirrors AppShell's own prevPath pattern — it
   // fires exactly once per selection change, not on every render while a selection persists, so
   // a user who manually flips back to Templates mid-session (while something stays selected)
@@ -133,7 +132,10 @@ export function DesignerShell({
   const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
   if (selectionKey !== prevSelectionKey) {
     setPrevSelectionKey(selectionKey);
-    if (selectedElementIds.length > 0) setInspectorTab('properties');
+    if (selectedElementIds.length > 0) {
+      setInspectorTab('properties');
+      setInspectorCollapsed(false);
+    }
   }
 
   // designer.md Phase 10 — Manual Save. `document` is already validated DesignDocument state, so
@@ -267,7 +269,11 @@ export function DesignerShell({
         zoom={zoom}
         onZoomIn={() => setZoom(Math.min(4, zoom * 1.2))}
         onZoomOut={() => setZoom(Math.max(0.1, zoom / 1.2))}
-        onToggleLayers={() => setLayersPanelOpen((v) => !v)}
+        onShowLayers={() => {
+          setInspectorTab('layers');
+          setInspectorCollapsed(false);
+        }}
+        isLayersActive={inspectorTab === 'layers' && !inspectorCollapsed}
         onToggleVersions={() => setVersionsPanelOpen((v) => !v)}
         onSave={document ? () => void handleSave() : undefined}
         saving={saving}
@@ -303,7 +309,11 @@ export function DesignerShell({
             onAddVideoPlaceholder={() => {
               if (document && activeScene) commit(() => addElement(createVideoPlaceholderElement(document.canvas, activeScene.elements)));
             }}
-            onToggleVariables={() => setVariablesPanelOpen((v) => !v)}
+            onShowVariables={() => {
+              setInspectorTab('variables');
+              setInspectorCollapsed(false);
+            }}
+            isVariablesActive={inspectorTab === 'variables' && !inspectorCollapsed}
           />
         )}
         <div className="relative min-w-0 flex-1">
@@ -338,21 +348,13 @@ export function DesignerShell({
             adapter={adapter}
             commit={commit}
             isTemplateMode={!!templateId}
+            onReorderLayers={(orderedIds) => commit(() => reorderAll(orderedIds))}
+            variables={document?.variables ?? {}}
+            onCommitVariables={(next) => commit(() => setVariables(next))}
           />
         )}
       </div>
       {!previewing && <SceneStrip commit={commit} adapter={adapter} />}
-      <LayersPanel
-        open={layersPanelOpen && !previewing}
-        onOpenChange={setLayersPanelOpen}
-        onReorder={(orderedIds) => commit(() => reorderAll(orderedIds))}
-      />
-      <VariablesPanel
-        open={variablesPanelOpen && !previewing}
-        onOpenChange={setVariablesPanelOpen}
-        variables={document?.variables ?? {}}
-        onCommit={(next) => commit(() => setVariables(next))}
-      />
       <VersionsPanel
         open={versionsPanelOpen && !previewing}
         onOpenChange={setVersionsPanelOpen}

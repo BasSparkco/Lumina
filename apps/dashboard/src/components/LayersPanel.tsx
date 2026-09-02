@@ -36,6 +36,12 @@ interface LayersPanelProps {
   title: string;
   emptyLabel: string;
   closeLabel: string;
+  // 'modal' (default) is the original toggled-overlay treatment — backdrop + fixed drawer —
+  // used by the legacy Designer's Themes/Layouts editors. 'inline' drops the backdrop, fixed
+  // positioning and header, and just renders the list to fill its container: designer2's
+  // InspectorPanel docks this as one of its own tabs, where the tab bar already supplies the
+  // label and a shared close button.
+  variant?: 'modal' | 'inline';
 }
 
 function LayerRow({
@@ -96,6 +102,7 @@ export function LayersPanel({
   title,
   emptyLabel,
   closeLabel,
+  variant = 'modal',
 }: LayersPanelProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const orderedIds = items.map((i) => i.id);
@@ -111,6 +118,28 @@ export function LayersPanel({
 
   if (!open) return null;
 
+  const list = (
+    <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
+      {items.length === 0 && (
+        <div className="px-2 py-6 text-center text-xs text-gray-400 dark:text-gray-500">{emptyLabel}</div>
+      )}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+          {items.map((item) => (
+            <LayerRow
+              key={item.id}
+              item={item}
+              selected={item.id === selectedId}
+              onSelect={() => onSelect(item.id)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+
+  if (variant === 'inline') return list;
+
   return (
     <>
       <div className="fixed inset-0 z-30 bg-black/40" onClick={() => onOpenChange(false)} />
@@ -125,27 +154,7 @@ export function LayersPanel({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
-          {items.length === 0 && (
-            <div className="px-2 py-6 text-center text-xs text-gray-400 dark:text-gray-500">{emptyLabel}</div>
-          )}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
-              {items.map((item) => (
-                <LayerRow
-                  key={item.id}
-                  item={item}
-                  selected={item.id === selectedId}
-                  onSelect={() => onSelect(item.id)}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
-        </div>
+        {list}
       </aside>
     </>
   );

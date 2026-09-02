@@ -3,8 +3,6 @@ import { LayersPanel as SharedLayersPanel } from '@/components/LayersPanel';
 import { useDesignerStore } from '../state/designer.store';
 
 interface DesignerLayersPanelProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   // Commit-wrapped by the caller (DesignerShell owns useDesignerHistory) so drag-reorder is a
   // single undo step, same convention as every other mutation in this feature.
   onReorder: (orderedIdsFrontToBack: string[]) => void;
@@ -14,8 +12,11 @@ interface DesignerLayersPanelProps {
 // drag/sort/UI logic) rather than reimplementing layer list UI from scratch. Kept local because
 // the Designer will eventually need per-item lock/visibility icons and multi-select (designer.md
 // §7) the shared component doesn't expose yet — better to keep that mapping here than grow the
-// shared component's prop surface prematurely.
-export function LayersPanel({ open, onOpenChange, onReorder }: DesignerLayersPanelProps) {
+// shared component's prop surface prematurely. Always rendered `variant="inline"`, docked as one
+// of InspectorPanel's tabs — visibility is the tab switch itself, not an open/close flag, so
+// there's no `open`/`onOpenChange` here (unlike the legacy Designer's modal usage of the shared
+// component).
+export function LayersPanel({ onReorder }: DesignerLayersPanelProps) {
   const document = useDesignerStore((s) => s.document);
   const activeSceneId = useDesignerStore((s) => s.activeSceneId);
   const selectedElementIds = useDesignerStore((s) => s.selectedElementIds);
@@ -29,8 +30,8 @@ export function LayersPanel({ open, onOpenChange, onReorder }: DesignerLayersPan
 
   return (
     <SharedLayersPanel
-      open={open}
-      onOpenChange={onOpenChange}
+      open
+      onOpenChange={() => {}}
       items={items}
       selectedId={selectedElementIds[0] ?? null}
       onSelect={(id) => setSelection([id])}
@@ -38,6 +39,7 @@ export function LayersPanel({ open, onOpenChange, onReorder }: DesignerLayersPan
       title="Layers"
       emptyLabel="No layers yet"
       closeLabel="Close"
+      variant="inline"
     />
   );
 }

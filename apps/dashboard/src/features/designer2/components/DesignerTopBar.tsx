@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2, Check } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2, Check, Menu } from 'lucide-react';
+import { useAppSidebar } from '@/context/AppSidebarContext';
 import { SaveStatus } from './SaveStatus';
 import type { AutosaveStatus } from '../hooks/useAutosave';
 
@@ -25,7 +26,8 @@ interface DesignerTopBarProps {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onToggleLayers: () => void;
+  onShowLayers: () => void;
+  isLayersActive?: boolean;
   onToggleVersions: () => void;
   // designer.md Phase 6 — a Designer-only scene-sequencing playback loop, not the full Player-
   // parity preview (dynamic variables/animation/video, designer.md Phase 11's design-runtime).
@@ -63,7 +65,8 @@ export function DesignerTopBar({
   zoom,
   onZoomIn,
   onZoomOut,
-  onToggleLayers,
+  onShowLayers,
+  isLayersActive,
   onToggleVersions,
   previewing,
   onTogglePreview,
@@ -76,6 +79,10 @@ export function DesignerTopBar({
 }: DesignerTopBarProps) {
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  // Opens the app-level nav sidebar (rendered as an off-canvas drawer while on designer2 — see
+  // AppShell's own comment) from inside this toolbar instead of AppShell's floating top-end
+  // button, which designer2 suppresses in favor of this one.
+  const appSidebar = useAppSidebar();
 
   function startRename() {
     if (!onRename) return;
@@ -91,6 +98,14 @@ export function DesignerTopBar({
 
   return (
     <div className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
+      {appSidebar && !appSidebar.open && (
+        <>
+          <button className={btn} onClick={() => appSidebar.setOpen(true)} aria-label="Open menu">
+            <Menu className="h-4 w-4" />
+          </button>
+          <div className="h-5 w-px bg-gray-200 dark:bg-gray-800" />
+        </>
+      )}
       <button className={btn} onClick={onBack} aria-label="Back">
         <ArrowLeft className="h-4 w-4" />
       </button>
@@ -137,7 +152,7 @@ export function DesignerTopBar({
         <ZoomIn className="h-4 w-4" />
       </button>
 
-      <button className={btn} onClick={onToggleLayers} aria-label="Layers">
+      <button className={btn} onClick={onShowLayers} aria-pressed={isLayersActive} aria-label="Layers">
         <Layers className="h-4 w-4" />
       </button>
 

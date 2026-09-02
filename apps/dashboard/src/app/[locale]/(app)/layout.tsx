@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
 import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { AppSidebarProvider } from '@/context/AppSidebarContext';
 import { EditorDirtyProvider, useEditorDirty } from '@/context/EditorDirtyContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
@@ -87,9 +88,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
   // Adjusting state during render (rather than in an effect) avoids an extra post-navigation
   // render pass. Collapsing only fires on the transition into /designer, not on every render
   // while there, so it doesn't fight a user who manually re-expands mid-session. If it was open
-  // when they entered, restoreOnExitRef remembers to reopen it on the way out; a manual toggle
-  // while inside the Designer cancels that so leaving doesn't override the user's own choice.
-  const restoreOnExitRef = useRef(false);
+  // when they entered, restoreOnExit remembers to reopen it on the way out; a manual toggle while
+  // inside the Designer cancels that so leaving doesn't override the user's own choice. Plain
+  // state, not a ref — mutating a ref during render is unsafe under React's concurrent rendering
+  // (a discarded/retried render could mutate it more than once), but state set during render is
+  // the same sanctioned pattern the sibling `prevPath` update below already uses.
+  const [restoreOnExit, setRestoreOnExit] = useState(false);
   const [prevPath, setPrevPath] = useState(path);
   if (path !== prevPath) {
     const wasInDesigner = prevPath.includes('/designer') && !prevPath.includes('/designer2');
@@ -97,11 +101,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
     setPrevPath(path);
     setMobileOpen(false);
     if (isInDesigner && !wasInDesigner) {
-      restoreOnExitRef.current = !collapsed;
+      setRestoreOnExit(!collapsed);
       if (!collapsed) setCollapsed(true);
     } else if (wasInDesigner && !isInDesigner) {
-      if (restoreOnExitRef.current) setCollapsed(false);
-      restoreOnExitRef.current = false;
+      if (restoreOnExit) setCollapsed(false);
+      setRestoreOnExit(false);
     }
   }
 
@@ -125,11 +129,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
       {/* Mobile hamburger trigger — hidden once the drawer is open, since the drawer's own
-          close button takes over at that point. Stays live at desktop widths on designer2, since
-          that page always treats the sidebar as an off-canvas drawer rather than a static column. */}
-      {!mobileOpen && (
+          close button takes over at that point. Suppressed entirely on designer2: that page
+          renders its own trigger inside DesignerTopBar instead (top-left, part of its own
+          toolbar, driven by AppSidebarContext below) rather than this floating button. */}
+      {!mobileOpen && !isDesigner2 && (
         <button onClick={() => setMobileOpen(true)} title={t('openMenu')}
-          className={`fixed top-4 end-4 z-20 ${isDesigner2 ? '' : 'md:hidden'} inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 shadow-sm`}>
+          className="fixed top-4 end-4 z-20 md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 shadow-sm">
           <Menu className="w-5 h-5" />
         </button>
       )}
@@ -149,7 +154,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <Tv className="w-5 h-5 text-indigo-600 shrink-0" />
           {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Novacore Signage</span>}
           {!isDesigner2 && (
-            <button onClick={() => { restoreOnExitRef.current = false; setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
+            <button onClick={() => { setRestoreOnExit(false); setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
               className="ms-auto hidden md:block text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
               {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
@@ -263,7 +268,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto">
+        <AppSidebarProvider open={mobileOpen} setOpen={setMobileOpen}>{children}</AppSidebarProvider>
+      </main>
     </div>
   );
 }

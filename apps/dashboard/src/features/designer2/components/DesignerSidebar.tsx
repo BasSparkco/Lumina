@@ -30,7 +30,10 @@ interface DesignerSidebarProps {
   onAddImagePlaceholder: () => void;
   onAddQrPlaceholder: () => void;
   onAddVideoPlaceholder: () => void;
-  onToggleVariables: () => void;
+  // Opens (or re-focuses) the Variables tab in the merged InspectorPanel — same pattern as
+  // onShowTemplates above.
+  onShowVariables: () => void;
+  isVariablesActive?: boolean;
 }
 
 const tabBtn =
@@ -54,7 +57,8 @@ export function DesignerSidebar({
   onAddImagePlaceholder,
   onAddQrPlaceholder,
   onAddVideoPlaceholder,
-  onToggleVariables,
+  onShowVariables,
+  isVariablesActive,
 }: DesignerSidebarProps) {
   const [shapesOpen, setShapesOpen] = useState(false);
 
@@ -112,7 +116,7 @@ export function DesignerSidebar({
         QR
       </button>
 
-      <button className={tabBtn} onClick={onToggleVariables} title="Design variables (designer.md §17.2)">
+      <button className={tabBtn} aria-pressed={isVariablesActive} onClick={onShowVariables} title="Design variables (designer.md §17.2)">
         <Braces className="h-4 w-4" />
         Variables
       </button>

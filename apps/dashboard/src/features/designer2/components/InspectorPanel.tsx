@@ -1,16 +1,20 @@
 'use client';
-import { ChevronLeft, ChevronRight, LayoutTemplate, SlidersHorizontal } from 'lucide-react';
+import { Braces, ChevronLeft, ChevronRight, Layers, LayoutTemplate, SlidersHorizontal, X } from 'lucide-react';
 import type { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
 import { TemplatesGalleryPanel } from './TemplatesGalleryPanel';
 import { PropertiesPanel } from './PropertiesPanel';
+import { LayersPanel } from './LayersPanel';
+import { VariablesPanel } from './VariablesPanel';
 
-export type InspectorTab = 'templates' | 'properties';
+export type InspectorTab = 'templates' | 'properties' | 'layers' | 'variables';
 
 // Ordered tab defs for the tab bar below — add an entry here (and a matching branch in the
 // content switch) when a future tab is wired up; everything else is already generic over it.
 const TAB_DEFS: { id: InspectorTab; label: string; icon: typeof LayoutTemplate }[] = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'properties', label: 'Properties', icon: SlidersHorizontal },
+  { id: 'layers', label: 'Layers', icon: Layers },
+  { id: 'variables', label: 'Variables', icon: Braces },
 ];
 
 interface InspectorPanelProps {
@@ -21,12 +25,16 @@ interface InspectorPanelProps {
   adapter: FabricCanvasAdapter | null;
   commit: (mutator: () => void) => void;
   isTemplateMode?: boolean;
+  onReorderLayers: (orderedIdsFrontToBack: string[]) => void;
+  variables: Record<string, string>;
+  onCommitVariables: (next: Record<string, string> | undefined) => void;
 }
 
-// Merges the old separate Templates flyout and Properties panel into one tabbed sidebar
-// (designer.md follow-up). Selection changes and the DesignerSidebar's Templates button drive
-// `activeTab` from the parent (DesignerShell owns that state so both can reach it); this
-// component only renders the tab bar/content and the slide-open/closed toggle.
+// Merges the old separate Templates flyout, Properties panel, and Layers/Variables toggled
+// overlays into one tabbed sidebar (designer.md follow-up). Selection changes and the
+// DesignerSidebar/DesignerTopBar buttons drive `activeTab` from the parent (DesignerShell owns
+// that state so all of them can reach it); this component only renders the tab bar/content and
+// the slide-open/closed toggle.
 //
 // The toggle tab sits in the outer wrapper, as a sibling of the width-animated inner panel
 // rather than a child of it — the inner panel clips to 0 width when collapsed (overflow-hidden),
@@ -34,7 +42,18 @@ interface InspectorPanelProps {
 // flex item in the row (canvas is the flex-1 sibling before it), the wrapper's own end edge
 // stays anchored at the same physical position whether the inner panel is 320px or 0px wide, so
 // `end-0` keeps the toggle pinned at the row's outer corner throughout the slide.
-export function InspectorPanel({ activeTab, onTabChange, collapsed, onCollapsedChange, adapter, commit, isTemplateMode }: InspectorPanelProps) {
+export function InspectorPanel({
+  activeTab,
+  onTabChange,
+  collapsed,
+  onCollapsedChange,
+  adapter,
+  commit,
+  isTemplateMode,
+  onReorderLayers,
+  variables,
+  onCommitVariables,
+}: InspectorPanelProps) {
   return (
     <div className="relative flex h-full shrink-0">
       <button
@@ -48,7 +67,7 @@ export function InspectorPanel({ activeTab, onTabChange, collapsed, onCollapsedC
         className={`h-full overflow-hidden transition-[width] duration-200 ease-in-out ${collapsed ? 'w-0' : 'w-80'}`}
       >
         <div className="flex h-full w-80 flex-col border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex shrink-0 border-b border-gray-200 dark:border-gray-800">
+          <div className="flex shrink-0 items-stretch border-b border-gray-200 dark:border-gray-800">
             {TAB_DEFS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -64,10 +83,24 @@ export function InspectorPanel({ activeTab, onTabChange, collapsed, onCollapsedC
                 {label}
               </button>
             ))}
+            {/* Explicit close affordance for the whole panel, always in the same top-right spot
+                regardless of which tab is active — a more discoverable alternative to the slide
+                toggle tab above for users who don't notice it. Same action either way. `me-7`
+                reserves room for that toggle tab, which floats `absolute` over this same corner
+                (end-0) — without it the two overlap and this button becomes unclickable. */}
+            <button
+              onClick={() => onCollapsedChange(true)}
+              title="Close panel"
+              className="me-7 flex shrink-0 items-center border-s border-gray-200 px-2 text-gray-300 hover:bg-gray-100 hover:text-gray-600 dark:border-gray-800 dark:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {activeTab === 'templates' && <TemplatesGalleryPanel />}
             {activeTab === 'properties' && <PropertiesPanel adapter={adapter} commit={commit} isTemplateMode={isTemplateMode} />}
+            {activeTab === 'layers' && <LayersPanel onReorder={onReorderLayers} />}
+            {activeTab === 'variables' && <VariablesPanel variables={variables} onCommit={onCommitVariables} />}
           </div>
         </div>
       </div>
