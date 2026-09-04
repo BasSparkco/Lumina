@@ -97,6 +97,10 @@ export function DesignerShell({
   // Same lifted-from-CanvasViewport convention as `adapter` above — pan offset is local
   // interaction state CanvasViewport owns, but the top bar's "Fit to Screen" button lives here.
   const [resetView, setResetView] = useState<(() => void) | null>(null);
+  // Top bar's toggleable Hand tool — a persistent alternative to holding Space (some users find
+  // holding a key while dragging awkward). Lives here (not in CanvasViewport) since the button
+  // that toggles it is in DesignerTopBar; CanvasViewport just receives it as a prop.
+  const [handToolActive, setHandToolActive] = useState(false);
 
   const { canUndo, canRedo, undo, redo, commit } = useDesignerHistory();
   const { confirmDelete } = useConfirmBeforeDelete();
@@ -273,6 +277,8 @@ export function DesignerShell({
         onZoomIn={() => setZoom(Math.min(4, zoom * 1.2))}
         onZoomOut={() => setZoom(Math.max(0.1, zoom / 1.2))}
         onResetView={() => resetView?.()}
+        handToolActive={handToolActive}
+        onToggleHandTool={() => setHandToolActive((v) => !v)}
         onShowObjects={() => {
           setInspectorTab('objects');
           setInspectorCollapsed(false);
@@ -329,6 +335,7 @@ export function DesignerShell({
             // previous state) rather than storing it — wrapping in `() => fn` forces it to be
             // stored as-is.
             onResetViewReady={(fn) => setResetView(() => fn)}
+            panToolActive={handToolActive}
           />
           {previewing && (
             // A single layer on top of the canvas: its own presence (painted after CanvasViewport,

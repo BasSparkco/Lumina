@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, Layers, History, Eye, Square, Save, Loader2, Check, Menu } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, Hand, Layers, History, Eye, Square, Save, Loader2, Check, Menu } from 'lucide-react';
 import { useAppSidebar } from '@/context/AppSidebarContext';
 import { SaveStatus } from './SaveStatus';
 import type { AutosaveStatus } from '../hooks/useAutosave';
@@ -29,6 +29,12 @@ interface DesignerTopBarProps {
   // Re-centers a pan offset and re-fits zoom to the viewport (designer2 pan/zoom feature) — same
   // action as double-clicking empty canvas.
   onResetView: () => void;
+  // Hand tool toggle — a persistent alternative to holding Space while dragging to pan (some
+  // users find holding a key down while dragging awkward). Click to turn on, click again to
+  // turn off; while on, every left-drag on the canvas pans instead of selecting/moving objects,
+  // exactly as if Space were held the whole time.
+  handToolActive: boolean;
+  onToggleHandTool: () => void;
   onShowObjects: () => void;
   isObjectsActive?: boolean;
   onToggleVersions: () => void;
@@ -56,6 +62,11 @@ interface DesignerTopBarProps {
 
 const btn =
   'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-30 disabled:hover:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100';
+// Selected-state variant for toggleable tools (currently just the Hand tool) — the plain `btn`
+// class has no "pressed" look of its own (aria-pressed alone isn't styled), so a real color
+// change on click needs its own class swapped in based on the active flag.
+const btnActive =
+  'inline-flex h-8 w-8 items-center justify-center rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900';
 
 export function DesignerTopBar({
   name,
@@ -69,6 +80,8 @@ export function DesignerTopBar({
   onZoomIn,
   onZoomOut,
   onResetView,
+  handToolActive,
+  onToggleHandTool,
   onShowObjects,
   isObjectsActive,
   onToggleVersions,
@@ -142,6 +155,18 @@ export function DesignerTopBar({
       </button>
       <button className={btn} onClick={onRedo} disabled={!canRedo} aria-label="Redo">
         <Redo2 className="h-4 w-4" />
+      </button>
+
+      <div className="mx-2 h-5 w-px bg-gray-200 dark:bg-gray-800" />
+
+      <button
+        className={handToolActive ? btnActive : btn}
+        onClick={onToggleHandTool}
+        aria-pressed={handToolActive}
+        aria-label="Hand tool"
+        title="Hand tool — click to pan by dragging, or just hold Space"
+      >
+        <Hand className="h-4 w-4" />
       </button>
 
       <div className="mx-2 h-5 w-px bg-gray-200 dark:bg-gray-800" />

@@ -33,12 +33,16 @@ interface CanvasViewportProps {
   // trigger it — same callback-prop convention as onAdapterReady, since pan offset is local
   // interaction state owned by this component (not the designer store).
   onResetViewReady: (fn: (() => void) | null) => void;
+  // Top bar's toggleable Hand tool button (designer2 pan feature amendment) — some users find
+  // holding Space while dragging awkward, so this is a persistent alternative that behaves
+  // exactly like Space being held down until the user clicks the button again to turn it off.
+  panToolActive: boolean;
 }
 
 // Mounts the Fabric <canvas> and owns the adapter's lifecycle. This is the piece that must be
 // lazy-loaded client-only (see designer2/page.tsx) — Fabric touches `window`/`document` at
 // construction time and cannot run during SSR.
-export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: CanvasViewportProps) {
+export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panToolActive }: CanvasViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasBoxRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
@@ -53,6 +57,10 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: Can
   // mousemove at 60fps without round-tripping through a re-render.
   const panRef = useRef({ x: 0, y: 0 });
   const spaceHeldRef = useRef(false);
+  // Mirrors the `panToolActive` prop (see the sync effect below) — kept as a ref alongside
+  // spaceHeldRef so the mousedown-capture effect can OR the two together without re-binding
+  // itself on every toggle of the top bar's Hand tool button.
+  const handToolRef = useRef(false);
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ mouseX: 0, mouseY: 0, offsetX: 0, offsetY: 0 });
   const resetTransitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,6 +164,18 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: Can
     if (!el) return;
     el.style.transition = smooth ? 'transform 220ms ease-out' : 'none';
     el.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0)`;
+  }
+
+  // Applies the "not actively dragging" pan state — grab cursor + suspended Fabric interaction
+  // whenever Space is held OR the Hand tool is toggled on, plain cursor/interaction otherwise.
+  // No-ops while a drag is in flight (endPan re-syncs from this once the drag itself finishes).
+  // Shared by the Space-key handling inside the pan effect below and the panToolActive-prop sync
+  // effect, since both need to recompute the same combined state from their own trigger.
+  function applyIdlePanState() {
+    if (isPanningRef.current) return;
+    const active = spaceHeldRef.current || handToolRef.current;
+    adapterRef.current?.setPanModeActive(active);
+    if (containerRef.current) containerRef.current.style.cursor = active ? 'grab' : '';
   }
 
   // Reset View: re-centers a pan offset back to zero and re-fits zoom to the viewport. Wired to
@@ -307,11 +327,7 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: Can
     function setSpaceHeld(held: boolean) {
       if (spaceHeldRef.current === held) return;
       spaceHeldRef.current = held;
-      // Don't touch Fabric's interaction/cursor state mid-drag — endPan() re-syncs it from
-      // spaceHeldRef once the drag actually finishes.
-      if (isPanningRef.current) return;
-      adapterRef.current?.setPanModeActive(held);
-      container.style.cursor = held ? 'grab' : '';
+      applyIdlePanState();
     }
 
     function onKeyDown(e: KeyboardEvent) {
@@ -326,8 +342,7 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: Can
 
     function endPan() {
       isPanningRef.current = false;
-      adapterRef.current?.setPanModeActive(spaceHeldRef.current);
-      container.style.cursor = spaceHeldRef.current ? 'grab' : '';
+      applyIdlePanState();
       window.document.body.style.userSelect = '';
       window.removeEventListener('mousemove', onPanMove, true);
       window.removeEventListener('mouseup', onPanUp, true);
@@ -373,8 +388,11 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: Can
     function onMouseDown(e: MouseEvent) {
       if (isPanningRef.current) return;
       const isMiddleButton = e.button === 1;
-      const isSpaceDrag = e.button === 0 && spaceHeldRef.current;
-      if (isMiddleButton || isSpaceDrag) startPan(e);
+      // Space held OR the top bar's Hand tool toggled on — either one puts every left-drag into
+      // pan mode, same as real design tools (while Hand tool is active you can't click-select,
+      // only pan, until you toggle it back off).
+      const isPanDrag = e.button === 0 && (spaceHeldRef.current || handToolRef.current);
+      if (isMiddleButton || isPanDrag) startPan(e);
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -393,6 +411,14 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: Can
       window.document.body.style.userSelect = '';
     };
   }, []);
+
+  // Mirrors the Hand tool button's toggled state into handToolRef and immediately reflects it
+  // (grab cursor + suspended Fabric interaction) unless a drag is already in flight — a toggle
+  // mid-drag just gets picked up by endPan() once that drag finishes instead.
+  useEffect(() => {
+    handToolRef.current = panToolActive;
+    applyIdlePanState();
+  }, [panToolActive]);
 
   const canvasPxWidth = (document?.canvas.width ?? 0) * zoom;
   const canvasPxHeight = (document?.canvas.height ?? 0) * zoom;
