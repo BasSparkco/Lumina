@@ -193,7 +193,7 @@ It must contain the decisions in Sections 3.1–3.7 and name the exported contra
 
 **Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
 
-**Plan status:** the design decisions above have been technically reviewed against the current codebase (two review passes; see commit history) and are approved to begin Milestone A1 execution. This covers the decisions themselves, not yet their artifacts — the ADR, the module catalog, and the shared capability types still need to be written as A1's own deliverables.
+**Plan status:** Milestone A1 is complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). Milestone B1 (persistence — `Organization.status`, `TenantModule`, migration and backfill) may begin.
 
 ---
 
@@ -683,12 +683,12 @@ Automate or manually verify this exact scenario against the real development sta
 
 ## 11. Implementation Sequence
 
-### Milestone A1 — Contract freeze
+### Milestone A1 — Contract freeze — complete
 
-- [ ] Add shared module keys and dependency metadata.
-- [ ] Add shared capability response types.
-- [ ] Write the entitlement ADR.
-- [ ] Approve disabled-module and tenant-suspension behavior.
+- [x] Add shared module keys and dependency metadata. (`packages/types/src/modules.ts`)
+- [x] Add shared capability response types. (`TenantCapabilities` in `packages/types/src/modules.ts`)
+- [x] Write the entitlement ADR. (`docs/adr/platform-modules-and-entitlements.md`)
+- [x] Approve disabled-module and tenant-suspension behavior. (two-pass technical review, see commit history)
 
 ### Milestone B1 — Persistence
 

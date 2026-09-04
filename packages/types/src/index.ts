@@ -7,6 +7,7 @@ export * from './theme';
 export * from './fonts';
 export * from './wayfinding';
 export * from './playlist-transitions';
+export * from './modules';
 
 // Explicit re-exports of runtime values (schemas, functions) alongside the `export *`
 // above: `export *` compiles to a dynamic re-export loop that bundlers' CJS/ESM interop
@@ -58,3 +59,10 @@ export {
   buildIncomingTransitionStyle,
   buildOutgoingTransitionStyle,
 } from './playlist-transitions';
+export {
+  MODULE_KEYS,
+  ModuleKeySchema,
+  MODULE_DEPENDENCIES,
+  TenantModuleStatusSchema,
+  OrganizationStatusSchema,
+} from './modules';
