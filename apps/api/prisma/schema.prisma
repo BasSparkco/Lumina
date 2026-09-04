@@ -484,8 +484,8 @@ model Playlist {
   id                   String          @id @default(cuid())
   name                 String
   approvalStatus       ApprovalStatus  @default(APPROVED)
-  // Item 8 (transition effects) and item 9 (shuffle) — both configurable per playlist, not
-  // per item, per the plain-English "configurable per playlist" framing in roadmap2.0.md.
+  // Playlist-wide default transition. Individual items may override this — see
+  // PlaylistItem.transitionStyle below — with null on the item meaning "inherit this".
   transitionStyle      TransitionStyle @default(NONE)
   transitionDurationMs Int             @default(500)
   playbackOrder        PlaybackOrder   @default(SEQUENTIAL)
@@ -521,9 +521,19 @@ enum ApprovalStatus {
   REJECTED
 }
 
+// String identifiers are what actually cross the wire to the player (see
+// packages/types transition registry) — this enum just constrains what the dashboard/API
+// can persist today. The player resolves unrecognized identifiers to NONE at render time,
+// so a future transition can ship in the player's registry ahead of a DB migration that
+// adds its enum value here without breaking anything.
 enum TransitionStyle {
   NONE
+  FADE
   CROSSFADE
+  SLIDE_LEFT
+  SLIDE_RIGHT
+  ZOOM
+  FLIP
 }
 
 enum PlaybackOrder {
@@ -559,6 +569,12 @@ model PlaylistItem {
   cropZoom      Float?
   cropOffsetX   Float?
   cropOffsetY   Float?
+  // Per-item transition override. Null means "inherit the playlist's transitionStyle" —
+  // this is the DB-level expression of the dropdown's "Default (Use Playlist Transition)"
+  // option. transitionDurationMs is null unless the item overrides the style; when it does
+  // and leaves duration unset, the player falls back to the playlist's transitionDurationMs.
+  transitionStyle      TransitionStyle?
+  transitionDurationMs Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

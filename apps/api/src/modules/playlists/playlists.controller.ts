@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } fro
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, Min } from 'class-validator';
 import type { TransitionStyle, PlaybackOrder } from '@lumina/db';
+import { PLAYLIST_TRANSITION_IDS } from '@lumina/types';
 import { PlaylistsService } from './playlists.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -10,6 +11,9 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
 const PLAYLIST_ITEM_KINDS = ['ASSET', 'THEME', 'LAYOUT', 'DESIGN'] as const;
+// The registry in @lumina/types is the source of truth for which identifiers exist; this just
+// spreads it into a plain array for class-validator's @IsIn, which won't accept a readonly tuple.
+const VALID_TRANSITION_IDS = [...PLAYLIST_TRANSITION_IDS];
 
 class CreatePlaylistDto { @IsString() name!: string; }
 class RenamePlaylistDto { @IsString() name!: string; }
@@ -25,6 +29,10 @@ class AddItemDto {
   @IsNumber() @Min(1) @Max(4) @IsOptional() cropZoom?: number;
   @IsNumber() @IsOptional() cropOffsetX?: number;
   @IsNumber() @IsOptional() cropOffsetY?: number;
+  // Per-item transition override — omitted/undefined means "inherit Playlist.transitionStyle"
+  // (see PlaylistItem.transitionStyle in schema.prisma). Same bounds as UpdateConfigDto below.
+  @IsOptional() @IsIn(VALID_TRANSITION_IDS) transitionStyle?: TransitionStyle;
+  @IsOptional() @IsInt() @Min(100) @Max(3000) transitionDurationMs?: number;
 }
 class UpdateItemDto {
   @IsInt() @Min(1) durationSecs!: number;
@@ -33,10 +41,14 @@ class UpdateItemDto {
   @IsNumber() @Min(1) @Max(4) @IsOptional() cropZoom?: number | null;
   @IsNumber() @IsOptional() cropOffsetX?: number | null;
   @IsNumber() @IsOptional() cropOffsetY?: number | null;
+  // Explicit null clears the override back to "inherit playlist" — same null-clears convention
+  // as cropZoom above (checked by presence in the service, not truthiness).
+  @IsOptional() @IsIn(VALID_TRANSITION_IDS) transitionStyle?: TransitionStyle | null;
+  @IsOptional() @IsInt() @Min(100) @Max(3000) transitionDurationMs?: number | null;
 }
 class ReorderDto { @IsArray() @IsString({ each: true }) ids!: string[]; }
 class UpdateConfigDto {
-  @IsOptional() @IsIn(['NONE', 'CROSSFADE']) transitionStyle?: TransitionStyle;
+  @IsOptional() @IsIn(VALID_TRANSITION_IDS) transitionStyle?: TransitionStyle;
   // Bounds agreed with the Android side so the CMS can never save a value the player would
   // silently clamp or reject — keep these in sync if that range changes.
   @IsOptional() @IsInt() @Min(100) @Max(3000) transitionDurationMs?: number;
@@ -92,6 +104,7 @@ export class PlaylistsController {
       user.orgId, id, dto.kind, dto.durationSecs,
       { assetId: dto.assetId, themeId: dto.themeId, layoutId: dto.layoutId, designAssetId: dto.designAssetId },
       dto.muted, dto.playFullVideo, dto.cropZoom, dto.cropOffsetX, dto.cropOffsetY,
+      dto.transitionStyle, dto.transitionDurationMs,
     );
   }
 
@@ -105,6 +118,7 @@ export class PlaylistsController {
     return this.playlists.updateItem(
       user.orgId, id, itemId, dto.durationSecs, dto.muted, dto.playFullVideo,
       dto.cropZoom, dto.cropOffsetX, dto.cropOffsetY,
+      dto.transitionStyle, dto.transitionDurationMs,
     );
   }
 

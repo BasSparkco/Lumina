@@ -1,5 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { fontStack, mediaCropStyle, shapeClipStyle } from '@lumina/types';
+import {
+  fontStack, mediaCropStyle, shapeClipStyle,
+  resolveEffectiveTransition, buildIncomingTransitionStyle, buildOutgoingTransitionStyle,
+  DEFAULT_PLAYLIST_TRANSITION_DURATION_MS, type PlaylistTransitionDefinition,
+} from '@lumina/types';
+import { PlaylistTransitionStyles } from '@lumina/ui';
 import type { Playlist, PlaylistItem, PlayerState } from '../lib/api';
 import TextAssetTicker from './TextAssetTicker';
 import ThemeRenderer from './ThemeRenderer';
@@ -70,15 +75,105 @@ function scaleFit(playlist: Playlist, type: keyof typeof DEFAULT_SCALE_FIT): 'co
   return playlist.scaleSettings?.[type] ?? DEFAULT_SCALE_FIT[type];
 }
 
+// Item transitions (§ below) briefly keep the outgoing item mounted underneath the incoming one
+// so they can visually overlap (crossfade/slide/zoom/dissolve into each other). That's cheap and
+// safe for IMAGE/TEXT/DOCUMENT — plain <img>/text markup, no hardware resource — but NOT for
+// VIDEO (a second live decoder is a separate, hardware-tiered feature the preload-warmup above
+// deliberately avoids) or THEME/LAYOUT/DESIGN/APP (each is a whole subtree with its own timers,
+// widgets, zones, or iframe — mounting two live copies would double-run all of that). Those
+// still get the incoming item's transition — just as a solo "enter" animation with nothing
+// overlapping underneath it, see the render below.
+function isLightweightTransitionable(candidate: PlaylistItem): boolean {
+  return candidate.kind === 'ASSET' && (candidate.asset?.type === 'IMAGE' || candidate.asset?.type === 'TEXT' || candidate.asset?.type === 'DOCUMENT');
+}
+
+// The lightweight (IMAGE/TEXT/DOCUMENT) subset of the render below, factored out so the same
+// markup can back both the current item and — while a transition is overlapping the previous one
+// underneath it — the outgoing item. A pure function of (playlist, item, pageIndex): no component
+// state, so it's equally valid for either layer.
+function renderLightweightAssetBody(playlist: Playlist, bodyItem: PlaylistItem, bodyPageIndex: number) {
+  if (bodyItem.kind !== 'ASSET' || !bodyItem.asset) return null;
+  const asset = bodyItem.asset;
+
+  if (asset.type === 'IMAGE') {
+    return (
+      <img
+        key={bodyItem.id}
+        src={asset.url ?? undefined}
+        alt={asset.name}
+        crossOrigin="anonymous"
+        style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'IMAGE'), ...mediaCropStyle(bodyItem) }}
+      />
+    );
+  }
+  if (asset.type === 'DOCUMENT' && asset.pageUrls[bodyPageIndex]) {
+    return (
+      <img
+        key={`${bodyItem.id}-${bodyPageIndex}`}
+        src={asset.pageUrls[bodyPageIndex]}
+        alt={asset.name}
+        crossOrigin="anonymous"
+        style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'DOCUMENT') }}
+      />
+    );
+  }
+  if (asset.type === 'TEXT' && asset.textTickerEnabled) {
+    return (
+      <TextAssetTicker
+        key={bodyItem.id}
+        text={asset.textContent ?? ''}
+        color={asset.textColor ?? '#fff'}
+        backgroundColor={asset.textBackgroundColor ?? undefined}
+        fontFamily={fontStack(asset.textFontFamily)}
+        fontSize={FONT_SIZE_CLAMPS[asset.textSize ?? 'MEDIUM'] ?? FONT_SIZE_CLAMPS.MEDIUM!}
+        direction={asset.textTickerDirection}
+        speedPx={asset.textTickerSpeed ?? 80}
+        crossPosition={asset.textTickerCrossOffset ?? 50}
+      />
+    );
+  }
+  if (asset.type === 'TEXT' && !asset.textTickerEnabled) {
+    return (
+      <div
+        key={bodyItem.id}
+        style={{
+          width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '5%', boxSizing: 'border-box', backgroundColor: asset.textBackgroundColor ?? undefined,
+        }}
+      >
+        <p
+          style={{
+            color: asset.textColor ?? '#fff',
+            fontFamily: fontStack(asset.textFontFamily),
+            fontSize: FONT_SIZE_CLAMPS[asset.textSize ?? 'MEDIUM'],
+            textAlign: 'center',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            margin: 0,
+          }}
+        >
+          {asset.textContent}
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
 function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted = false, controllable = false, onPlaybackProgress }: Props, ref: React.Ref<ZonePlayerHandle>) {
   const [index, setIndex] = useState(0);
   const [item, setItem] = useState<PlaylistItem | null>(null);
   // Which page of a DOCUMENT item is currently showing — durationSecs doubles as "seconds per
   // page" for this type (see hydratePlaylist on the API side).
   const [pageIndex, setPageIndex] = useState(0);
+  // The just-departed item, kept mounted underneath the new `item` for a transition's duration —
+  // see isLightweightTransitionable/renderLightweightAssetBody above and the advance effect below
+  // for when this gets populated, and the render for how the two layers overlap.
+  const [prevLayer, setPrevLayer] = useState<{ item: PlaylistItem; pageIndex: number; transition: PlaylistTransitionDefinition; durationMs: number } | null>(null);
   const [videoLoadGeneration, setVideoLoadGeneration] = useState(0);
   const [videoFailed, setVideoFailed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevLayerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Tracks an explicit Custom Player pause across a state refetch of the same video — see the
@@ -101,6 +196,26 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
     if (!playlist.items.length) return;
     const current = playlist.items[index % playlist.items.length];
     if (!current) return;
+
+    // `item`/`pageIndex` here are still last render's values (this effect's own setItem/
+    // setPageIndex below haven't run yet) — i.e. exactly the outgoing item/page, still valid to
+    // read even though they're not in the dependency array (same reasoning as the eslint-disable
+    // below: this effect intentionally only re-runs on index/playlist, not on every item/pageIndex
+    // change, but always sees their latest committed values). A same-item re-run (playlist
+    // refetched wholesale on a heartbeat, id unchanged) must not restart a transition that's
+    // already mid-flight, hence the id check.
+    if (item && item.id !== current.id) {
+      const transition = resolveEffectiveTransition(current.transitionStyle, playlist.transitionStyle);
+      const durationMs = current.transitionDurationMs ?? playlist.transitionDurationMs ?? DEFAULT_PLAYLIST_TRANSITION_DURATION_MS;
+      if (transition.overlap && isLightweightTransitionable(item) && isLightweightTransitionable(current)) {
+        setPrevLayer({ item, pageIndex, transition, durationMs });
+        if (prevLayerTimerRef.current) clearTimeout(prevLayerTimerRef.current);
+        prevLayerTimerRef.current = setTimeout(() => setPrevLayer(null), durationMs);
+      } else {
+        setPrevLayer(null);
+      }
+    }
+
     setItem(current);
     onAssetChange?.(current.kind === 'ASSET' && current.asset ? current.asset.id : current.id);
 
@@ -123,6 +238,13 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, playlist]);
+
+  // Mount/unmount only — the advance effect above manages prevLayerTimerRef's normal
+  // set/clear/reschedule lifecycle; this just guards against it firing setPrevLayer after this
+  // component itself has unmounted.
+  useEffect(() => {
+    return () => { if (prevLayerTimerRef.current) clearTimeout(prevLayerTimerRef.current); };
+  }, []);
 
   function advance() {
     setIndex(i => (i + 1) % playlist.items.length);
@@ -342,8 +464,36 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
 
   const asset = item.kind === 'ASSET' ? item.asset : null;
 
+  // Registry lookup, not a switch on the identifier — see resolveEffectiveTransition/
+  // buildIncomingTransitionStyle (@lumina/types). An id this player build doesn't recognize
+  // resolves to NONE (a plain cut) rather than throwing, so a transition added to the dashboard/
+  // DB after this build ships degrades safely instead of breaking playback.
+  const effectiveTransition = resolveEffectiveTransition(item.transitionStyle, playlist.transitionStyle);
+  const transitionDurationMs = item.transitionDurationMs ?? playlist.transitionDurationMs ?? DEFAULT_PLAYLIST_TRANSITION_DURATION_MS;
+  const incomingStyle = buildIncomingTransitionStyle(effectiveTransition, transitionDurationMs);
+
   return (
-    <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden' }}>
+      <PlaylistTransitionStyles />
+
+      {/* Outgoing layer — the item that was just showing, kept mounted underneath the incoming
+          one for transitionDurationMs so the two can overlap (crossfade/slide/zoom/flip into each
+          other). Only ever populated for IMAGE/TEXT/DOCUMENT pairs — see isLightweightTransitionable. */}
+      {prevLayer && (
+        <div
+          key={`prev:${prevLayer.item.id}`}
+          style={{ position: 'absolute', inset: 0, zIndex: 0, ...buildOutgoingTransitionStyle(prevLayer.transition, prevLayer.durationMs) }}
+        >
+          {renderLightweightAssetBody(playlist, prevLayer.item, prevLayer.pageIndex)}
+        </div>
+      )}
+
+      {/* Incoming layer — the current item. Every kind gets its transition's "enter" animation
+          (fade/slide/zoom/flip in) even when it can't overlap a live previous layer (VIDEO/THEME/
+          LAYOUT/DESIGN/APP) — it just animates in solo, over the black background, instead of
+          crossfading with something underneath. re-keyed on item.id so the CSS animation restarts
+          on every item change instead of playing once and then sitting at its end state. */}
+      <div key={`current:${item.id}`} style={{ position: 'absolute', inset: 0, zIndex: 1, ...incomingStyle }}>
       {item.kind === 'THEME' && item.theme && state && (
         <ThemeRenderer theme={item.theme} state={state} onAssetChange={onAssetChange ?? NOOP_ASSET_CHANGE} />
       )}
@@ -393,68 +543,7 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
         />
       )}
 
-      {asset?.type === 'IMAGE' && (
-        <img
-          key={item.id}
-          src={asset.url ?? undefined}
-          alt={asset.name}
-          crossOrigin="anonymous"
-          style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'IMAGE'), ...mediaCropStyle(item) }}
-        />
-      )}
-      {asset?.type === 'DOCUMENT' && asset.pageUrls[pageIndex] && (
-        <img
-          key={`${item.id}-${pageIndex}`}
-          src={asset.pageUrls[pageIndex]}
-          alt={asset.name}
-          crossOrigin="anonymous"
-          style={{ width: '100%', height: '100%', objectFit: scaleFit(playlist, 'DOCUMENT') }}
-        />
-      )}
-      {asset?.type === 'TEXT' && asset.textTickerEnabled && (
-        <TextAssetTicker
-          key={item.id}
-          text={asset.textContent ?? ''}
-          color={asset.textColor ?? '#fff'}
-          backgroundColor={asset.textBackgroundColor ?? undefined}
-          fontFamily={fontStack(asset.textFontFamily)}
-          fontSize={FONT_SIZE_CLAMPS[asset.textSize ?? 'MEDIUM'] ?? FONT_SIZE_CLAMPS.MEDIUM!}
-          direction={asset.textTickerDirection}
-          speedPx={asset.textTickerSpeed ?? 80}
-          crossPosition={asset.textTickerCrossOffset ?? 50}
-        />
-      )}
-      {asset?.type === 'TEXT' && !asset.textTickerEnabled && (
-        <div
-          key={item.id}
-          style={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '5%',
-            boxSizing: 'border-box',
-            // null = transparent, i.e. the container's own black shows through (the historical
-            // look from before this field existed).
-            backgroundColor: asset.textBackgroundColor ?? undefined,
-          }}
-        >
-          <p
-            style={{
-              color: asset.textColor ?? '#fff',
-              fontFamily: fontStack(asset.textFontFamily),
-              fontSize: FONT_SIZE_CLAMPS[asset.textSize ?? 'MEDIUM'],
-              textAlign: 'center',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              margin: 0,
-            }}
-          >
-            {asset.textContent}
-          </p>
-        </div>
-      )}
+      {renderLightweightAssetBody(playlist, item, pageIndex)}
       {asset?.type === 'VIDEO' && videoFailed && (
         <div
           role="status"
@@ -495,6 +584,8 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
           }}
         />
       )}
+      </div>
+
       {nextVideoAsset && (
         <video
           key={`preload:${nextVideoAsset.id}:${nextVideoAsset.url}`}

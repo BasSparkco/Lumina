@@ -372,8 +372,9 @@ export const playlistsApi = {
   updateItem: (
     id: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
     crop?: { cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null },
+    transition?: { transitionStyle: TransitionStyle | null; transitionDurationMs?: number | null },
   ) =>
-    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted, playFullVideo, ...crop }) }),
+    req<PlaylistItem>(`/playlists/${id}/items/${itemId}`, { method: 'PUT', body: JSON.stringify({ durationSecs, muted, playFullVideo, ...crop, ...transition }) }),
   removeItem: (id: string, itemId: string) => req<void>(`/playlists/${id}/items/${itemId}`, { method: 'DELETE' }),
   reorder: (id: string, ids: string[]) => req<void>(`/playlists/${id}/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
   reorderPlaylists: (ids: string[]) => req<void>('/playlists/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
@@ -739,6 +740,10 @@ export interface PlaylistItem {
   // Per-placement image/video framing (crop editor) — null means "show the whole asset", and
   // only ever meaningful for an ASSET-kind item.
   cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null;
+  // Per-item transition override — null means "inherit the playlist's transitionStyle" (the
+  // Transition dropdown's "Default (Use Playlist Transition)" option). See
+  // resolveEffectiveTransition in @lumina/types for how the player resolves this.
+  transitionStyle: TransitionStyle | null; transitionDurationMs: number | null;
   kind: PlaylistItemKind;
   // Exactly one of these is set, matching `kind` — a playlist item can be a plain asset
   // (including an APP-type one), a whole Theme, a whole Layout, or (designer.md Phase 11) a
@@ -748,7 +753,14 @@ export interface PlaylistItem {
   layout: { id: string; name: string } | null;
   design: { id: string; name: string } | null;
 }
-export type TransitionStyle = 'NONE' | 'CROSSFADE';
+export type TransitionStyle = 'NONE' | 'FADE' | 'CROSSFADE' | 'SLIDE_LEFT' | 'SLIDE_RIGHT' | 'ZOOM' | 'FLIP';
+// Every persistable transition identifier, in display order — the registry in @lumina/types is
+// the actual source of truth for the player; this list (and the i18n key each maps to under
+// playlistDetail.transition.*) just needs to stay a superset match with it for the dropdowns.
+export const TRANSITION_STYLE_OPTIONS: TransitionStyle[] = ['NONE', 'FADE', 'CROSSFADE', 'SLIDE_LEFT', 'SLIDE_RIGHT', 'ZOOM', 'FLIP'];
+export const TRANSITION_LABEL_KEYS: Record<TransitionStyle, string> = {
+  NONE: 'none', FADE: 'fade', CROSSFADE: 'crossfade', SLIDE_LEFT: 'slideLeft', SLIDE_RIGHT: 'slideRight', ZOOM: 'zoom', FLIP: 'flip',
+};
 export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
 // playsetting.md — same six kinds as Asset['type'], kept as its own alias here since
 // scaleSettings is keyed by asset type but lives on Playlist, not Asset.

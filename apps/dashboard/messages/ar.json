@@ -549,8 +549,17 @@
     "transition": {
       "label": "الانتقال",
       "none": "بدون (قطع مباشر)",
+      "fade": "تلاشٍ",
       "crossfade": "تلاشٍ متبادل",
+      "slideLeft": "انزلاق لليسار",
+      "slideRight": "انزلاق لليمين",
+      "zoom": "تكبير",
+      "flip": "قلب",
       "ms": "مللي ثانية"
+    },
+    "itemTransition": {
+      "label": "الانتقال",
+      "default": "افتراضي (استخدام انتقال القائمة)"
     },
     "playbackOrder": {
       "label": "الترتيب",

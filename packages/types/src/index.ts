@@ -6,6 +6,7 @@ export * from './player-manifest';
 export * from './theme';
 export * from './fonts';
 export * from './wayfinding';
+export * from './playlist-transitions';
 
 // Explicit re-exports of runtime values (schemas, functions) alongside the `export *`
 // above: `export *` compiles to a dynamic re-export loop that bundlers' CJS/ESM interop
@@ -42,3 +43,18 @@ export {
 } from './theme';
 export { FONT_LIBRARY, FONT_IDS, DEFAULT_FONT_ID, fontStack } from './fonts';
 export { POI_CATEGORY_PRESETS } from './wayfinding';
+export {
+  PLAYLIST_TRANSITION_IDS,
+  PlaylistTransitionIdSchema,
+  DEFAULT_PLAYLIST_TRANSITION_ID,
+  DEFAULT_PLAYLIST_TRANSITION_DURATION_MS,
+  INHERIT_PLAYLIST_TRANSITION,
+  PLAYLIST_TRANSITION_KEYFRAMES_CSS,
+  PLAYLIST_TRANSITION_REGISTRY,
+  PLAYLIST_TRANSITION_OPTIONS,
+  resolvePlaylistTransition,
+  resolveEffectiveTransitionId,
+  resolveEffectiveTransition,
+  buildIncomingTransitionStyle,
+  buildOutgoingTransitionStyle,
+} from './playlist-transitions';

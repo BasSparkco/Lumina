@@ -2,7 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { X, Sparkles, Shuffle, ImageIcon, Film, FileText } from 'lucide-react';
-import { playlistsApi, type AssetType, type ScaleFitMode, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { playlistsApi, TRANSITION_STYLE_OPTIONS, TRANSITION_LABEL_KEYS, type AssetType, type ScaleFitMode, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 
 interface PlaylistSettingsModalProps {
   id: string;
@@ -109,10 +109,11 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
                   <select value={playlist.transitionStyle} disabled={!canEdit || configMut.isPending}
                     onChange={e => configMut.mutate({ transitionStyle: e.target.value as TransitionStyle })}
                     className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-                    <option value="NONE">{td('transition.none')}</option>
-                    <option value="CROSSFADE">{td('transition.crossfade')}</option>
+                    {TRANSITION_STYLE_OPTIONS.map(id => (
+                      <option key={id} value={id}>{td(`transition.${TRANSITION_LABEL_KEYS[id]}`)}</option>
+                    ))}
                   </select>
-                  {playlist.transitionStyle === 'CROSSFADE' && (
+                  {playlist.transitionStyle !== 'NONE' && (
                     <>
                       <input type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
                         disabled={!canEdit || configMut.isPending}

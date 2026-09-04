@@ -549,8 +549,17 @@
     "transition": {
       "label": "Transition",
       "none": "None (hard cut)",
+      "fade": "Fade",
       "crossfade": "Crossfade",
+      "slideLeft": "Slide Left",
+      "slideRight": "Slide Right",
+      "zoom": "Zoom",
+      "flip": "Flip",
       "ms": "ms"
+    },
+    "itemTransition": {
+      "label": "Transition",
+      "default": "Default (Use Playlist Transition)"
     },
     "playbackOrder": {
       "label": "Order",

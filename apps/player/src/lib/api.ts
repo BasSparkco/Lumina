@@ -71,6 +71,8 @@ export interface PreviewPlaylistItem {
   cropZoom: number | null;
   cropOffsetX: number | null;
   cropOffsetY: number | null;
+  transitionStyle: string | null;
+  transitionDurationMs: number | null;
   kind: PlaylistItemKind;
   asset: PreviewAsset | null;
   theme: { id: string; name: string } | null;
@@ -102,6 +104,10 @@ export interface PlaylistItem {
   cropZoom: number | null;
   cropOffsetX: number | null;
   cropOffsetY: number | null;
+  // Per-item transition override — null (or 'DEFAULT') means "inherit Playlist.transitionStyle".
+  // See resolveEffectiveTransition in @lumina/types, which is what actually applies this.
+  transitionStyle: string | null;
+  transitionDurationMs: number | null;
   kind: PlaylistItemKind;
   // Exactly one of asset/theme/layout/design is set, matching `kind` — a playlist item can be a
   // plain asset (an APP-type asset included — see AppAsset below), a whole Theme, a whole
@@ -142,6 +148,10 @@ export type ScaleSettings = Partial<Record<'IMAGE' | 'VIDEO' | 'AUDIO' | 'TEXT' 
 export interface Playlist {
   id: string;
   name: string;
+  // Playlist-wide default transition — an item's own transitionStyle/transitionDurationMs
+  // above overrides these unless it's null/'DEFAULT'. See resolveEffectiveTransition (@lumina/types).
+  transitionStyle?: string;
+  transitionDurationMs?: number;
   scaleSettings?: ScaleSettings | null;
   items: PlaylistItem[];
 }

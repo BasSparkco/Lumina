@@ -195,6 +195,7 @@ export class PlaylistsService {
     refs: { assetId?: string; themeId?: string; layoutId?: string; designAssetId?: string },
     muted?: boolean, playFullVideo?: boolean,
     cropZoom?: number, cropOffsetX?: number, cropOffsetY?: number,
+    transitionStyle?: TransitionStyle, transitionDurationMs?: number,
   ) {
     await this.assertOwns(orgId, playlistId);
 
@@ -267,6 +268,8 @@ export class PlaylistsService {
         muted: initialMuted,
         ...(playFullVideo !== undefined && { playFullVideo }),
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
+        ...(transitionStyle !== undefined && { transitionStyle }),
+        ...(transitionDurationMs !== undefined && { transitionDurationMs }),
       },
       include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
     });
@@ -276,6 +279,7 @@ export class PlaylistsService {
   async updateItem(
     orgId: string, playlistId: string, itemId: string, durationSecs: number, muted?: boolean, playFullVideo?: boolean,
     cropZoom?: number | null, cropOffsetX?: number | null, cropOffsetY?: number | null,
+    transitionStyle?: TransitionStyle | null, transitionDurationMs?: number | null,
   ) {
     await this.assertOwns(orgId, playlistId);
     await this.assertItemBelongs(playlistId, itemId);
@@ -289,6 +293,9 @@ export class PlaylistsService {
         // clears a previously-set crop, so this checks arg *presence* on the request, not
         // truthiness — same reasoning as muted/playFullVideo above, but null-inclusive.
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),
+        // Same null-clears-back-to-"inherit playlist" convention as cropZoom above.
+        ...(transitionStyle !== undefined && { transitionStyle }),
+        ...(transitionDurationMs !== undefined && { transitionDurationMs }),
       },
       include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
     });

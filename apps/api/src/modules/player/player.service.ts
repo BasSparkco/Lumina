@@ -49,6 +49,9 @@ interface HydratedLayout { id: string; name: string; zones: HydratedZone[]; }
 interface HydratedPlaylistItem {
   id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
   cropZoom: number | null; cropOffsetX: number | null; cropOffsetY: number | null; kind: string;
+  // Per-item transition override — null means "inherit the parent HydratedPlaylist's
+  // transitionStyle/transitionDurationMs"; resolved player-side via resolveEffectiveTransition.
+  transitionStyle: string | null; transitionDurationMs: number | null;
   asset: HydratedPlaylistItemAsset | null; theme: HydratedTheme | null; layout: HydratedLayout | null;
   // designer.md Phase 11 — a DESIGN-kind item's fully resolved payload (§23.1's contract:
   // dynamic variables already substituted, every assetId already a signed/CDN URL).
@@ -676,6 +679,10 @@ export class PlayerService {
     items: {
       id: string; position: number; durationSecs: number; muted: boolean; playFullVideo: boolean;
       cropZoom?: number | null; cropOffsetX?: number | null; cropOffsetY?: number | null;
+      // Per-item transition override — undefined/null means "inherit the playlist's
+      // transitionStyle/transitionDurationMs above" (resolved player-side, see
+      // resolveEffectiveTransition in @lumina/types).
+      transitionStyle?: string | null; transitionDurationMs?: number | null;
       kind: string; assetId?: string | null; themeId?: string | null; layoutId?: string | null; designAssetId?: string | null;
       asset: { id: string; name: string; type: string; mimeType: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; textContent: string | null; textFontFamily: string | null; textColor: string | null; textSize: string | null; textBackgroundColor: string | null; textTickerEnabled: boolean; textTickerDirection: string; textTickerSpeed: number | null; textTickerCrossOffset: number | null; appProviderId: string | null; appConfig: unknown } | null;
     }[];
@@ -691,6 +698,8 @@ export class PlayerService {
         cropZoom: item.cropZoom ?? null,
         cropOffsetX: item.cropOffsetX ?? null,
         cropOffsetY: item.cropOffsetY ?? null,
+        transitionStyle: item.transitionStyle ?? null,
+        transitionDurationMs: item.transitionDurationMs ?? null,
         kind: item.kind,
       };
 

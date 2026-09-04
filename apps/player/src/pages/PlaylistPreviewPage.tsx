@@ -20,6 +20,8 @@ function toZonePlayerItem(item: PreviewPlaylistItem): PlaylistItem {
     cropZoom: item.cropZoom,
     cropOffsetX: item.cropOffsetX,
     cropOffsetY: item.cropOffsetY,
+    transitionStyle: item.transitionStyle,
+    transitionDurationMs: item.transitionDurationMs,
     kind: 'ASSET',
     asset: item.asset,
     theme: null,

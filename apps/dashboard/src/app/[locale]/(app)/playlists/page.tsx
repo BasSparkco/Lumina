@@ -18,7 +18,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, PLAYER_URL, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, PLAYER_URL, TRANSITION_STYLE_OPTIONS, TRANSITION_LABEL_KEYS, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
 import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
 import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
@@ -63,7 +63,7 @@ type Translate = ReturnType<typeof useTranslations>;
  * parent's .map()) because useSortable is a hook — calling it once per item inside the parent's
  * own render body would violate the rules of hooks the moment the list length changes. */
 function PlaylistItemRow({
-  item, index, canEditContent, t, tCrop, onView, onCrop, onDurationChange, onTogglePlayFullVideo, onToggleMuted, onRemove,
+  item, index, canEditContent, t, tCrop, onView, onCrop, onDurationChange, onTogglePlayFullVideo, onToggleMuted, onTransitionChange, onRemove,
 }: {
   item: PlaylistItem;
   index: number;
@@ -75,6 +75,7 @@ function PlaylistItemRow({
   onDurationChange: (dur: number) => void;
   onTogglePlayFullVideo: () => void;
   onToggleMuted: () => void;
+  onTransitionChange: (transitionStyle: TransitionStyle | null) => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -161,6 +162,20 @@ function PlaylistItemRow({
           className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
           <Crop className="w-3.5 h-3.5" />
         </button>
+      )}
+
+      {canEditContent && item.kind === 'ASSET' && item.asset && (
+        <select
+          value={item.transitionStyle ?? 'DEFAULT'}
+          title={t('itemTransition.label')}
+          onChange={e => onTransitionChange(e.target.value === 'DEFAULT' ? null : e.target.value as TransitionStyle)}
+          className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        >
+          <option value="DEFAULT">{t('itemTransition.default')}</option>
+          {TRANSITION_STYLE_OPTIONS.map(id => (
+            <option key={id} value={id}>{t(`transition.${TRANSITION_LABEL_KEYS[id]}`)}</option>
+          ))}
+        </select>
       )}
 
       {canEditContent && (
@@ -311,6 +326,12 @@ function PlaylistDetail({ id }: { id: string }) {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
   });
 
+  const itemTransitionMut = useMutation({
+    mutationFn: ({ item, transitionStyle }: { item: PlaylistItem; transitionStyle: TransitionStyle | null }) =>
+      playlistsApi.updateItem(id, item.id, item.durationSecs, item.muted, item.playFullVideo, undefined, { transitionStyle }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
+  });
+
   const reorderMut = useMutation({
     mutationFn: (ids: string[]) => playlistsApi.reorder(id, ids),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['playlist', id] }); },
@@ -345,10 +366,11 @@ function PlaylistDetail({ id }: { id: string }) {
             <select value={playlist.transitionStyle} disabled={!canEditContent}
               onChange={e => configMut.mutate({ transitionStyle: e.target.value as TransitionStyle })}
               className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
-              <option value="NONE">{t('transition.none')}</option>
-              <option value="CROSSFADE">{t('transition.crossfade')}</option>
+              {TRANSITION_STYLE_OPTIONS.map(id => (
+                <option key={id} value={id}>{t(`transition.${TRANSITION_LABEL_KEYS[id]}`)}</option>
+              ))}
             </select>
-            {playlist.transitionStyle === 'CROSSFADE' && (
+            {playlist.transitionStyle !== 'NONE' && (
               <>
                 <input type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
                   disabled={!canEditContent}
@@ -580,6 +602,7 @@ function PlaylistDetail({ id }: { id: string }) {
                 onDurationChange={dur => durMut.mutate({ itemId: item.id, dur })}
                 onTogglePlayFullVideo={() => playFullVideoMut.mutate(item)}
                 onToggleMuted={() => mutedMut.mutate(item)}
+                onTransitionChange={transitionStyle => itemTransitionMut.mutate({ item, transitionStyle })}
                 onRemove={() => removeMut.mutate(item)}
               />
             ))}
