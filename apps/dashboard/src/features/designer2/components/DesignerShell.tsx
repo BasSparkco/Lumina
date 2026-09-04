@@ -94,6 +94,9 @@ export function DesignerShell({
   // CanvasViewport needing to know anything about property-panel UI. State (not a bare ref) so
   // PropertiesPanel re-renders once the adapter becomes available after mount.
   const [adapter, setAdapter] = useState<FabricCanvasAdapter | null>(null);
+  // Same lifted-from-CanvasViewport convention as `adapter` above — pan offset is local
+  // interaction state CanvasViewport owns, but the top bar's "Fit to Screen" button lives here.
+  const [resetView, setResetView] = useState<(() => void) | null>(null);
 
   const { canUndo, canRedo, undo, redo, commit } = useDesignerHistory();
   const { confirmDelete } = useConfirmBeforeDelete();
@@ -269,6 +272,7 @@ export function DesignerShell({
         zoom={zoom}
         onZoomIn={() => setZoom(Math.min(4, zoom * 1.2))}
         onZoomOut={() => setZoom(Math.max(0.1, zoom / 1.2))}
+        onResetView={() => resetView?.()}
         onShowObjects={() => {
           setInspectorTab('objects');
           setInspectorCollapsed(false);
@@ -317,7 +321,15 @@ export function DesignerShell({
           />
         )}
         <div className="relative min-w-0 flex-1">
-          <CanvasViewport commit={commit} onAdapterReady={setAdapter} />
+          <CanvasViewport
+            commit={commit}
+            onAdapterReady={setAdapter}
+            // Passing `setResetView` directly would be a classic React footgun: a state setter
+            // interprets a function argument as a lazy updater (calls it immediately with the
+            // previous state) rather than storing it — wrapping in `() => fn` forces it to be
+            // stored as-is.
+            onResetViewReady={(fn) => setResetView(() => fn)}
+          />
           {previewing && (
             // A single layer on top of the canvas: its own presence (painted after CanvasViewport,
             // covering the full area) blocks pointer events from reaching the canvas underneath —

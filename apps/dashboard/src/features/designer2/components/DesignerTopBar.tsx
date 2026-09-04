@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Layers, History, Eye, Square, Save, Loader2, Check, Menu } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, Layers, History, Eye, Square, Save, Loader2, Check, Menu } from 'lucide-react';
 import { useAppSidebar } from '@/context/AppSidebarContext';
 import { SaveStatus } from './SaveStatus';
 import type { AutosaveStatus } from '../hooks/useAutosave';
@@ -26,6 +26,9 @@ interface DesignerTopBarProps {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  // Re-centers a pan offset and re-fits zoom to the viewport (designer2 pan/zoom feature) — same
+  // action as double-clicking empty canvas.
+  onResetView: () => void;
   onShowObjects: () => void;
   isObjectsActive?: boolean;
   onToggleVersions: () => void;
@@ -65,6 +68,7 @@ export function DesignerTopBar({
   zoom,
   onZoomIn,
   onZoomOut,
+  onResetView,
   onShowObjects,
   isObjectsActive,
   onToggleVersions,
@@ -150,6 +154,9 @@ export function DesignerTopBar({
       </span>
       <button className={btn} onClick={onZoomIn} aria-label="Zoom in">
         <ZoomIn className="h-4 w-4" />
+      </button>
+      <button className={btn} onClick={onResetView} aria-label="Fit to Screen / Reset View" title="Fit to Screen (or double-click empty canvas)">
+        <Maximize2 className="h-4 w-4" />
       </button>
 
       <button className={btn} onClick={onShowObjects} aria-pressed={isObjectsActive} aria-label="Objects">

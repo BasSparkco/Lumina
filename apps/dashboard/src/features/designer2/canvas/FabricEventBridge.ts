@@ -127,3 +127,17 @@ export function bindContextMenuEvents(
   upperEl.addEventListener('contextmenu', handler);
   return () => upperEl.removeEventListener('contextmenu', handler);
 }
+
+// Double-click on empty canvas — Reset View (pan/zoom feature). Same findTarget-on-upperCanvasEl
+// pattern as bindContextMenuEvents, since detecting "empty canvas" needs the same target lookup;
+// double-clicking an actual element is left alone (no in-canvas double-click editing exists yet
+// for designer2, so this only ever needs to distinguish empty-vs-not).
+export function bindDoubleClickEvents(canvas: Canvas, onEmptyDoubleClick: () => void): () => void {
+  const upperEl = canvas.upperCanvasEl;
+  const handler = (ev: MouseEvent) => {
+    const target = canvas.findTarget(ev as TPointerEvent).target as DesignerFabricObject | undefined;
+    if (!target) onEmptyDoubleClick();
+  };
+  upperEl.addEventListener('dblclick', handler);
+  return () => upperEl.removeEventListener('dblclick', handler);
+}

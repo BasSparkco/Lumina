@@ -18,6 +18,7 @@ import { fontStack } from '@lumina/types';
 import { createFabricObject, type ResolveAssetUrl } from './FabricObjectFactory';
 import {
   bindContextMenuEvents,
+  bindDoubleClickEvents,
   bindLiveTransformEvents,
   bindModifiedEvents,
   bindSelectionEvents,
@@ -51,6 +52,14 @@ export interface CanvasAdapter {
   setZoom(value: number): void;
   fitToViewport(): void;
 
+  // designer2 pan feature — suspends Fabric's own object interaction (selection + drag) while
+  // Space is held or a middle-mouse pan is in flight, and reflects that in the cursor. The actual
+  // translate/pan math lives in CanvasViewport (a DOM-level transform outside Fabric's own
+  // viewportTransform); this only needs to stop Fabric from treating the same mousedown as an
+  // object interaction.
+  setPanModeActive(active: boolean): void;
+  setCursor(cursor: string): void;
+
   exportSceneSnapshot(): Promise<Blob>;
 
   // designer.md Phase 7 — see the amendment under Phase 7 for why these are Fabric-native tweens
@@ -75,6 +84,9 @@ export interface CanvasAdapterCallbacks {
   // the wheel-zoom handler (Phase 1's original wiring) drifts out of sync with the canvas's
   // actual zoom the first time the window/container resizes.
   onZoomChange: (zoom: number) => void;
+  // designer2 pan feature — double-click on empty canvas resets the view (see
+  // bindDoubleClickEvents). Never fires for a double-click on an actual element.
+  onEmptyDoubleClick: () => void;
   // designer.md Phase 4 — Image elements store an `assetId`, not a URL (designer.md §9); resolving
   // that to a real, signed/CDN URL means querying the tenant's media list, which is exactly the
   // kind of "SaaS authorization"/data concern designer.md §4.1 keeps out of this adapter. The
@@ -130,6 +142,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   private unbindModified: () => void;
   private unbindLiveTransform: () => void;
   private unbindContextMenu: () => void;
+  private unbindDoubleClick: () => void;
 
   constructor(
     canvasEl: HTMLCanvasElement,
@@ -157,6 +170,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       callbacks.onGuidesChange,
     );
     this.unbindContextMenu = bindContextMenuEvents(this.canvas, callbacks.onContextMenu);
+    this.unbindDoubleClick = bindDoubleClickEvents(this.canvas, callbacks.onEmptyDoubleClick);
     const onAfterRender = () => {
       this.syncTextOverlays();
       this.syncVideoOverlays();
@@ -443,6 +457,18 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     this.callbacks.onZoomChange(value);
   }
 
+  setPanModeActive(active: boolean): void {
+    this.canvas.selection = !active;
+    this.canvas.skipTargetFind = active;
+    this.canvas.defaultCursor = active ? 'grab' : 'default';
+    this.canvas.hoverCursor = active ? 'grab' : 'move';
+    this.canvas.upperCanvasEl.style.cursor = active ? 'grab' : '';
+  }
+
+  setCursor(cursor: string): void {
+    this.canvas.upperCanvasEl.style.cursor = cursor;
+  }
+
   // designer.md §4.2 declares this with no parameters; the optional viewport size lets
   // CanvasViewport pass its ResizeObserver reading directly rather than the adapter having to
   // reach back into the DOM for its own container size.
@@ -598,6 +624,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     this.unbindModified();
     this.unbindLiveTransform();
     this.unbindContextMenu();
+    this.unbindDoubleClick();
     this.unbindAfterRender();
     for (const div of this.textOverlays.values()) div.remove();
     this.textOverlays.clear();

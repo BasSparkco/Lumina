@@ -29,19 +29,33 @@ interface CanvasViewportProps {
   // adapter.updateElement() directly for live-feedback edits (designer.md §8 amendment) without
   // this component needing to know anything about property-panel UI.
   onAdapterReady: (adapter: FabricCanvasAdapter | null) => void;
+  // Hands the parent an imperative resetView() so the top bar's "Fit to Screen" button can
+  // trigger it — same callback-prop convention as onAdapterReady, since pan offset is local
+  // interaction state owned by this component (not the designer store).
+  onResetViewReady: (fn: (() => void) | null) => void;
 }
 
 // Mounts the Fabric <canvas> and owns the adapter's lifecycle. This is the piece that must be
 // lazy-loaded client-only (see designer2/page.tsx) — Fabric touches `window`/`document` at
 // construction time and cannot run during SSR.
-export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) {
+export function CanvasViewport({ commit, onAdapterReady, onResetViewReady }: CanvasViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasBoxRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const textOverlayContainerRef = useRef<HTMLDivElement>(null);
   const videoOverlayContainerRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<FabricCanvasAdapter | null>(null);
   const [guides, setGuides] = useState<Guides>({ v: [], h: [] });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  // Pan (Space+drag / middle-mouse-drag) — a DOM-level `transform: translate` applied directly to
+  // canvasBoxRef, entirely outside Fabric's own viewportTransform/zoom. Kept in refs and mutated
+  // imperatively (applyPanTransform) rather than React state so a drag can update every
+  // mousemove at 60fps without round-tripping through a re-render.
+  const panRef = useRef({ x: 0, y: 0 });
+  const spaceHeldRef = useRef(false);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ mouseX: 0, mouseY: 0, offsetX: 0, offsetY: 0 });
+  const resetTransitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { confirmDelete } = useConfirmBeforeDelete();
   // Same tenant-scoped assets list every asset picker/select in the dashboard queries (see
   // ImagePicker.tsx) — React Query dedupes against those by queryKey, so this doesn't add a
@@ -134,6 +148,29 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
     ];
   }
 
+  // Applies panRef's current offset to the DOM directly (no React re-render). `smooth: true` is
+  // only for the brief animated snap-back in resetView — every live drag frame passes `false` so
+  // dragging itself is instant with no transition lag.
+  function applyPanTransform(smooth: boolean) {
+    const el = canvasBoxRef.current;
+    if (!el) return;
+    el.style.transition = smooth ? 'transform 220ms ease-out' : 'none';
+    el.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0)`;
+  }
+
+  // Reset View: re-centers a pan offset back to zero and re-fits zoom to the viewport. Wired to
+  // both the top bar's "Fit to Screen" button (via onResetViewReady) and double-clicking empty
+  // canvas (via the adapter's onEmptyDoubleClick callback below). Only reads/writes refs, so this
+  // closure stays valid even though it's captured once at mount time by the effect below.
+  function resetView() {
+    panRef.current = { x: 0, y: 0 };
+    applyPanTransform(true);
+    if (resetTransitionTimeoutRef.current) clearTimeout(resetTransitionTimeoutRef.current);
+    resetTransitionTimeoutRef.current = setTimeout(() => applyPanTransform(false), 220);
+    const container = containerRef.current;
+    adapterRef.current?.fitToViewport(container?.clientWidth, container?.clientHeight);
+  }
+
   // fabric.Canvas.dispose() synchronously restores the DOM but only *defers* tearing down its
   // render context until any pending requestAnimationFrame-scheduled render fires — see
   // fabric's StaticCanvas.dispose()/destroy(). React 18 Strict Mode's dev-only synchronous
@@ -161,13 +198,16 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
         setContextMenu({ x: clientX, y: clientY, actions: buildContextMenuActions(elementId) });
       },
       onZoomChange: (z) => latest.current.setZoom(z),
+      onEmptyDoubleClick: () => resetView(),
       resolveAssetUrl: (assetId) => latest.current.resolveAssetUrl(assetId),
     });
     adapterRef.current = adapter;
     onAdapterReady(adapter);
+    onResetViewReady(resetView);
     return () => {
       adapterRef.current = null;
       onAdapterReady(null);
+      onResetViewReady(null);
       adapter.dispose();
       canvasEl.remove();
     };
@@ -244,6 +284,116 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
     return () => container.removeEventListener('wheel', onWheel);
   }, [zoom]);
 
+  // Space/Drag-to-Pan + middle-mouse-drag-to-pan. Space+drag pans regardless of what's under the
+  // cursor (adapter.setPanModeActive suspends Fabric's own object interaction for the duration);
+  // plain click-drag on blank canvas is left untouched, so Fabric's existing rubber-band marquee
+  // multi-select keeps working exactly as before. mousemove/mouseup listeners for an in-flight
+  // drag are attached only while panning and torn down the instant it ends, rather than living
+  // for the component's whole lifetime — same "don't leak persistent global listeners" concern as
+  // the wheel handler above, just scoped to the drag gesture instead of the mount.
+  useEffect(() => {
+    const containerEl = containerRef.current;
+    if (!containerEl) return;
+    // Function declarations below are hoisted, so TS can't carry the `!containerEl` narrowing
+    // into them (it only narrows in the same control-flow path, not closures called later) —
+    // this second binding is annotated non-null once instead of `!`-asserting on every use.
+    const container: HTMLDivElement = containerEl;
+
+    function isTypingTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+    }
+
+    function setSpaceHeld(held: boolean) {
+      if (spaceHeldRef.current === held) return;
+      spaceHeldRef.current = held;
+      // Don't touch Fabric's interaction/cursor state mid-drag — endPan() re-syncs it from
+      // spaceHeldRef once the drag actually finishes.
+      if (isPanningRef.current) return;
+      adapterRef.current?.setPanModeActive(held);
+      container.style.cursor = held ? 'grab' : '';
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== 'Space' || e.repeat || isTypingTarget(e.target)) return;
+      e.preventDefault(); // stop the page from scrolling on Space
+      setSpaceHeld(true);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code !== 'Space') return;
+      setSpaceHeld(false);
+    }
+
+    function endPan() {
+      isPanningRef.current = false;
+      adapterRef.current?.setPanModeActive(spaceHeldRef.current);
+      container.style.cursor = spaceHeldRef.current ? 'grab' : '';
+      window.document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onPanMove, true);
+      window.removeEventListener('mouseup', onPanUp, true);
+      window.removeEventListener('blur', endPan);
+    }
+
+    function onPanMove(e: MouseEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dx = e.clientX - panStartRef.current.mouseX;
+      const dy = e.clientY - panStartRef.current.mouseY;
+      panRef.current = { x: panStartRef.current.offsetX + dx, y: panStartRef.current.offsetY + dy };
+      applyPanTransform(false);
+    }
+
+    function onPanUp(e: MouseEvent) {
+      e.preventDefault();
+      e.stopPropagation();
+      endPan();
+    }
+
+    function startPan(e: MouseEvent) {
+      // Captured before Fabric ever sees this mousedown (see onMouseDown below), so this
+      // simultaneously satisfies spec item 3 (dragging an object doesn't pan unless Space is
+      // held) and keeps blank-canvas marquee-select intact (this only runs for Space+drag or
+      // middle-mouse, never a plain blank-canvas click).
+      e.preventDefault();
+      e.stopPropagation();
+      isPanningRef.current = true;
+      panStartRef.current = { mouseX: e.clientX, mouseY: e.clientY, offsetX: panRef.current.x, offsetY: panRef.current.y };
+      adapterRef.current?.setPanModeActive(true);
+      adapterRef.current?.setCursor('grabbing');
+      container.style.cursor = 'grabbing';
+      window.document.body.style.userSelect = 'none';
+      window.addEventListener('mousemove', onPanMove, true);
+      window.addEventListener('mouseup', onPanUp, true);
+      window.addEventListener('blur', endPan);
+    }
+
+    // Capture phase + stopPropagation so a pan-triggering mousedown never reaches Fabric's own
+    // mousedown handling (bound on canvas.upperCanvasEl, a descendant of `container`) — Fabric
+    // never sees the event at all rather than seeing it and being told to ignore it.
+    function onMouseDown(e: MouseEvent) {
+      if (isPanningRef.current) return;
+      const isMiddleButton = e.button === 1;
+      const isSpaceDrag = e.button === 0 && spaceHeldRef.current;
+      if (isMiddleButton || isSpaceDrag) startPan(e);
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    container.addEventListener('mousedown', onMouseDown, true);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      container.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mousemove', onPanMove, true);
+      window.removeEventListener('mouseup', onPanUp, true);
+      window.removeEventListener('blur', endPan);
+      if (resetTransitionTimeoutRef.current) clearTimeout(resetTransitionTimeoutRef.current);
+      container.style.cursor = '';
+      window.document.body.style.userSelect = '';
+    };
+  }, []);
+
   const canvasPxWidth = (document?.canvas.width ?? 0) * zoom;
   const canvasPxHeight = (document?.canvas.height ?? 0) * zoom;
   const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
@@ -255,7 +405,7 @@ export function CanvasViewport({ commit, onAdapterReady }: CanvasViewportProps) 
 
   return (
     <div ref={containerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden bg-gray-100 dark:bg-gray-950">
-      <div className="relative" style={{ width: canvasPxWidth, height: canvasPxHeight }}>
+      <div ref={canvasBoxRef} className="relative" style={{ width: canvasPxWidth, height: canvasPxHeight, willChange: 'transform' }}>
         <div className="absolute inset-0" style={{ backgroundColor }} />
         {/* designer.md Phase 9 — video elements' actual playback (FabricCanvasAdapter
             populates/positions these; the Fabric hit-box underneath is fully transparent). Sits
