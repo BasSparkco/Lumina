@@ -13,12 +13,21 @@ datasource db {
 
 // ─── Tenant ──────────────────────────────────────────────────────────────────
 
+// Whole-tenant lifecycle, orthogonal to per-module entitlement (TenantModule below). SUSPENDED
+// blocks the tenant across every route/player while leaving all data intact — never used to
+// represent "this one module is off," which is what TenantModuleStatus.DISABLED is for.
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
 model Organization {
-  id        String   @id @default(cuid())
+  id        String             @id @default(cuid())
   name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  slug      String             @unique
+  status    OrganizationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
 
   // When true, screen setting changes (playlist, layout, volume, prayer, emergency, stop) push
   // to the screen the moment they're saved. When false, they're saved but not pushed until
@@ -45,6 +54,34 @@ model Organization {
   designAssets         DesignAsset[]
   designDrafts         DesignDraft[]
   designTemplateAccess DesignTemplateTenant[]
+  tenantModules        TenantModule[]
+}
+
+// Per-tenant paid-module entitlement. `moduleKey` is a plain String constrained by
+// @lumina/types' MODULE_KEYS catalog at the service/DTO layer, not a Prisma enum — see
+// docs/adr/platform-modules-and-entitlements.md. Disabling a module (status: DISABLED) never
+// deletes this row or anything it gates; re-enabling just flips status back.
+enum TenantModuleStatus {
+  ACTIVE
+  TRIAL
+  DISABLED
+}
+
+model TenantModule {
+  id        String             @id @default(cuid())
+  moduleKey String
+  status    TenantModuleStatus @default(ACTIVE)
+  enabledAt DateTime           @default(now())
+  expiresAt DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, moduleKey])
+  @@index([organizationId, status])
+  @@index([expiresAt])
 }
 
 // ─── Users & Auth ─────────────────────────────────────────────────────────────

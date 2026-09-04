@@ -193,7 +193,7 @@ It must contain the decisions in Sections 3.1–3.7 and name the exported contra
 
 **Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
 
-**Plan status:** Milestone A1 is complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). Milestone B1 (persistence — `Organization.status`, `TenantModule`, migration and backfill) may begin.
+**Plan status:** Milestones A1 and B1 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). Milestone B2 (entitlement domain service — `EntitlementsService`, `@RequireModule`, `GET /v1/org/capabilities`) may begin.
 
 ---
 
@@ -690,12 +690,12 @@ Automate or manually verify this exact scenario against the real development sta
 - [x] Write the entitlement ADR. (`docs/adr/platform-modules-and-entitlements.md`)
 - [x] Approve disabled-module and tenant-suspension behavior. (two-pass technical review, see commit history)
 
-### Milestone B1 — Persistence
+### Milestone B1 — Persistence — complete
 
-- [ ] Add organization/module status models.
-- [ ] Create migration and existing-tenant backfill.
-- [ ] Update seed/bootstrap behavior.
-- [ ] Verify migration on empty and populated database copies.
+- [x] Add organization/module status models. (`OrganizationStatus`, `TenantModuleStatus`, `TenantModule` in `schema.prisma`)
+- [x] Create migration and existing-tenant backfill. (`20260904192902_add_tenant_status_and_modules` — backfills `WAYFINDING`/`ACTIVE` for every pre-existing org)
+- [x] Update seed/bootstrap behavior. (`prisma/seed.ts` grants the demo org `WAYFINDING` directly, since the migration backfill can't reach an org created after it ran on a fresh database)
+- [x] Verify migration on empty and populated database copies. (Verified: full migration history applies clean to an empty throwaway database with zero rows produced; applied to the populated dev database, correctly backfilled all 4 existing orgs to `ACTIVE` + `WAYFINDING`/`ACTIVE`, confirmed idempotent on reseed)
 
 ### Milestone B2 — Backend entitlement kernel
 

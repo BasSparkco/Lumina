@@ -14,6 +14,16 @@ async function main() {
     create: { name: 'Demo Org', slug: 'demo' },
   });
 
+  // The tenant-modules migration backfills WAYFINDING for every organization that already
+  // existed when it ran — it can't reach an org created afterward by this seed on a fresh
+  // database, so the demo org needs the same entitlement granted here instead. Keeps
+  // `db:seed-wayfinding`'s demo content usable once Wayfinding enforcement ships.
+  await prisma.tenantModule.upsert({
+    where: { organizationId_moduleKey: { organizationId: org.id, moduleKey: 'WAYFINDING' } },
+    update: {},
+    create: { organizationId: org.id, moduleKey: 'WAYFINDING', status: 'ACTIVE' },
+  });
+
   await prisma.user.upsert({
     where: { email: 'admin@demo.com' },
     update: {},
