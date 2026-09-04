@@ -193,7 +193,7 @@ It must contain the decisions in Sections 3.1–3.7 and name the exported contra
 
 **Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
 
-**Plan status:** Milestones A1 and B1 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). Milestone B2 (entitlement domain service — `EntitlementsService`, `@RequireModule`, `GET /v1/org/capabilities`) may begin.
+**Plan status:** Milestones A1, B1, and B2 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (see Milestone B2 below). Milestone B3 (Super Admin tenant control plane API) may begin.
 
 ---
 
@@ -697,12 +697,12 @@ Automate or manually verify this exact scenario against the real development sta
 - [x] Update seed/bootstrap behavior. (`prisma/seed.ts` grants the demo org `WAYFINDING` directly, since the migration backfill can't reach an org created after it ran on a fresh database)
 - [x] Verify migration on empty and populated database copies. (Verified: full migration history applies clean to an empty throwaway database with zero rows produced; applied to the populated dev database, correctly backfilled all 4 existing orgs to `ACTIVE` + `WAYFINDING`/`ACTIVE`, confirmed idempotent on reseed)
 
-### Milestone B2 — Backend entitlement kernel
+### Milestone B2 — Backend entitlement kernel — complete
 
-- [ ] Add entitlement module/service/decorator/guard, following `OrgScopedService`'s existing org-ownership conventions.
-- [ ] Add capabilities endpoint.
-- [ ] Add dependency and expiry validation.
-- [ ] Add unit and API tests.
+- [x] Add entitlement module/service/decorator/guard. (`apps/api/src/modules/entitlements/**` — `EntitlementsService`, `@RequireModule`, `EntitlementGuard`, `ModuleCatalogService`, `Clock`)
+- [x] Add capabilities endpoint. (`GET /v1/org/capabilities` on `OrgController`, resolves only `req.user.orgId`, live DB read)
+- [x] Add dependency and expiry validation. (`validateDependencies()`, `isAssignmentUsable()` — org-suspended/disabled/trial/expired/dependency-chain cases all covered)
+- [x] Add unit and API tests. (26 Jest unit tests across `entitlements.service.spec.ts`/`entitlement.guard.spec.ts`; no e2e/API test harness exists yet in this repo — `test/jest-e2e.json` is referenced by `package.json` but the directory doesn't exist — so the endpoint was instead verified live: full Nest DI graph boot, real login, `GET /v1/org/capabilities` against the demo org returning the correct backfilled state, and a 401 on an unauthenticated request. Building e2e infrastructure from scratch is out of scope for this milestone.)
 
 ### Milestone B3 — Super Admin control plane API
 

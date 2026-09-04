@@ -28,6 +28,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { ScreenGroupsModule } from './modules/screen-groups/screen-groups.module';
 import { ProofOfPlayModule } from './modules/proof-of-play/proof-of-play.module';
 import { WayfindingModule } from './modules/wayfinding/wayfinding.module';
+import { EntitlementsModule } from './modules/entitlements/entitlements.module';
 import { KioskAnalyticsModule } from './modules/kiosk-analytics/kiosk-analytics.module';
 import { DesignsModule } from './modules/designs/designs.module';
 import { TemplatesModule } from './modules/templates/templates.module';
@@ -109,6 +110,7 @@ loadDotenv({
     ScreenGroupsModule,
     ProofOfPlayModule,
     WayfindingModule,
+    EntitlementsModule,
     KioskAnalyticsModule,
     DesignsModule,
     TemplatesModule,

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { OrgService } from './org.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
@@ -16,7 +17,20 @@ import type { JwtUser } from '../../common/types/jwt-user';
 @ApiTags('org')
 @Controller('org')
 export class OrgController {
-  constructor(private readonly org: OrgService) {}
+  constructor(
+    private readonly org: OrgService,
+    private readonly entitlements: EntitlementsService,
+  ) {}
+
+  // Resolves only the caller's own organization from req.user.orgId — never accepts an
+  // organization id from the client — and is always computed live, per
+  // docs/adr/platform-modules-and-entitlements.md.
+  @Get('capabilities')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  getCapabilities(@CurrentUser() user: JwtUser) {
+    return this.entitlements.getCapabilities(user.orgId);
+  }
 
   @Get('all')
   @ApiBearerAuth()
