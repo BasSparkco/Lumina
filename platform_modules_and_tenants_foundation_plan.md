@@ -193,7 +193,7 @@ It must contain the decisions in Sections 3.1–3.7 and name the exported contra
 
 **Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
 
-**Plan status:** Milestones A1, B1, B2, and B3 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (see Milestone B2 below). The Super Admin tenant control plane (`/v1/admin/tenants/**`), global tenant-suspension enforcement, live `SuperAdminGuard` revalidation, and gated public registration are live and verified end-to-end (see Milestone B3 below). Milestone B4 (dashboard capability layer) may begin.
+**Plan status:** Milestones A1, B1, B2, B3, and B4 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (see Milestone B2 below). The Super Admin tenant control plane (`/v1/admin/tenants/**`), global tenant-suspension enforcement, live `SuperAdminGuard` revalidation, and gated public registration are live and verified end-to-end (see Milestone B3 below). The dashboard capability layer — nav/route gating and the full Super Admin tenant UI — is live and browser-verified, and the registration-page gating deferred from B3 is closed (see Milestone B4 below). Milestone B5 (Wayfinding player-side entitlement gating) may begin — scoped to `apps/player` only; see `flutter_player_entitlement_sync_roadmap.md` for why the Flutter native player isn't affected.
 
 ---
 
@@ -725,12 +725,16 @@ Verified live end-to-end (not just unit tests): booted the real API, created a t
 
 **Addendum (2026-09-04), found while reading the Flutter native player's source for a separate roadmap request:** the original B3 pass verified suspension for dashboard routes and logins, but never checked `PlayerService.getState()`/`getManifest()` against §6.4's "player state must not expose tenant content" — that gap is now closed, see the note under Section 6.4 above. This was worth catching before it shipped: reading `Lumina_player`'s actual revocation-handling code showed that a naive `401` here would have caused every suspended tenant's kiosk (web or Flutter) to unpair itself.
 
-### Milestone B4 — Dashboard foundation
+### Milestone B4 — Dashboard foundation — complete
 
-- [ ] Add capability provider/hooks.
-- [ ] Add module-aware navigation and route guard.
-- [ ] Add Super Admin tenant list/create/detail/module UI.
-- [ ] Add English and Arabic translations.
+- [x] Add capability provider/hooks. (`CapabilitiesContext.tsx`, `useCapabilities.ts`, `useModuleAccess.ts` — one `GET /org/capabilities` fetch per session, react-query dedupes concurrent callers on its own.)
+- [x] Add module-aware navigation and route guard. (`NavItem.requiredModule`, `(app)/layout.tsx`'s filter waits for capabilities before rendering a gated item; `useModuleRouteGuard('WAYFINDING')` applied to the Wayfinding page, every one of its queries gated on `enabled: canRender`.)
+- [x] Add Super Admin tenant list/create/detail/module UI. (`admin/tenants/page.tsx` + `admin/tenants/[tenantId]/page.tsx`, `ModuleAssignmentsEditor` shared between create and edit, client-side dependency validation mirroring `EntitlementsService.validateDependencies` blocks submit before the API ever sees a bad request.)
+- [x] Add English and Arabic translations. (`adminTenants` namespace in both `en.json`/`ar.json`, plus `nav.adminTenants`.)
+
+**Also closed, previously deferred from B3**: hiding/redirecting the dashboard's own registration page per Section 6.3. `NEXT_PUBLIC_ALLOW_SELF_REGISTRATION` mirrors the API's own flag (same pattern already used for `NEXT_PUBLIC_PLAYER_URL`) — the register page redirects to `/login` and the login page hides its "create one" link when disabled. This is UX only; the API remains the actual boundary regardless of whether the two flags are kept in sync.
+
+Verified live in a real browser (Playwright against the actual dev server, not just typecheck/lint): Super Admin sees the Tenants nav entry and a working list; Create Tenant's dependency validation blocks submit for `WAYFINDING_AI` without `WAYFINDING` and clears once resolved, then creates the tenant and shows a copyable invite link; the detail page's suspend/activate buttons show the confirm dialog and take effect immediately; module edits save and persist across reload; a normal non-Super-Admin user never sees the Tenants nav item and is redirected away from a direct `/admin/tenants` visit; a tenant without `WAYFINDING` never sees that nav item and a direct `/wayfinding` visit redirects away without ever calling the Wayfinding-exclusive endpoints (`buildings`/`poi-categories` — confirmed absent from the network log, unlike the destination page's own unrelated `screens`/`assets` calls). Zero console errors or failed requests across every scenario.
 
 ### Milestone B5 — Wayfinding vertical slice
 

@@ -73,10 +73,12 @@ export default function LoginPage() {
             {submitting ? t('signingIn') : t('signIn')}
           </button>
         </div>
-        <p className="mt-4 text-sm text-center text-gray-500 dark:text-gray-400">
-          {t('noAccount')}{' '}
-          <a href={`/${locale}/register`} className="text-indigo-600 hover:underline">{t('createOne')}</a>
-        </p>
+        {process.env.NEXT_PUBLIC_ALLOW_SELF_REGISTRATION === 'true' && (
+          <p className="mt-4 text-sm text-center text-gray-500 dark:text-gray-400">
+            {t('noAccount')}{' '}
+            <a href={`/${locale}/register`} className="text-indigo-600 hover:underline">{t('createOne')}</a>
+          </p>
+        )}
       </div>
     </div>
   );

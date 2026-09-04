@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ThemeProvider, themeInitScript } from '@/context/ThemeContext';
 import { QueryProvider } from '@/context/QueryProvider';
 import { AuthProvider } from '@/context/AuthContext';
+import { CapabilitiesProvider } from '@/context/CapabilitiesContext';
 import { AppToaster } from '@/components/AppToaster';
 import './globals.css';
 
@@ -29,7 +30,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <AppToaster />
           <QueryProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <CapabilitiesProvider>{children}</CapabilitiesProvider>
+            </AuthProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

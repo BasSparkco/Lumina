@@ -1,5 +1,6 @@
 import Cookies from 'js-cookie';
 import type { DesignDocument } from '@lumina/design-schema';
+import type { ModuleKey, OrganizationStatus, TenantModuleStatus, TenantCapabilities } from '@lumina/types';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/v1';
 // playsetting.md Phase 4 — the player PWA's own origin (a separate deployment, see
@@ -87,6 +88,62 @@ export const orgApi = {
     req<{ autoPublish: boolean }>('/org/settings', { method: 'PUT', body: JSON.stringify({ autoPublish }) }),
   // Super Admin only — every tenant, not just the caller's own (see OrgController.listAll).
   listAllOrganizations: () => req<{ id: string; name: string; slug: string }[]>('/org/all'),
+  // Always the caller's own organization — the server resolves this from the JWT, never from
+  // a client-supplied id. See docs/adr/platform-modules-and-entitlements.md.
+  getCapabilities: () => req<TenantCapabilities>('/org/capabilities'),
+};
+
+// ── Platform tenants (Super Admin control plane) ─────────────────────────────
+export interface TenantModuleAssignment {
+  key: ModuleKey;
+  status: TenantModuleStatus;
+  expiresAt: string | null;
+}
+export interface TenantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrganizationStatus;
+  createdAt: string;
+  modules: TenantModuleAssignment[];
+}
+export interface TenantDetail {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrganizationStatus;
+  createdAt: string;
+  capabilities: TenantCapabilities;
+}
+export interface OwnerInviteResult {
+  email: string;
+  token: string;
+  expiresAt: string;
+}
+export interface CreateTenantInput {
+  name: string;
+  slug: string;
+  ownerEmail: string;
+  modules: { key: ModuleKey; status: TenantModuleStatus; expiresAt?: string }[];
+}
+export interface CreateTenantResult {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrganizationStatus;
+  ownerInvite: OwnerInviteResult;
+}
+
+export const platformTenantsApi = {
+  list: () => req<TenantSummary[]>('/admin/tenants'),
+  detail: (tenantId: string) => req<TenantDetail>(`/admin/tenants/${tenantId}`),
+  create: (input: CreateTenantInput) => req<CreateTenantResult>('/admin/tenants', { method: 'POST', body: JSON.stringify(input) }),
+  updateStatus: (tenantId: string, status: OrganizationStatus) =>
+    req<{ id: string; status: OrganizationStatus }>(`/admin/tenants/${tenantId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  setModules: (tenantId: string, assignments: { key: ModuleKey; status: TenantModuleStatus; expiresAt?: string }[]) =>
+    req<TenantCapabilities>(`/admin/tenants/${tenantId}/modules`, { method: 'PUT', body: JSON.stringify({ assignments }) }),
+  reissueOwnerInvite: (tenantId: string, email: string) =>
+    req<OwnerInviteResult>(`/admin/tenants/${tenantId}/owner-invite`, { method: 'POST', body: JSON.stringify({ email }) }),
 };
 
 // ── Screens ─────────────────────────────────────────────────────────────────

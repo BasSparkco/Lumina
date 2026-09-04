@@ -13,6 +13,7 @@
     "themes": "Themes",
     "templates": "Templates",
     "adminTemplates": "Design Templates",
+    "adminTenants": "Tenants",
     "wayfinding": "Wayfinding",
     "schedules": "Schedules",
     "powerSchedule": "Display power",
@@ -1216,6 +1217,51 @@
     "removeConfirm": "Remove {name}?",
     "ownerCannotBeRemoved": "The owner cannot be removed",
     "removeMember": "Remove member"
+  },
+  "adminTenants": {
+    "title": "Tenants",
+    "subtitle": "Create and manage customer organizations and their licensed modules",
+    "createTenant": "Create Tenant",
+    "tenantName": "Tenant name",
+    "slug": "Slug",
+    "ownerEmail": "Owner email",
+    "modules": "Modules",
+    "noModules": "No modules",
+    "statusLabel": "Status",
+    "created": "Created",
+    "manage": "Manage",
+    "empty": "No tenants yet.",
+    "backToTenants": "Back to tenants",
+    "suspendTenant": "Suspend",
+    "activateTenant": "Activate",
+    "suspendConfirm": "Suspend {name}? Existing data is preserved, but users and players will lose access immediately.",
+    "activateConfirm": "Reactivate {name}? Access is restored immediately.",
+    "saveModules": "Save modules",
+    "ownerInvite": "Owner invite",
+    "ownerInviteHint": "Send or resend an invitation link for this tenant's initial owner account. Re-sending expires any previous unaccepted invite.",
+    "sendOwnerInvite": "Send invite",
+    "copyInviteLink": "Copy invite link",
+    "copied": "Copied",
+    "createSuccessTitle": "Tenant created",
+    "createSuccessBody": "Share the invite link below with {email} so they can set up their account.",
+    "expiryOptional": "Expiry date (optional)",
+    "dependencyNote": "Requires {dependency}",
+    "dependencyError": "{module} requires {dependency} to also be enabled",
+    "tenantStatus": {
+      "ACTIVE": "Active",
+      "SUSPENDED": "Suspended"
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "TRIAL": "Trial",
+      "DISABLED": "Disabled"
+    },
+    "moduleNames": {
+      "WAYFINDING": "Wayfinding",
+      "WAYFINDING_AI": "AI Wayfinding",
+      "ROOM_BOOKING": "Room Booking",
+      "INDOOR_POSITIONING": "Indoor Positioning"
+    }
   },
   "auditLog": {
     "title": "Audit log",

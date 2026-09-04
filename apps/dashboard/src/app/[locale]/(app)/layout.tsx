@@ -4,17 +4,29 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown } from 'lucide-react';
+import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown, Building2 } from 'lucide-react';
+import type { ModuleKey } from '@lumina/types';
 import { useAuth } from '@/context/AuthContext';
 import { AppSidebarProvider } from '@/context/AppSidebarContext';
 import { EditorDirtyProvider, useEditorDirty } from '@/context/EditorDirtyContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
+import { useCapabilities } from '@/hooks/useCapabilities';
 import { playlistsApi } from '@/lib/api';
 import { approvalsApi } from '@/lib/mocks/approvals';
 
 type Permissions = ReturnType<typeof usePermissions>;
-type NavItem = { href: string; key: string; icon: typeof Monitor; visible?: (p: Permissions) => boolean; children?: NavItem[] };
+type NavItem = {
+  href: string;
+  key: string;
+  icon: typeof Monitor;
+  visible?: (p: Permissions) => boolean;
+  // Tenant module entitlement, orthogonal to `visible`'s role check — see
+  // docs/adr/platform-modules-and-entitlements.md. Evaluated separately below so a role-only
+  // item never needs to know about capabilities loading state, and vice versa.
+  requiredModule?: ModuleKey;
+  children?: NavItem[];
+};
 type NavSection = { titleKey: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
@@ -33,7 +45,7 @@ const navSections: NavSection[] = [
     { href: '/templates', key: 'templates', icon: Layers },
   ] },
   { titleKey: 'operations', items: [
-    { href: '/wayfinding', key: 'wayfinding', icon: MapPin },
+    { href: '/wayfinding', key: 'wayfinding', icon: MapPin, requiredModule: 'WAYFINDING' },
     { href: '/schedules', key: 'schedules', icon: CalendarClock },
     { href: '/power-schedule', key: 'powerSchedule', icon: PowerCircle },
   ] },
@@ -46,6 +58,9 @@ const navSections: NavSection[] = [
     // Cross-tenant platform feature (designer.md Phase 5) — gated on the isSuperAdmin flag, not
     // this org's own role ladder, same distinction usePermissions.ts already draws.
     { href: '/admin/templates', key: 'adminTemplates', icon: Layers, visible: p => p.isSuperAdmin },
+    // Platform tenant/module control plane (platform_modules_and_tenants_foundation_plan.md) —
+    // same cross-tenant isSuperAdmin gate as adminTemplates above.
+    { href: '/admin/tenants', key: 'adminTenants', icon: Building2, visible: p => p.isSuperAdmin },
   ] },
   { titleKey: 'settings', items: [
     { href: '/settings', key: 'settings', icon: Settings },
@@ -63,6 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const perms = usePermissions();
+  const { hasModule, isLoading: capsLoading } = useCapabilities();
   const { collapsed, setCollapsed } = useSidebarCollapsed();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toggledSubmenus, setToggledSubmenus] = useState<Record<string, boolean>>({});
@@ -166,7 +182,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
           {navSections.map((section, sectionIndex) => {
-            const items = section.items.filter(item => !item.visible || item.visible(perms));
+            // A requiredModule item stays hidden while capabilities are still loading — this is
+            // what "navigation must wait for capabilities" means in practice: never show it
+            // speculatively, only once hasModule() has a real answer.
+            const items = section.items.filter(item =>
+              (!item.visible || item.visible(perms)) &&
+              (!item.requiredModule || (!capsLoading && hasModule(item.requiredModule))),
+            );
             if (items.length === 0) return null;
             return (
               <div key={section.titleKey}>

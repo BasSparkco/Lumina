@@ -13,6 +13,7 @@
     "themes": "السمات",
     "templates": "القوالب",
     "adminTemplates": "قوالب التصميم",
+    "adminTenants": "المستأجرون",
     "wayfinding": "الإرشاد",
     "schedules": "الجداول",
     "powerSchedule": "طاقة الشاشة",
@@ -1216,6 +1217,51 @@
     "removeConfirm": "هل تريد إزالة {name}؟",
     "ownerCannotBeRemoved": "لا يمكن إزالة المالك",
     "removeMember": "إزالة العضو"
+  },
+  "adminTenants": {
+    "title": "المستأجرون",
+    "subtitle": "إنشاء وإدارة مؤسسات العملاء والوحدات المرخّصة لكل منها",
+    "createTenant": "إنشاء مستأجر",
+    "tenantName": "اسم المستأجر",
+    "slug": "المعرّف النصي",
+    "ownerEmail": "البريد الإلكتروني للمالك",
+    "modules": "الوحدات",
+    "noModules": "لا توجد وحدات",
+    "statusLabel": "الحالة",
+    "created": "تاريخ الإنشاء",
+    "manage": "إدارة",
+    "empty": "لا يوجد مستأجرون بعد.",
+    "backToTenants": "العودة إلى المستأجرين",
+    "suspendTenant": "تعليق",
+    "activateTenant": "تفعيل",
+    "suspendConfirm": "هل تريد تعليق {name}؟ تبقى البيانات محفوظة، لكن المستخدمين والمشغّلات سيفقدون الوصول فورًا.",
+    "activateConfirm": "هل تريد إعادة تفعيل {name}؟ سيتم استعادة الوصول فورًا.",
+    "saveModules": "حفظ الوحدات",
+    "ownerInvite": "دعوة المالك",
+    "ownerInviteHint": "أرسل أو أعد إرسال رابط دعوة لحساب المالك الأساسي لهذا المستأجر. إعادة الإرسال تُلغي أي دعوة سابقة لم تُقبل بعد.",
+    "sendOwnerInvite": "إرسال الدعوة",
+    "copyInviteLink": "نسخ رابط الدعوة",
+    "copied": "تم النسخ",
+    "createSuccessTitle": "تم إنشاء المستأجر",
+    "createSuccessBody": "شارك رابط الدعوة أدناه مع {email} ليتمكّن من إعداد حسابه.",
+    "expiryOptional": "تاريخ الانتهاء (اختياري)",
+    "dependencyNote": "يتطلب {dependency}",
+    "dependencyError": "{module} يتطلب تفعيل {dependency} أيضًا",
+    "tenantStatus": {
+      "ACTIVE": "نشط",
+      "SUSPENDED": "معلّق"
+    },
+    "status": {
+      "ACTIVE": "نشط",
+      "TRIAL": "تجريبي",
+      "DISABLED": "معطّل"
+    },
+    "moduleNames": {
+      "WAYFINDING": "الإرشاد",
+      "WAYFINDING_AI": "الإرشاد الذكي",
+      "ROOM_BOOKING": "حجز القاعات",
+      "INDOOR_POSITIONING": "تحديد الموقع الداخلي"
+    }
   },
   "auditLog": {
     "title": "سجل التدقيق",

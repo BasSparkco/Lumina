@@ -19,6 +19,7 @@ import { RouteGraphEditor, type RouteGraphMode } from '@/components/RouteGraphEd
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { useModuleRouteGuard } from '@/hooks/useModuleRouteGuard';
 import { useAuth } from '@/context/AuthContext';
 
 const POI_STATUSES: PoiStatus[] = ['OPEN', 'CLOSED', 'RELOCATED'];
@@ -90,6 +91,9 @@ export default function WayfindingPage() {
   const logAction = useAuditLog();
   const t = useTranslations('wayfinding');
   const tc = useTranslations('common');
+  // A direct URL visit by a tenant without the WAYFINDING module redirects away and never
+  // starts any of the queries below — see docs/adr/platform-modules-and-entitlements.md.
+  const canRender = useModuleRouteGuard('WAYFINDING');
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
@@ -100,15 +104,15 @@ export default function WayfindingPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [error, setError] = useState('');
 
-  const { data: buildings = [], isLoading } = useQuery({ queryKey: ['buildings'], queryFn: wayfindingApi.listBuildings });
-  const { data: categories = [] } = useQuery({ queryKey: ['poiCategories'], queryFn: wayfindingApi.listPoiCategories });
-  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
-  const { data: screens = [] } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
+  const { data: buildings = [], isLoading } = useQuery({ queryKey: ['buildings'], queryFn: wayfindingApi.listBuildings, enabled: canRender });
+  const { data: categories = [] } = useQuery({ queryKey: ['poiCategories'], queryFn: wayfindingApi.listPoiCategories, enabled: canRender });
+  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list, enabled: canRender });
+  const { data: screens = [] } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list, enabled: canRender });
   const [notice, setNotice] = useState('');
   const { data: pois = [] } = useQuery({
     queryKey: ['pois', selectedFloorId],
     queryFn: () => wayfindingApi.listPois(selectedFloorId as string),
-    enabled: !!selectedFloorId,
+    enabled: canRender && !!selectedFloorId,
   });
 
   const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId) ?? null;
@@ -239,6 +243,8 @@ export default function WayfindingPage() {
     },
     onError: (e: Error) => setError(e.message),
   });
+
+  if (!canRender) return null;
 
   return (
     <div className="p-8 max-w-6xl mx-auto">

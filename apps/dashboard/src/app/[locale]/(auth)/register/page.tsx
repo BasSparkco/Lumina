@@ -1,9 +1,14 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useLocale, useTranslations } from 'next-intl';
 import { Eye, EyeOff } from 'lucide-react';
+
+// Mirrors the API's own ALLOW_SELF_REGISTRATION — the production business flow is
+// Super-Admin-provisioned tenants (see the platform-tenants module). This only hides the form;
+// the API remains the real security boundary. See docs/adr/platform-modules-and-entitlements.md.
+const SELF_REGISTRATION_ENABLED = process.env.NEXT_PUBLIC_ALLOW_SELF_REGISTRATION === 'true';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -15,6 +20,12 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!SELF_REGISTRATION_ENABLED) router.replace(`/${locale}/login`);
+  }, [router, locale]);
+
+  if (!SELF_REGISTRATION_ENABLED) return null;
 
   function set(k: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
