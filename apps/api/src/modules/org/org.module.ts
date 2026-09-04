@@ -8,5 +8,6 @@ import { EntitlementsModule } from '../entitlements/entitlements.module';
   imports: [AuthModule, EntitlementsModule],
   providers: [OrgService],
   controllers: [OrgController],
+  exports: [OrgService],
 })
 export class OrgModule {}

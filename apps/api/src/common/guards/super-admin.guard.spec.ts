@@ -1,38 +1,78 @@
-import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
+import type { ExecutionContext } from '@nestjs/common';
 import { SuperAdminGuard } from './super-admin.guard';
+import type { PrismaService } from '../../prisma/prisma.service';
 
-function makeContext(user?: { isSuperAdmin: boolean }): ExecutionContext {
+function makeContext(user: Record<string, unknown> | undefined): ExecutionContext {
   return {
-    switchToHttp: () => ({ getRequest: () => ({ user }) }),
     getHandler: () => ({}),
     getClass: () => ({}),
+    switchToHttp: () => ({ getRequest: () => ({ user }) }),
   } as unknown as ExecutionContext;
 }
 
-describe('SuperAdminGuard', () => {
-  it('passes through when the route has no @RequireSuperAdmin() metadata', () => {
-    const reflector = { getAllAndOverride: () => undefined } as unknown as Reflector;
-    const guard = new SuperAdminGuard(reflector);
-    expect(guard.canActivate(makeContext({ isSuperAdmin: false }))).toBe(true);
+function makeReflector(required: boolean | undefined) {
+  return { getAllAndOverride: jest.fn().mockReturnValue(required) } as unknown as Reflector;
+}
+
+// Regression coverage for the live Super Admin authority rule (see
+// docs/adr/platform-modules-and-entitlements.md): the JWT's isSuperAdmin claim can be up to
+// seven days stale, so this guard must re-read the current database row on every request rather
+// than trusting req.user.isSuperAdmin.
+describe('SuperAdminGuard — live database revalidation', () => {
+  it('allows the request through untouched when the route has no @RequireSuperAdmin() at all', async () => {
+    const prisma = { user: { findUnique: jest.fn() } } as unknown as PrismaService;
+    const guard = new SuperAdminGuard(makeReflector(undefined), prisma);
+
+    await expect(guard.canActivate(makeContext({ sub: 'user_1', isSuperAdmin: true }))).resolves.toBe(true);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it('allows a super admin through on a protected route', () => {
-    const reflector = { getAllAndOverride: () => true } as unknown as Reflector;
-    const guard = new SuperAdminGuard(reflector);
-    expect(guard.canActivate(makeContext({ isSuperAdmin: true }))).toBe(true);
+  it('rejects a JWT claiming isSuperAdmin: true when the current database row says otherwise (revoked mid-session)', async () => {
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ isSuperAdmin: false }) },
+    } as unknown as PrismaService;
+    const guard = new SuperAdminGuard(makeReflector(true), prisma);
+
+    await expect(guard.canActivate(makeContext({ sub: 'user_1', isSuperAdmin: true }))).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
-  it('rejects a non-super-admin on a protected route', () => {
-    const reflector = { getAllAndOverride: () => true } as unknown as Reflector;
-    const guard = new SuperAdminGuard(reflector);
-    expect(() => guard.canActivate(makeContext({ isSuperAdmin: false }))).toThrow(ForbiddenException);
+  it('rejects when the user row is gone entirely, even with isSuperAdmin: true still in the JWT', async () => {
+    const prisma = { user: { findUnique: jest.fn().mockResolvedValue(null) } } as unknown as PrismaService;
+    const guard = new SuperAdminGuard(makeReflector(true), prisma);
+
+    await expect(guard.canActivate(makeContext({ sub: 'user_1', isSuperAdmin: true }))).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
-  it('rejects a missing user on a protected route', () => {
-    const reflector = { getAllAndOverride: () => true } as unknown as Reflector;
-    const guard = new SuperAdminGuard(reflector);
-    expect(() => guard.canActivate(makeContext(undefined))).toThrow(ForbiddenException);
+  it('allows the request when the current database row still says isSuperAdmin: true', async () => {
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ isSuperAdmin: true }) },
+    } as unknown as PrismaService;
+    const guard = new SuperAdminGuard(makeReflector(true), prisma);
+
+    await expect(guard.canActivate(makeContext({ sub: 'user_1', isSuperAdmin: true }))).resolves.toBe(true);
+  });
+
+  it('never trusts the JWT alone — a stale isSuperAdmin: true claim with no matching database row is rejected, not just logged', async () => {
+    const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ isSuperAdmin: false }) } } as unknown as PrismaService;
+    const guard = new SuperAdminGuard(makeReflector(true), prisma);
+
+    await expect(guard.canActivate(makeContext({ sub: 'user_1', isSuperAdmin: true }))).rejects.toThrow(
+      'Requires Super Admin access',
+    );
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 'user_1' }, select: { isSuperAdmin: true } });
+  });
+
+  it('fails closed when req.user has no sub at all', async () => {
+    const prisma = { user: { findUnique: jest.fn() } } as unknown as PrismaService;
+    const guard = new SuperAdminGuard(makeReflector(true), prisma);
+
+    await expect(guard.canActivate(makeContext(undefined))).rejects.toThrow(ForbiddenException);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 });

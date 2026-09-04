@@ -60,6 +60,31 @@ export class OrgService {
     return invite;
   }
 
+  // Used by the Super Admin tenant-creation and owner-invite-reissue flows (see
+  // PlatformTenantsService) — kept separate from `invite()` above rather than adding a role
+  // branch to it, since the re-issue semantics here are specific to the single-owner
+  // provisioning flow, not the ordinary team member-invite UX.
+  //
+  // Expires any prior pending OWNER invite for this org first, so re-issuing (e.g. after a
+  // typo'd email) never leaves two live tokens where whichever is accepted first silently wins —
+  // see docs/adr/platform-modules-and-entitlements.md's owner-invite re-issue decision.
+  async createOwnerInvite(organizationId: string, email: string) {
+    await this.prisma.orgInvite.updateMany({
+      where: { organizationId, role: 'OWNER', acceptedAt: null },
+      data: { expiresAt: new Date() },
+    });
+
+    return this.prisma.orgInvite.create({
+      data: {
+        email,
+        role: 'OWNER',
+        organizationId,
+        token: crypto.randomUUID(),
+        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      },
+    });
+  }
+
   async acceptInvite(token: string, name: string, password: string) {
     const invite = await this.prisma.orgInvite.findUnique({ where: { token } });
     if (invite?.acceptedAt !== null || invite.expiresAt < new Date()) {

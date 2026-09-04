@@ -193,7 +193,7 @@ It must contain the decisions in Sections 3.1–3.7 and name the exported contra
 
 **Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
 
-**Plan status:** Milestones A1, B1, and B2 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (see Milestone B2 below). Milestone B3 (Super Admin tenant control plane API) may begin.
+**Plan status:** Milestones A1, B1, B2, and B3 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (see Milestone B2 below). The Super Admin tenant control plane (`/v1/admin/tenants/**`), global tenant-suspension enforcement, live `SuperAdminGuard` revalidation, and gated public registration are live and verified end-to-end (see Milestone B3 below). Milestone B4 (dashboard capability layer) may begin.
 
 ---
 
@@ -704,14 +704,22 @@ Automate or manually verify this exact scenario against the real development sta
 - [x] Add dependency and expiry validation. (`validateDependencies()`, `isAssignmentUsable()` — org-suspended/disabled/trial/expired/dependency-chain cases all covered)
 - [x] Add unit and API tests. (26 Jest unit tests across `entitlements.service.spec.ts`/`entitlement.guard.spec.ts`; no e2e/API test harness exists yet in this repo — `test/jest-e2e.json` is referenced by `package.json` but the directory doesn't exist — so the endpoint was instead verified live: full Nest DI graph boot, real login, `GET /v1/org/capabilities` against the demo org returning the correct backfilled state, and a 401 on an unauthenticated request. Building e2e infrastructure from scratch is out of scope for this milestone.)
 
-### Milestone B3 — Super Admin control plane API
+### Milestone B3 — Super Admin control plane API — complete
 
-- [ ] Add tenant list/detail/create/status/module APIs.
-- [ ] Reuse owner invitation flow; expire/replace any prior pending invite when re-issuing (Section 3.5).
-- [ ] Add platform audit events via the existing `AuditService.log()` — do not build new audit infrastructure.
-- [ ] Gate public registration through environment policy; wrap `AuthService.register()`'s org+user creation in a `$transaction` while touching this file.
-- [ ] Add suspension enforcement.
-- [ ] Make `SuperAdminGuard` revalidate `User.isSuperAdmin` from the database on every protected request, and fix its stale "no route uses this" doc comment.
+- [x] Add tenant list/detail/create/status/module APIs. (`apps/api/src/modules/platform-tenants/**` — `GET/POST /v1/admin/tenants`, `GET :tenantId`, `PUT :tenantId/status`, `PUT :tenantId/modules`, `POST :tenantId/owner-invite`, all `@RequireSuperAdmin()`. Create is atomic: slug validated/normalized, dependency-validated before any write, `Organization` + `TenantModule` rows created inside one `$transaction`, owner invite and audit write after commit.)
+- [x] Reuse owner invitation flow; expire/replace any prior pending invite when re-issuing (Section 3.5). (`OrgService.createOwnerInvite()` — expires any pending `OWNER` invite for the org before creating the new one; reuses the existing `acceptInvite` flow unchanged.)
+- [x] Add platform audit events via the existing `AuditService.log()`. (`tenant.create`, `tenant.status.update`, `tenant.owner_invite.create` from `PlatformTenantsService`; `tenant.module.activate`/`.disable`/`.trial.update` already came from `EntitlementsService.setTenantModules` in B2 and are reused as-is.)
+- [x] Gate public registration through environment policy; wrap `AuthService.register()`'s org+user creation in a `$transaction`. (`ALLOW_SELF_REGISTRATION`, default closed.)
+- [x] Add suspension enforcement. (`TenantStatusGuard`, registered globally via `APP_GUARD` — does its own lightweight JWT decode since global guards run before `JwtAuthGuard`; rejects any dashboard-authenticated request, including an already-issued JWT, the instant the org's status flips to `SUSPENDED`. `AuthService.login()` separately rejects new logins for a suspended org, checked after password verification so a failed suspension check can't be used to probe credential validity.)
+- [x] Make `SuperAdminGuard` revalidate `User.isSuperAdmin` from the database on every protected request, and fix its stale "no route uses this" doc comment. (Both done.)
+
+Two real bugs surfaced by live testing, not just unit tests or typecheck, and fixed as part of this milestone:
+- `z.coerce.boolean()` in `env.validation.ts` is a footgun for env vars: it coerces via JS `Boolean(value)`, so the *string* `"false"` — a non-empty string — coerces to `true`. `ALLOW_SELF_REGISTRATION=false` was silently permissive until this was replaced with an explicit `z.string().transform(v => v === 'true')`.
+- `ConfigModule.forRoot`'s `load: [() => ({ ...process.env })]` factory returns raw unvalidated strings that take precedence over the `validate`-produced object in `ConfigService.get()` — so even after the zod fix, reading the flag via `ConfigService` still returned the untransformed string. `AuthService` reads `process.env.ALLOW_SELF_REGISTRATION` directly instead, matching the existing precedent `main.ts` already uses for `PORT`/`HOST`. This is a systemic `ConfigService` gotcha worth knowing about for any future var that needs real type coercion, not just this one.
+
+Also fixed in passing: `OrgModule` didn't export `OrgService`, so nothing outside that module could inject it — needed for `PlatformTenantsService` to reuse `OrgService.createOwnerInvite()`.
+
+Verified live end-to-end (not just unit tests): booted the real API, created a tenant with a `WAYFINDING_AI`-depends-on-`WAYFINDING` assignment (rejected without `WAYFINDING`, accepted with it), hit the slug-collision path, accepted the owner invite to create a real user, suspended the tenant and confirmed both an already-issued JWT and a fresh login attempt were rejected while all rows (`User`, `TenantModule`) remained intact, re-activated and confirmed login worked again, and read back the full accurate audit trail. Deliberately deferred to Milestone B4: hiding/redirecting the dashboard's own registration page — that's dashboard work, out of this milestone's API-only scope.
 
 ### Milestone B4 — Dashboard foundation
 

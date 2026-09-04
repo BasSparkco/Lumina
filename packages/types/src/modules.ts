@@ -28,10 +28,12 @@ export const MODULE_DEPENDENCIES: Record<ModuleKey, ModuleKey | null> = {
   INDOOR_POSITIONING: 'WAYFINDING',
 };
 
-export const TenantModuleStatusSchema = z.enum(['ACTIVE', 'TRIAL', 'DISABLED']);
+export const TENANT_MODULE_STATUSES = ['ACTIVE', 'TRIAL', 'DISABLED'] as const;
+export const TenantModuleStatusSchema = z.enum(TENANT_MODULE_STATUSES);
 export type TenantModuleStatus = z.infer<typeof TenantModuleStatusSchema>;
 
-export const OrganizationStatusSchema = z.enum(['ACTIVE', 'SUSPENDED']);
+export const ORGANIZATION_STATUSES = ['ACTIVE', 'SUSPENDED'] as const;
+export const OrganizationStatusSchema = z.enum(ORGANIZATION_STATUSES);
 export type OrganizationStatus = z.infer<typeof OrganizationStatusSchema>;
 
 export interface TenantCapabilityModule {

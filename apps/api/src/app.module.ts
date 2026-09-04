@@ -7,6 +7,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
+import { TenantStatusGuard } from './common/guards/tenant-status.guard';
 import { PrismaModule } from './prisma/prisma.module';
 import { OrgScopedModule } from './common/org-scoped.module';
 import { validateEnv } from './config/env.validation';
@@ -29,6 +30,7 @@ import { ScreenGroupsModule } from './modules/screen-groups/screen-groups.module
 import { ProofOfPlayModule } from './modules/proof-of-play/proof-of-play.module';
 import { WayfindingModule } from './modules/wayfinding/wayfinding.module';
 import { EntitlementsModule } from './modules/entitlements/entitlements.module';
+import { PlatformTenantsModule } from './modules/platform-tenants/platform-tenants.module';
 import { KioskAnalyticsModule } from './modules/kiosk-analytics/kiosk-analytics.module';
 import { DesignsModule } from './modules/designs/designs.module';
 import { TemplatesModule } from './modules/templates/templates.module';
@@ -111,11 +113,17 @@ loadDotenv({
     ProofOfPlayModule,
     WayfindingModule,
     EntitlementsModule,
+    PlatformTenantsModule,
     KioskAnalyticsModule,
     DesignsModule,
     TemplatesModule,
   ],
   controllers: [AppController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Global so tenant suspension is enforced in one place for every dashboard-authenticated
+    // route — see TenantStatusGuard's own doc comment for why it can't just read req.user.
+    { provide: APP_GUARD, useClass: TenantStatusGuard },
+  ],
 })
 export class AppModule {}

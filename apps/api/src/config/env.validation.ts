@@ -33,6 +33,19 @@ const EnvSchema = z.object({
   // Optional — the stock-photo picker (assets/stock/*) just reports itself unconfigured and
   // the dashboard shows a setup hint when this is unset, same "degrade, don't fail boot" pattern.
   PEXELS_API_KEY: z.string().optional(),
+
+  // The production business flow is Super-Admin-provisioned tenants (see the platform-tenants
+  // module), so this defaults closed. Set true for local dev/testing or a future self-service
+  // plan — see docs/adr/platform-modules-and-entitlements.md.
+  //
+  // Deliberately not z.coerce.boolean(): that coerces via JS `Boolean(value)`, and env vars are
+  // always strings — `Boolean("false")` is `true`, since "false" is a non-empty string. That
+  // would make ALLOW_SELF_REGISTRATION=false in the environment silently mean "enabled," which
+  // defeats the entire point of this flag. Only the literal string "true" turns it on.
+  ALLOW_SELF_REGISTRATION: z
+    .string()
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
