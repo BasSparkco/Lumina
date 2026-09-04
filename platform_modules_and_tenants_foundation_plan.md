@@ -2,7 +2,7 @@
 
 **Scope:** Phases A and B only  
 **Repository:** `https://github.com/BasSparkco/Lumina`  
-**Baseline reviewed:** commit `2e6a20e252163a8e5d39db9de37fad766d44da6b`; re-verified against `1921876c78871a7997794ca463ea5b8af2393748` during technical review (2026-09-04) — the intervening commits (Wayfinding demo seed, Designer2 rebuild, playlist transition overrides, device-initiated unpair) do not change any finding below. Re-baseline this section against current `main` HEAD immediately before Milestone A1 begins.  
+**Baseline reviewed:** implementation code reviewed through `1921876c78871a7997794ca463ea5b8af2393748`; the reviewed plan and its repository-specific corrections were committed at `155c400d4e764e9edf678e51471d65cbfc06bbc7` (2026-09-04). The intervening implementation commits (Wayfinding demo seed, Designer2 rebuild, playlist transition overrides, and device-initiated unpair) do not change any finding below. Re-baseline this section against current `main` HEAD immediately before Milestone A1 begins.  
 **Purpose:** Establish the shared tenant/module contract and implement the minimum production-ready platform foundation required before AI Wayfinding and Room Booking can be developed in parallel.
 
 ---
@@ -151,14 +151,14 @@ GET /v1/org/capabilities
 
 Do not encode module entitlements into the JWT. A JWT remains valid for days, while a Super Admin may need a module change to take effect immediately. The server must resolve current entitlement state when enforcing a request.
 
-### 3.5a Owner-invite re-issue behavior
+### 3.5 Owner-invite re-issue behavior
 
 `OrgInvite` has no `revokedAt`/status field today — state is derived purely from `acceptedAt`/`expiresAt`, and `OrgService.invite()` does not check for an existing pending invite before creating a new one. Freeze this rule before Section 6's `POST /v1/admin/tenants/:tenantId/owner-invite` is implemented:
 
 - Calling the owner-invite endpoint again for a tenant with an existing unaccepted invite must expire/replace the prior invite row, not create a second live token for the same email.
 - The simplest compliant implementation: set the prior pending invite's `expiresAt` to now (or add `revokedAt`) before creating the replacement, so only one invite token for a given tenant/email can ever be accepted.
 
-### 3.5 Disabled-module behavior
+### 3.6 Disabled-module behavior
 
 Freeze the following rule:
 
@@ -168,9 +168,20 @@ Freeze the following rule:
 - The player receives no protected module payload.
 - Re-enabling the module restores access to the existing data and screen bindings.
 - A disabled screen should show Lumina's neutral unavailable/awaiting-content state, not expose commercial licensing details to public visitors.
-- **Offline/cached players are best-effort.** On boot, the player restores its last-persisted presentation (building/POI/route-graph data included) from local storage before making any network call, and a backgrounded or disconnected player never re-validates against a live API. Revocation for an offline or not-yet-reconnected kiosk is accepted as eventually consistent — it catches up on the next successful `/player/state` fetch or WebSocket command — consistent with how unpair/delete already document themselves as best-effort pushes. A locally-checkable signed expiry embedded in the persisted presentation is out of scope for this foundation and may be revisited later if the eventual-consistency window proves unacceptable in practice.
+- **Offline/cached module access uses a bounded lease; it is not indefinite.** On every successful `/player/state` response, the server must issue a per-module lease with `issuedAt` and `validUntil`, and the player must persist that lease with the cached presentation. The default offline grace period is seven days (`168` hours) and must be configurable through `PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS`. When restoring cached state, the player may render protected module content only while the relevant lease remains valid. Once the lease expires, normal Wayfinding content must stop until the player successfully revalidates with the API. The cached data itself must remain stored so a successful revalidation can restore operation without re-downloading or reconstructing tenant configuration.
+- **Emergency routing overrides both entitlement and offline-lease expiry.** If cached state has `emergencyActive === true`, the player must retain enough cached Wayfinding data to render the evacuation route even when the module is disabled, the tenant is suspended, or the offline lease has expired. This exception applies only to the evacuation experience; it must not reopen the normal directory, search, POI browsing, attract content, or other paid Wayfinding UI.
+- The bounded player lease is an operational SaaS control, not a tamper-resistant on-premise license. Protecting a deployment where the customer controls the server, database, executable, or device clock requires a separate signed-license/node-locking design and is explicitly outside this foundation.
 
-### 3.6 Phase A deliverable
+### 3.7 Live Super Admin authority
+
+Freeze this platform-security rule before the control plane is implemented:
+
+- JWT `isSuperAdmin` is not sufficient authorization for platform-administration operations because it may remain valid for up to seven days.
+- Every `@RequireSuperAdmin()` request must re-read the current `User` row by the authenticated `sub` and require the current database value `isSuperAdmin === true`.
+- Deleting the user or revoking the flag must take effect immediately for tenant creation, tenant suspension, module assignment, and every other Super Admin route.
+- This foundation does not require a full live-role refresh for every ordinary tenant route; it requires live revalidation of the high-impact platform authority.
+
+### 3.8 Phase A deliverable
 
 Add a short Architecture Decision Record:
 
@@ -178,9 +189,11 @@ Add a short Architecture Decision Record:
 docs/adr/platform-modules-and-entitlements.md
 ```
 
-It must contain the decisions in Sections 3.1–3.5 and name the exported contracts that downstream modules must use.
+It must contain the decisions in Sections 3.1–3.7 and name the exported contracts that downstream modules must use.
 
-**Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
+**Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
+
+**Plan status:** the design decisions above have been technically reviewed against the current codebase (two review passes; see commit history) and are approved to begin Milestone A1 execution. This covers the decisions themselves, not yet their artifacts — the ADR, the module catalog, and the shared capability types still need to be written as A1's own deliverables.
 
 ---
 
@@ -339,6 +352,8 @@ All routes must use:
 ```
 
 `SuperAdminGuard`'s current doc comment claims no route applies it yet; `GET /org/all` and all of `AdminTemplatesController` already do. Fix the stale comment while this file is central to Phase B.
+
+Implement the live Super Admin authority invariant frozen in Section 3.7. The JWT establishes identity; the current database row establishes platform authority. No `/admin/tenants` or other Super Admin control-plane endpoint may rely only on the JWT's `isSuperAdmin` value.
 
 ### 6.1 API surface
 
@@ -516,6 +531,37 @@ The Screens page must:
 
 Before hydrating Wayfinding data, `PlayerService.getState()` must validate `WAYFINDING` against the organization associated with the paired screen. `PlayerService` queries `Building`/`Floor`/`Poi`/`RouteNode`/`RouteEdge` directly and does not go through the Wayfinding module's own services — gating the four Wayfinding controllers with `@RequireModule` has no effect on this path, so this check must be added explicitly inside `PlayerService`.
 
+Apply the same check inside `PlayerService.getManifest()`, not just `getState()`. `getManifest()` wraps `getState()` and is the payload actually consumed by the OPFS/offline-caching pipeline (`presentation-preparer.ts` / `rewrite-player-state.ts`) that gets persisted and restored on player boot — the state returned by `getState()` alone is not what ends up cached for offline use.
+
+`PlayerState` is not currently a shared type in `packages/types` despite the name. It is independently defined twice: as an untyped inferred return from `apps/api/src/modules/player/player.service.ts`'s `getState()`, and as a hand-written interface at `apps/player/src/lib/api.ts:384-408` that the player app's presentation layer (`apps/player/src/lib/presentation/types.ts`) imports directly. Extend both by hand and keep them in sync; do not assume `packages/types` enforces this today.
+
+Extend the player-side lease collection rather than a Wayfinding-only timestamp, for example:
+
+```ts
+interface PlayerModuleLease {
+  key: ModuleKey;
+  issuedAt: string;
+  validUntil: string;
+}
+
+interface PlayerState {
+  // existing fields
+  moduleLeases: PlayerModuleLease[];
+}
+```
+
+Lease behavior:
+
+- Issue a lease only after the server has resolved the module as currently usable for that screen's organization.
+- Calculate `validUntil` from the server clock using `PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS`, defaulting to `168` hours.
+- Persist the lease as part of the same cached player-state snapshot; do not create a second cache with independent lifecycle rules.
+- Validate the cached lease in the player restore/apply path before rendering protected module UI.
+- Treat a missing or malformed lease as expired for normal paid-module rendering.
+- Do not delete the cached presentation when a lease expires; suppress its protected runtime branch until a fresh server state renews the lease.
+- Keep the mechanism generic so Room Booking or another future player-facing module can use the same contract without adding a parallel offline-license system.
+
+This lease bounds ordinary offline use but is not claimed to resist a customer who controls and modifies the browser code, IndexedDB, operating-system clock, or on-premise server. Strong anti-tamper licensing remains a separate product-security concern.
+
 **Evacuation bypass (required, not optional):** `Screen.emergencyActive` combined with a populated `wayfinding` payload drives the player's fullscreen evacuation-route view; if `emergencyActive` is true but `wayfinding` is unavailable, the player falls through to a generic "kiosk location not set" splash instead of showing an exit route. The entitlement check added here must not suppress the `wayfinding` payload while `emergencyActive === true` for that screen. This mirrors how `ScreensService.setEmergency` already bypasses the unrelated `autoPublish` gate for the same reason — evacuation display must never be blocked by unrelated business-rule enforcement.
 
 For an unlicensed or expired tenant (outside of an active evacuation):
@@ -597,6 +643,10 @@ Test:
 - assigning `WAYFINDING` streaming type is rejected without entitlement;
 - player state excludes Wayfinding data after disable/expiry;
 - suspended tenant login/API/player access is blocked.
+- revoking `User.isSuperAdmin` immediately blocks platform-administration requests made with an already-issued JWT;
+- a missing/deleted Super Admin user is rejected even when the JWT contains `isSuperAdmin: true`;
+- a cached Wayfinding presentation renders normally before its offline lease expires and stops normal module rendering afterward;
+- an active evacuation route remains available from cached data after entitlement or offline-lease expiry, without reopening the normal Wayfinding UI.
 
 ### 10.3 Dashboard tests
 
@@ -657,11 +707,11 @@ Automate or manually verify this exact scenario against the real development sta
 ### Milestone B3 — Super Admin control plane API
 
 - [ ] Add tenant list/detail/create/status/module APIs.
-- [ ] Reuse owner invitation flow; expire/replace any prior pending invite when re-issuing (Section 3.5a).
+- [ ] Reuse owner invitation flow; expire/replace any prior pending invite when re-issuing (Section 3.5).
 - [ ] Add platform audit events via the existing `AuditService.log()` — do not build new audit infrastructure.
 - [ ] Gate public registration through environment policy; wrap `AuthService.register()`'s org+user creation in a `$transaction` while touching this file.
 - [ ] Add suspension enforcement.
-- [ ] Fix `SuperAdminGuard`'s stale "no route uses this" doc comment.
+- [ ] Make `SuperAdminGuard` revalidate `User.isSuperAdmin` from the database on every protected request, and fix its stale "no route uses this" doc comment.
 
 ### Milestone B4 — Dashboard foundation
 
@@ -677,6 +727,8 @@ Automate or manually verify this exact scenario against the real development sta
 - [ ] Gate Wayfinding queries and controls in the dashboard.
 - [ ] Gate player state hydration directly inside `PlayerService` (controller-level gating alone does not cover this path — see Section 8.3).
 - [ ] Verify the evacuation bypass: an active evacuation on a de-licensed kiosk still shows the exit route, not the "kiosk location not set" splash.
+- [ ] Add the configurable seven-day offline module lease to fresh player state and enforce it when restoring cached state.
+- [ ] Verify lease expiry stops normal Wayfinding but never disables the cached evacuation route.
 - [ ] Refresh affected screens after entitlement changes via a `ScreenGateway.sendToScreen` fan-out over the org's screens (Section 8.4).
 - [ ] Verify disable/re-enable preserves data.
 
@@ -718,6 +770,17 @@ apps/api/src/modules/wayfinding/**
 apps/api/src/modules/screens/screens.service.ts
 apps/api/src/modules/player/player.service.ts
 apps/api/src/modules/kiosk-analytics/**
+```
+
+### Player
+
+```text
+apps/player/src/lib/api.ts
+apps/player/src/pages/PlayerPage.tsx
+apps/player/src/lib/presentation/activation-coordinator.ts
+apps/player/src/lib/presentation/rewrite-player-state.ts
+apps/player/src/lib/presentation/types.ts
+apps/player/src/lib/presentation/<relevant lease tests>
 ```
 
 ### Dashboard
@@ -795,9 +858,12 @@ Phases A and B are complete only when:
 - [ ] Wayfinding is hidden and blocked for unlicensed tenants at every required layer.
 - [ ] Direct API calls cannot bypass module restrictions.
 - [ ] Player payloads cannot bypass module restrictions.
+- [ ] Cached normal module payloads stop rendering after the bounded offline lease expires.
+- [ ] Emergency evacuation routing remains available after entitlement or offline-lease expiry without restoring normal Wayfinding access.
 - [ ] Disabled module data remains intact and returns after reactivation.
 - [ ] Existing tenants retain current Wayfinding access after migration.
 - [ ] Tenant creation and entitlement changes are audited.
+- [ ] Revoked Super Admin authority takes effect immediately for platform-administration routes, regardless of JWT age.
 - [ ] Relevant unit, integration, and end-to-end tests pass.
 - [ ] The downstream parallel-work contracts are exported, documented, and stable.
 
