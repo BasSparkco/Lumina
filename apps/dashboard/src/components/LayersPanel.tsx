@@ -42,6 +42,12 @@ interface LayersPanelProps {
   // InspectorPanel docks this as one of its own tabs, where the tab bar already supplies the
   // label and a shared close button.
   variant?: 'modal' | 'inline';
+  // designer2's merged Objects tab (layers + properties, designer.md follow-up) — when an item's
+  // id matches `expandedId`, `renderExpanded` is rendered directly beneath that row inside an
+  // animated accordion instead of the caller having to fork this list. Neither prop is set by the
+  // legacy Themes/Layouts modal usages, so they're unaffected.
+  expandedId?: string | null;
+  renderExpanded?: (item: LayerItem) => React.ReactNode;
 }
 
 function LayerRow({
@@ -103,6 +109,8 @@ export function LayersPanel({
   emptyLabel,
   closeLabel,
   variant = 'modal',
+  expandedId,
+  renderExpanded,
 }: LayersPanelProps) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const orderedIds = items.map((i) => i.id);
@@ -126,12 +134,25 @@ export function LayersPanel({
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
           {items.map((item) => (
-            <LayerRow
-              key={item.id}
-              item={item}
-              selected={item.id === selectedId}
-              onSelect={() => onSelect(item.id)}
-            />
+            <div key={item.id}>
+              <LayerRow
+                item={item}
+                selected={item.id === selectedId}
+                onSelect={() => onSelect(item.id)}
+              />
+              {renderExpanded && (
+                // CSS grid-rows accordion trick: animating a 0fr <-> 1fr track (rather than
+                // max-height, which needs a guessed cap) gives a smooth height transition to
+                // "auto" content without measuring it in JS.
+                <div
+                  className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                    item.id === expandedId ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}
+                >
+                  <div className="overflow-hidden">{item.id === expandedId ? renderExpanded(item) : null}</div>
+                </div>
+              )}
+            </div>
           ))}
         </SortableContext>
       </DndContext>

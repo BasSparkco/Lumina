@@ -46,8 +46,8 @@ interface DesignerShellProps {
 //   Back | Name | Undo Redo | Canvas | Preview | Save
 //   Templates/Text/.../Uploads | CANVAS | Properties
 //   Scenes / Timeline
-// Templates/Properties/Layers/Variables share one tabbed InspectorPanel (see InspectorPanel.tsx)
-// rather than each being its own toggled overlay.
+// Templates/Objects(Layers+Properties)/Variables share one tabbed InspectorPanel (see
+// InspectorPanel.tsx) rather than each being its own toggled overlay.
 export function DesignerShell({
   templateId,
   templateName,
@@ -74,10 +74,10 @@ export function DesignerShell({
   const copySelection = useDesignerStore((s) => s.copySelection);
   const pasteClipboard = useDesignerStore((s) => s.pasteClipboard);
   const [versionsPanelOpen, setVersionsPanelOpen] = useState(false);
-  // Merged Templates/Properties/Layers/Variables sidebar (InspectorPanel) state lives here since
-  // DesignerSidebar's Templates button, DesignerTopBar's Layers button, and canvas selection all
-  // need to drive `inspectorTab`.
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('properties');
+  // Merged Templates/Objects(Layers+Properties)/Variables sidebar (InspectorPanel) state lives
+  // here since DesignerSidebar's Templates button, DesignerTopBar's Objects button, and canvas
+  // selection all need to drive `inspectorTab`.
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('objects');
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   // designer.md §26 — Template authoring keeps its own simpler explicit-save-only flow (Phase 5);
   // autosave drafts are a plain-designer2 concern, so the hook gets `null` in Template mode and
@@ -120,20 +120,20 @@ export function DesignerShell({
 
   const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
 
-  // Auto-switch the InspectorPanel to Properties whenever a selection is made on the canvas, and
+  // Auto-switch the InspectorPanel to Objects whenever a selection is made on the canvas, and
   // un-collapse it if it was hidden — a click on the canvas should always surface the properties
-  // it just switched to, not silently change tab behind a closed panel.
+  // that selection just expanded inline, not silently change tab behind a closed panel.
   // Adjusting state during render (not an effect) mirrors AppShell's own prevPath pattern — it
   // fires exactly once per selection change, not on every render while a selection persists, so
   // a user who manually flips back to Templates mid-session (while something stays selected)
-  // doesn't get yanked back to Properties on the next unrelated re-render. Deselecting (clicking
+  // doesn't get yanked back to Objects on the next unrelated re-render. Deselecting (clicking
   // empty canvas) intentionally leaves whatever tab is active alone.
   const selectionKey = selectedElementIds.join(',');
   const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
   if (selectionKey !== prevSelectionKey) {
     setPrevSelectionKey(selectionKey);
     if (selectedElementIds.length > 0) {
-      setInspectorTab('properties');
+      setInspectorTab('objects');
       setInspectorCollapsed(false);
     }
   }
@@ -269,11 +269,11 @@ export function DesignerShell({
         zoom={zoom}
         onZoomIn={() => setZoom(Math.min(4, zoom * 1.2))}
         onZoomOut={() => setZoom(Math.max(0.1, zoom / 1.2))}
-        onShowLayers={() => {
-          setInspectorTab('layers');
+        onShowObjects={() => {
+          setInspectorTab('objects');
           setInspectorCollapsed(false);
         }}
-        isLayersActive={inspectorTab === 'layers' && !inspectorCollapsed}
+        isObjectsActive={inspectorTab === 'objects' && !inspectorCollapsed}
         onToggleVersions={() => setVersionsPanelOpen((v) => !v)}
         onSave={document ? () => void handleSave() : undefined}
         saving={saving}

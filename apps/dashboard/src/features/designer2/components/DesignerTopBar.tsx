@@ -26,8 +26,8 @@ interface DesignerTopBarProps {
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
-  onShowLayers: () => void;
-  isLayersActive?: boolean;
+  onShowObjects: () => void;
+  isObjectsActive?: boolean;
   onToggleVersions: () => void;
   // designer.md Phase 6 — a Designer-only scene-sequencing playback loop, not the full Player-
   // parity preview (dynamic variables/animation/video, designer.md Phase 11's design-runtime).
@@ -65,8 +65,8 @@ export function DesignerTopBar({
   zoom,
   onZoomIn,
   onZoomOut,
-  onShowLayers,
-  isLayersActive,
+  onShowObjects,
+  isObjectsActive,
   onToggleVersions,
   previewing,
   onTogglePreview,
@@ -152,7 +152,7 @@ export function DesignerTopBar({
         <ZoomIn className="h-4 w-4" />
       </button>
 
-      <button className={btn} onClick={onShowLayers} aria-pressed={isLayersActive} aria-label="Layers">
+      <button className={btn} onClick={onShowObjects} aria-pressed={isObjectsActive} aria-label="Objects">
         <Layers className="h-4 w-4" />
       </button>
 

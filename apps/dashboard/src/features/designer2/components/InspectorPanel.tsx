@@ -1,19 +1,19 @@
 'use client';
-import { Braces, ChevronLeft, ChevronRight, Layers, LayoutTemplate, SlidersHorizontal, X } from 'lucide-react';
+import { Braces, ChevronLeft, ChevronRight, Layers, LayoutTemplate, X } from 'lucide-react';
 import type { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
 import { TemplatesGalleryPanel } from './TemplatesGalleryPanel';
-import { PropertiesPanel } from './PropertiesPanel';
-import { LayersPanel } from './LayersPanel';
+import { ObjectsPanel } from './ObjectsPanel';
 import { VariablesPanel } from './VariablesPanel';
 
-export type InspectorTab = 'templates' | 'properties' | 'layers' | 'variables';
+export type InspectorTab = 'templates' | 'objects' | 'variables';
 
 // Ordered tab defs for the tab bar below — add an entry here (and a matching branch in the
 // content switch) when a future tab is wired up; everything else is already generic over it.
+// Layers and Properties used to be separate tabs; they're merged into one "Objects" tab (see
+// ObjectsPanel) whose list expands a selected row's properties inline instead of switching tabs.
 const TAB_DEFS: { id: InspectorTab; label: string; icon: typeof LayoutTemplate }[] = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
-  { id: 'properties', label: 'Properties', icon: SlidersHorizontal },
-  { id: 'layers', label: 'Layers', icon: Layers },
+  { id: 'objects', label: 'Objects', icon: Layers },
   { id: 'variables', label: 'Variables', icon: Braces },
 ];
 
@@ -98,8 +98,9 @@ export function InspectorPanel({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {activeTab === 'templates' && <TemplatesGalleryPanel />}
-            {activeTab === 'properties' && <PropertiesPanel adapter={adapter} commit={commit} isTemplateMode={isTemplateMode} />}
-            {activeTab === 'layers' && <LayersPanel onReorder={onReorderLayers} />}
+            {activeTab === 'objects' && (
+              <ObjectsPanel onReorder={onReorderLayers} adapter={adapter} commit={commit} isTemplateMode={isTemplateMode} />
+            )}
             {activeTab === 'variables' && <VariablesPanel variables={variables} onCommit={onCommitVariables} />}
           </div>
         </div>
