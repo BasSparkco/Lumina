@@ -126,3 +126,98 @@ describe('PlayerService — pairing and heartbeat', () => {
     });
   });
 });
+
+// A suspended tenant must get a 200 with neutral content, never a 401/404 — both the web and
+// Flutter native players treat 401/404 on this endpoint as "this screen's credential is dead"
+// and react by wiping local pairing state, which would be a destructive overreaction to a
+// temporary, reversible business state. See docs/adr/platform-modules-and-entitlements.md.
+describe('PlayerService.getState — suspended tenant returns neutral content, not an error', () => {
+  function makeService(screenOverrides: Record<string, unknown>) {
+    const prisma = {
+      screen: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 's1',
+          organizationId: 'org_1',
+          streamingType: 'PLAYLIST',
+          timezone: 'UTC',
+          latitude: null,
+          longitude: null,
+          prayerMethod: 'UmmAlQura',
+          athanEnabled: false,
+          stopped: false,
+          showClock: false,
+          orientation: 0,
+          aspectRatio: '16:9',
+          volume: 80,
+          group: null,
+          ...screenOverrides,
+        }),
+      },
+      routeEdge: { findMany: jest.fn() },
+    } as unknown as PrismaService;
+    const storage = {} as StorageService;
+    const gateway = {} as ScreenGateway;
+    const schedules = { getSchedulesForScreen: jest.fn(), resolveNow: jest.fn() } as unknown as SchedulesService;
+    const powerSchedules = { resolveForScreen: jest.fn() } as unknown as PowerSchedulesService;
+    const screens = {} as ScreensService;
+    return { service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens), schedules, powerSchedules };
+  }
+
+  it('returns neutral content and never touches schedule/power resolution when the org is SUSPENDED', async () => {
+    const { service, schedules, powerSchedules } = makeService({ organization: { status: 'SUSPENDED' } });
+
+    const state = await service.getState('s1');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        screenId: 's1',
+        streamingType: 'PLAYLIST',
+        emergencyActive: false,
+        emergencyPlaylist: null,
+        asset: null,
+        wayfinding: null,
+        scheduleRules: [],
+        resolvedPlaylistId: null,
+        defaultPlaylist: null,
+        poweredOn: true,
+        powerScheduleRules: [],
+      }),
+    );
+    expect(schedules.getSchedulesForScreen).not.toHaveBeenCalled();
+    expect(powerSchedules.resolveForScreen).not.toHaveBeenCalled();
+  });
+
+  it('does not suppress content for an ACTIVE organization', async () => {
+    const { service, schedules, powerSchedules } = makeService({
+      organization: { status: 'ACTIVE' },
+      playlist: null,
+      emergencyPlaylist: null,
+      asset: null,
+      kioskLocation: null,
+    });
+    (schedules.getSchedulesForScreen as jest.Mock).mockResolvedValue([]);
+    (powerSchedules.resolveForScreen as jest.Mock).mockResolvedValue({ poweredOn: true, rules: [] });
+
+    const state = await service.getState('s1');
+
+    expect(powerSchedules.resolveForScreen).toHaveBeenCalled();
+    expect(state.streamingType).toBe('PLAYLIST');
+  });
+
+  it('leaves a screen with no organization (unassigned) unaffected — the nullable relation resolves to null, not a SUSPENDED status', async () => {
+    const { service, schedules, powerSchedules } = makeService({
+      organizationId: null,
+      organization: null,
+      playlist: null,
+      emergencyPlaylist: null,
+      asset: null,
+      kioskLocation: null,
+    });
+    (schedules.getSchedulesForScreen as jest.Mock).mockResolvedValue([]);
+    (powerSchedules.resolveForScreen as jest.Mock).mockResolvedValue({ poweredOn: true, rules: [] });
+
+    await service.getState('s1');
+
+    expect(powerSchedules.resolveForScreen).toHaveBeenCalled();
+  });
+});

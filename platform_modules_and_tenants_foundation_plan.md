@@ -412,6 +412,8 @@ When a Super Admin suspends a tenant:
 
 If fully enforcing tenant suspension across all API routes would require a new global authenticated guard, implement and test that guard as part of this phase. Do not scatter ad hoc suspension checks through individual services.
 
+**Player state must be a `200` with neutral content, never a `401`/`404`.** Both `apps/player` and the Flutter native player (`Lumina_player`) treat a `401`/`404` on `/player/state`/`/player/manifest` as "this screen's own credential is dead" (unpaired or deleted) and react by wiping local pairing state and returning to the pairing screen — confirmed directly in `Lumina_player`'s `ScreenRevokedException`/`PlayerRepository._isRevoked()`. A suspended tenant is a temporary, reversible business state, not a dead credential; returning an error status here would incorrectly unpair every affected kiosk. `PlayerService.getState()` checks `screen.organization.status` and, if `SUSPENDED`, returns the same shape with all content fields null/empty (mirroring the disabled-module neutral-state design) — `getManifest()` inherits this automatically since it wraps `getState()`. **Open policy question, not decided here:** this neutral state also sets `emergencyActive: false`, meaning an active evacuation is suppressed during a tenant suspension with no exception — unlike the module-disable case, which explicitly carves out an evacuation bypass. Confirm whether tenant suspension should carry the same evacuation exception before this ships to a real customer.
+
 ---
 
 ## 7. Phase B — Dashboard Capability Layer
@@ -720,6 +722,8 @@ Two real bugs surfaced by live testing, not just unit tests or typecheck, and fi
 Also fixed in passing: `OrgModule` didn't export `OrgService`, so nothing outside that module could inject it — needed for `PlatformTenantsService` to reuse `OrgService.createOwnerInvite()`.
 
 Verified live end-to-end (not just unit tests): booted the real API, created a tenant with a `WAYFINDING_AI`-depends-on-`WAYFINDING` assignment (rejected without `WAYFINDING`, accepted with it), hit the slug-collision path, accepted the owner invite to create a real user, suspended the tenant and confirmed both an already-issued JWT and a fresh login attempt were rejected while all rows (`User`, `TenantModule`) remained intact, re-activated and confirmed login worked again, and read back the full accurate audit trail. Deliberately deferred to Milestone B4: hiding/redirecting the dashboard's own registration page — that's dashboard work, out of this milestone's API-only scope.
+
+**Addendum (2026-09-04), found while reading the Flutter native player's source for a separate roadmap request:** the original B3 pass verified suspension for dashboard routes and logins, but never checked `PlayerService.getState()`/`getManifest()` against §6.4's "player state must not expose tenant content" — that gap is now closed, see the note under Section 6.4 above. This was worth catching before it shipped: reading `Lumina_player`'s actual revocation-handling code showed that a naive `401` here would have caused every suspended tenant's kiosk (web or Flutter) to unpair itself.
 
 ### Milestone B4 — Dashboard foundation
 

@@ -151,6 +151,7 @@ export class PlayerService {
     const screen = await this.prisma.screen.findUnique({
       where: { id: screenId },
       include: {
+        organization: { select: { status: true } },
         asset: true,
         emergencyPlaylist: {
           include: { items: { orderBy: { position: 'asc' }, include: { asset: true } } },
@@ -189,6 +190,40 @@ export class PlayerService {
       },
     });
     if (!screen) throw new NotFoundException('Screen not found');
+
+    // Suspended tenant: return 200 with neutral content, never a 401/404. Both players (web
+    // and the Flutter native player) treat 401/404 on this endpoint as "this screen's own
+    // credential is dead" (unpaired/deleted) and react by wiping local pairing state and
+    // returning to the pairing screen — see ScreenRevokedException in the Flutter app. A
+    // suspended tenant is a temporary, reversible business state, not a dead credential, so it
+    // must never trigger that path. This also means `Screen.streamingType`/`KioskLocation`/etc.
+    // are never touched here — same "preserve everything, hide the content" pattern as a
+    // disabled module (see docs/adr/platform-modules-and-entitlements.md).
+    if (screen.organization?.status === 'SUSPENDED') {
+      return {
+        screenId,
+        streamingType: screen.streamingType,
+        timezone: screen.timezone,
+        latitude: screen.latitude,
+        longitude: screen.longitude,
+        prayerMethod: screen.prayerMethod,
+        athanEnabled: screen.athanEnabled,
+        stopped: screen.stopped,
+        showClock: screen.showClock,
+        orientation: screen.orientation,
+        aspectRatio: screen.aspectRatio,
+        emergencyActive: false,
+        emergencyPlaylist: null,
+        asset: null,
+        wayfinding: null,
+        scheduleRules: [],
+        resolvedPlaylistId: null,
+        defaultPlaylist: null,
+        poweredOn: true,
+        powerScheduleRules: [],
+        volume: screen.volume ?? screen.group?.volume ?? 100,
+      };
+    }
 
     // Schedule rules only ever resolve a *playlist* to swap in/out — meaningless (and, if left
     // computed, a source of stale leakage) outside Playlist mode: a screen that used to be
