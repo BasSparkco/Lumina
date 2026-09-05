@@ -748,13 +748,13 @@ Verified live in a real browser (Playwright against the actual dev server, not j
 - [x] Refresh affected screens after entitlement changes via a `ScreenGateway.sendToScreen` fan-out over the org's screens (Section 8.4). (`PlatformTenantsService.setModules()` fans out `{type:'reload'}` to every `WAYFINDING`-mode screen in the org whenever `WAYFINDING` is among the changed assignments — same pattern as `BuildingsService.setEvacuation`, no second notification mechanism.)
 - [x] Verify disable/re-enable preserves data. (Verified live: disabled `WAYFINDING`, confirmed the kiosk fell back to the neutral splash with the building/floor/POI data and `KioskLocation` row untouched in the database, re-enabled, confirmed the exact same "Lumina Galleria Mall" configuration rendered again immediately with no reconstruction.)
 
-### Milestone B6 — Verification and handoff
+### ai_wayfinding_module_plan — Verification and handoff — complete
 
-- [ ] Run API, dashboard, player, type-check, lint, and relevant unit suites.
-- [ ] Run the end-to-end acceptance scenario.
-- [ ] Document stable downstream integration contracts.
-- [ ] Record known limitations without expanding this phase's scope.
-- [ ] Tag/merge the foundation before parallel module work begins.
+- [x] Run API, dashboard, player, type-check, lint, and relevant unit suites. (Full-project — not just per-file — typecheck/lint/tests across all three apps, run for the first time as one consolidated pass rather than the scoped per-milestone checks: found and fixed 8 real pre-existing lint errors in this plan's own test files that the scoped checks had missed (unnecessary `async`, `import type`, unused vars, optional-chain). 99/99 API tests, 0 dashboard errors, 0 player errors in any file this plan touched — the 4 remaining player lint errors are pre-existing and in files unrelated to this plan.)
+- [x] Run the end-to-end acceptance scenario. (Section 10.4's exact 13 steps, run as one continuous live pass, not the piecemeal per-milestone testing done earlier: created two fresh tenants through the real Super Admin flow — Tenant A with `WAYFINDING`, Tenant B without — accepted both owner invitations, confirmed Tenant B is blocked at the nav, direct-URL, API, and screen-mode layers with zero Wayfinding-exclusive requests fired, built a real building/floor/POI/kiosk for Tenant A and confirmed it rendering live in the actual player app, disabled `WAYFINDING` and confirmed the dashboard API 403s and the player falls back to the neutral splash while every row stayed in the database, re-enabled and confirmed the exact same content rendered again with zero reconstruction, then suspended Tenant A and confirmed login/existing-session/API all 401 while the player gets a neutral `200` — never a `401` — and all data remained intact throughout.)
+- [x] Document stable downstream integration contracts. (`docs/adr/platform-modules-and-entitlements.md`'s "Exported contracts" and "Player-side module enforcement pattern" sections.)
+- [x] Record known limitations without expanding this phase's scope. (Section 16 below — including one still-open policy question from Milestone B3 that's worth resolving before production, not just a list of nice-to-haves.)
+- [x] Tag/merge the foundation before parallel module work begins. (Already merged — every milestone pushed directly to `main` per this project's established convention; tagged `platform-modules-foundation-v1`.)
 
 ---
 
@@ -905,3 +905,54 @@ Do not add any of the following while executing this plan:
 - a second dashboard, application, authentication system, or player.
 
 These boundaries are required to keep the foundation small, testable, and safe for the parallel phase that follows.
+
+---
+
+## 16. Known Limitations (Milestone B6)
+
+Recorded per Milestone B6's requirement to document known limitations without expanding this
+phase's scope — none of these block Phases A/B from being complete; they're carried forward as
+explicit, deliberate boundaries rather than left implicit.
+
+**One open policy question, unresolved — the most important item on this list:** the tenant-
+suspension neutral state (`PlayerService.getState()`, §6.4) sets `emergencyActive: false`
+unconditionally, meaning an active fire evacuation would be suppressed if its tenant were
+suspended mid-emergency. The module-disable case (§8.3) explicitly carries an evacuation
+exemption; the suspension case, as shipped, does not. This was flagged during both Milestone B3
+and B5 and never decided either way — confirm the intended behavior before this reaches a real
+customer, since fixing it later is a one-line change (add the same bypass) but shipping the wrong
+default silently is a life-safety question, not a UX one.
+
+**Testing infrastructure gaps, pre-existing, not introduced by this plan:**
+- No end-to-end/integration test harness exists anywhere in this repo (`apps/api/test/
+  jest-e2e.json` is referenced by `package.json` but the directory doesn't exist). Every
+  milestone's "end-to-end" verification in this plan means a real local server boot, real HTTP/
+  browser calls, and manual inspection — not a committed, repeatable automated suite. Building
+  one was judged out of scope for this foundation; worth reconsidering before AI Wayfinding or
+  Room Booking need the same rigor repeated by hand.
+- `apps/player` has no unit test runner configured at all (no Jest/Vitest, no test script). The
+  new `isModuleLeaseValid()` was verified via an ad hoc script exercising every edge case, not a
+  committed test file — a future change to it has no regression safety net.
+- The offline module lease's actual **expiry** path was verified via the pure function and code
+  review, not by simulating a real browser past its 7-day grace window (would require directly
+  tampering with IndexedDB-persisted state). The higher-stakes evacuation-bypass half of the same
+  mechanism *was* verified live.
+
+**Product/UX gaps, deliberately deferred:**
+- `OrgInvite` still has no explicit revoke — re-issuing a Super Admin owner invite expires the
+  prior one (Section 3.5), but there's no way to cancel an invite without immediately sending a
+  replacement.
+- Invite delivery is copy-link-only; no email sending is wired up anywhere in this app (pre-
+  existing, not something this plan was scoped to add — see Section 6.2).
+- `GET /v1/admin/tenants` has no pagination. Fine at current scale; revisit if the tenant list
+  ever grows past what one unpaginated page can reasonably show.
+
+**Architectural notes for whoever builds the next player-facing module:**
+- `PlayerState` remains independently hand-duplicated between `apps/api`'s inferred return type
+  and `apps/player/src/lib/api.ts`'s interface — only the new `PlayerModuleLease` field is a
+  genuinely shared `@lumina/types` contract. Adding a field to one and not the other is a real,
+  easy mistake with no compiler to catch it across the boundary.
+- The Flutter native player (`Lumina_player`) has no Wayfinding implementation at all, so
+  Milestone B5's player-side gating was scoped to `apps/player` only. See
+  `flutter_player_entitlement_sync_roadmap.md` for what that means for AI Wayfinding or Room
+  Booking if either ever needs a native-player-visible payload.

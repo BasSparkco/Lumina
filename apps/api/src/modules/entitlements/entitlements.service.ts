@@ -73,7 +73,7 @@ export class EntitlementsService {
       where: { id: organizationId },
       select: { status: true },
     });
-    if (!org || org.status !== 'ACTIVE') return false;
+    if (org?.status !== 'ACTIVE') return false;
 
     return this.isUsable(organizationId, moduleKey, this.clock.now());
   }

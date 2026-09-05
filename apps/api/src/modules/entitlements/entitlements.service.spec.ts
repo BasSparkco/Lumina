@@ -1,7 +1,6 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EntitlementsService, type ModuleAssignmentInput } from './entitlements.service';
 import { ModuleCatalogService } from './module-catalog.service';
-import { Clock } from './clock';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
 
@@ -22,7 +21,7 @@ function makeService(overrides: { org?: Record<string, unknown>; tenantModule?: 
     $transaction: jest.fn(async (ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
   } as unknown as PrismaService;
 
-  const clock = { now: () => NOW } as Clock;
+  const clock = { now: () => NOW };
   const catalog = new ModuleCatalogService();
   const audit = { log: jest.fn() } as unknown as AuditService;
 
@@ -143,7 +142,7 @@ describe('EntitlementsService.assertModule', () => {
 
 describe('EntitlementsService.validateDependencies', () => {
   const catalog = new ModuleCatalogService();
-  const clock = { now: () => NOW } as Clock;
+  const clock = { now: () => NOW };
   const service = new EntitlementsService({} as PrismaService, catalog, clock, {} as AuditService);
 
   it('rejects activating WAYFINDING_AI without WAYFINDING in the same assignment set', () => {

@@ -16,7 +16,7 @@ function makeService(overrides: { prisma?: Record<string, unknown>; entitlements
     screen: {
       findMany: jest.fn().mockResolvedValue([]),
     },
-    $transaction: jest.fn(async (fn: (tx: unknown) => unknown) =>
+    $transaction: jest.fn((fn: (tx: unknown) => unknown) =>
       fn({
         organization: { create: jest.fn().mockResolvedValue({ id: 'org_1', name: 'Acme', slug: 'acme', status: 'ACTIVE' }) },
         tenantModule: { create: jest.fn() },
@@ -52,7 +52,7 @@ describe('PlatformTenantsService.create — atomic tenant creation', () => {
   });
 
   it('validates module dependencies before creating the organization, so a bad module set never leaves a half-created tenant', async () => {
-    const { service, prisma, entitlements } = makeService({
+    const { service, prisma } = makeService({
       entitlements: {
         validateDependencies: jest.fn().mockImplementation(() => {
           throw new Error('WAYFINDING_AI requires WAYFINDING');

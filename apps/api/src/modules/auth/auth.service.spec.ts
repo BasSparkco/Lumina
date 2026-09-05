@@ -9,7 +9,7 @@ function makeService(overrides: { prismaOverrides?: Record<string, unknown> } = 
     user: {
       findUnique: jest.fn().mockResolvedValue(null),
     },
-    $transaction: jest.fn(async (fn: (tx: unknown) => unknown) =>
+    $transaction: jest.fn((fn: (tx: unknown) => unknown) =>
       fn({
         organization: { create: jest.fn().mockResolvedValue({ id: 'org_1' }) },
         user: {

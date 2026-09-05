@@ -1,4 +1,4 @@
-import { Reflector } from '@nestjs/core';
+import type { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
 import { EntitlementGuard } from './entitlement.guard';
 import { REQUIRED_MODULE_KEY } from './require-module.decorator';
