@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, X, Delete, ChevronDown } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import type { WayfindingDirectory, WayfindingPoi, WayfindingPoiCategory } from '../lib/api';
 import { CategoryIcon } from './WayfindingDirectoryBoard';
+import WayfindingKeyboard from './WayfindingKeyboard';
 import { type WayfindingLang, t, pickName, pickCategoryLabel } from '../lib/wayfindingLang';
 import { logKioskEvent } from '../lib/kioskAnalytics';
 
 const SEARCH_LOG_DEBOUNCE_MS = 1200;
-
-const KEY_ROWS = [
-  ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-  ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-  ['z', 'x', 'c', 'v', 'b', 'n', 'm'],
-];
 
 // Full building directory (Phase 7.2) — alphabetical list + category filter + search, opened
 // from a button in WayfindingKioskMap's header. Searches across every floor (not just the one
@@ -125,28 +120,13 @@ export default function WayfindingDirectoryPanel({ directory, lang, onClose, onS
       </ul>
 
       {keyboardOpen && (
-        <div style={styles.keyboard}>
-          <div style={styles.keyboardHeader}>
-            <button style={styles.keyboardCollapse} onClick={() => setKeyboardOpen(false)}>
-              <ChevronDown size={20} color="#94a3b8" />
-            </button>
-          </div>
-          {KEY_ROWS.map((row, i) => (
-            <div key={i} style={styles.keyRow}>
-              {row.map(ch => (
-                <button key={ch} style={styles.key} onClick={() => setSearch(s => s + ch)}>
-                  {ch}
-                </button>
-              ))}
-            </div>
-          ))}
-          <div style={styles.keyRow}>
-            <button style={styles.keySpace} onClick={() => setSearch(s => s + ' ')}>space</button>
-            <button style={styles.keyBackspace} onClick={() => setSearch(s => s.slice(0, -1))}>
-              <Delete size={20} color="#0f172a" />
-            </button>
-          </div>
-        </div>
+        <WayfindingKeyboard
+          lang={lang}
+          onKey={(ch) => setSearch((s) => s + ch)}
+          onSpace={() => setSearch((s) => s + ' ')}
+          onBackspace={() => setSearch((s) => s.slice(0, -1))}
+          onCollapse={() => setKeyboardOpen(false)}
+        />
       )}
     </div>
   );
@@ -201,23 +181,4 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #fbbf24', borderRadius: 6, padding: '0.3vh 0.7vw', flex: '0 0 auto',
   },
   emptyText: { fontSize: '1.4vw', opacity: 0.6, margin: 'auto', paddingTop: '4vh' },
-  keyboard: {
-    flex: '0 0 auto', marginTop: '1.5vh', background: 'rgba(255,255,255,0.06)', borderRadius: '16px 16px 0 0',
-    padding: '1vh 1vw 1.5vh', display: 'flex', flexDirection: 'column', gap: '0.8vh', boxSizing: 'border-box',
-  },
-  keyboardHeader: { display: 'flex', justifyContent: 'center' },
-  keyboardCollapse: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 },
-  keyRow: { display: 'flex', gap: '0.5vw', justifyContent: 'center' },
-  key: {
-    flex: '1 1 0', maxWidth: '8vw', fontSize: '1.4vw', fontWeight: 600, textTransform: 'uppercase',
-    background: '#f1f5f9', color: '#0f172a', border: 'none', borderRadius: 8, padding: '1.4vh 0', cursor: 'pointer',
-  },
-  keySpace: {
-    flex: '4 1 0', fontSize: '1.2vw', fontWeight: 600, background: '#f1f5f9', color: '#0f172a',
-    border: 'none', borderRadius: 8, padding: '1.4vh 0', cursor: 'pointer',
-  },
-  keyBackspace: {
-    flex: '1 1 0', maxWidth: '10vw', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '1.4vh 0', cursor: 'pointer',
-  },
 };

@@ -729,6 +729,50 @@ export interface RouteNodeInput { x: number; y: number; label?: string; }
 export interface RouteEdge { id: string; fromNodeId: string; toNodeId: string; type: RouteEdgeType; weight: number; }
 export interface RouteEdgeInput { fromNodeId: string; toNodeId: string; type?: RouteEdgeType; weight: number; }
 export interface RouteGraph { nodes: RouteNode[]; edges: RouteEdge[]; }
+
+// ── AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §8) ──────────────
+export interface WayfindingAiScreenConfig {
+  id: string; enabled: boolean; welcomeMessage: string; welcomeMessageAr: string; maxTurns: number;
+}
+export interface WayfindingAiEligibleScreen {
+  id: string; name: string;
+  wayfindingAiConfig: WayfindingAiScreenConfig | null;
+  kioskLocation: { floor: { building: { id: string; name: string } } } | null;
+}
+export interface WayfindingAiUsageLogEntry {
+  id: string; language: string; outcome: string; provider: string; model: string;
+  inputTokens: number | null; outputTokens: number | null; latencyMs: number; usedModel: boolean;
+  createdAt: string; screenId: string;
+}
+export interface PoiAlias { id: string; value: string; normalizedValue: string; language: string; }
+export interface PoiWithAliases extends Poi { aliases: PoiAlias[]; floor: Floor; }
+export type WayfindingAiResolutionResult =
+  | { type: 'DESTINATION'; poiId: string; message: string }
+  | { type: 'NEAREST_DESTINATION'; candidatePoiIds: string[]; message: string }
+  | { type: 'CLARIFICATION'; message: string; alternatives: { poiId: string; label: string; floorLabel: string }[] }
+  | { type: 'NO_MATCH'; message: string }
+  | { type: 'UNAVAILABLE'; message: string };
+
+export const wayfindingAiApi = {
+  listScreens: () => req<WayfindingAiEligibleScreen[]>('/wayfinding-ai/screens'),
+  getConfig: (screenId: string) => req<WayfindingAiScreenConfig | null>(`/wayfinding-ai/screens/${screenId}/config`),
+  updateConfig: (screenId: string, dto: { enabled: boolean; welcomeMessage: string; welcomeMessageAr: string; maxTurns: number }) =>
+    req<WayfindingAiScreenConfig>(`/wayfinding-ai/screens/${screenId}/config`, { method: 'PUT', body: JSON.stringify(dto) }),
+  listPoisWithAliases: (buildingId: string) => req<PoiWithAliases[]>(`/wayfinding-ai/buildings/${buildingId}/pois`),
+  addAlias: (poiId: string, value: string, language: 'en' | 'ar') =>
+    req<PoiAlias>(`/wayfinding-ai/pois/${poiId}/aliases`, { method: 'POST', body: JSON.stringify({ value, language }) }),
+  removeAlias: (aliasId: string) => req<void>(`/wayfinding-ai/aliases/${aliasId}`, { method: 'DELETE' }),
+  getUsage: (opts: { from?: string; to?: string; screenId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.from) params.set('from', opts.from);
+    if (opts.to) params.set('to', opts.to);
+    if (opts.screenId) params.set('screenId', opts.screenId);
+    const qs = params.toString();
+    return req<WayfindingAiUsageLogEntry[]>(`/wayfinding-ai/usage${qs ? `?${qs}` : ''}`);
+  },
+  testResolve: (buildingId: string, message: string, language: 'en' | 'ar') =>
+    req<WayfindingAiResolutionResult>('/wayfinding-ai/test-resolve', { method: 'POST', body: JSON.stringify({ buildingId, message, language }) }),
+};
 export interface CrashReport {
   id: string; type: 'UNCAUGHT_EXCEPTION' | 'WATCHDOG_RECOVERY'; summary: string;
   stackTrace: string | null; occurredAt: string;

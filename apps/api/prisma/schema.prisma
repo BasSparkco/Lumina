@@ -55,6 +55,10 @@ model Organization {
   designDrafts         DesignDraft[]
   designTemplateAccess DesignTemplateTenant[]
   tenantModules        TenantModule[]
+
+  // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6.3) — operational cost/usage
+  // history, kept even if the module is later disabled (see WayfindingAiUsageLog).
+  wayfindingAiUsageLogs WayfindingAiUsageLog[]
 }
 
 // Per-tenant paid-module entitlement. `moduleKey` is a plain String constrained by
@@ -238,6 +242,13 @@ model Screen {
   alerts         ScreenAlert[]
   crashReports   CrashReport[]
   kioskLocation  KioskLocation?
+
+  // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6.1/§6.3) — optional per-screen
+  // configuration and cost/usage history. Both survive `WAYFINDING_AI` disable/re-enable and
+  // module deletion is impossible (Cascade only follows Screen deletion itself), matching the
+  // "preserve everything, hide the content" pattern the rest of the module catalog already uses.
+  wayfindingAiConfig    WayfindingAiScreenConfig?
+  wayfindingAiUsageLogs WayfindingAiUsageLog[]
 
   // Backs ScreensService.list — the org-scoped, createdAt-desc fleet listing every Screens page
   // load hits.
@@ -1028,8 +1039,31 @@ model Poi {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6.2) — tenant-taught alternate
+  // names the destination resolver matches before ever calling the AI provider.
+  aliases PoiAlias[]
+
   @@index([floorId])
   @@index([categoryId])
+}
+
+// AI Wayfinding §6.2 — explicit aliases so a tenant can teach the deterministic destination
+// resolver familiar names ("the food court entrance") without changing the public POI name
+// shown on the map/directory. Normalization (trim, Unicode-normalize, case-fold) is server-owned
+// and happens before a row is written here — this table never stores raw, unnormalized input as
+// the match key, only alongside it for the tenant's own editing UI.
+model PoiAlias {
+  id              String   @id @default(cuid())
+  value           String
+  normalizedValue String
+  language        String
+  createdAt       DateTime @default(now())
+
+  poiId String
+  poi   Poi    @relation(fields: [poiId], references: [id], onDelete: Cascade)
+
+  @@unique([poiId, language, normalizedValue])
+  @@index([normalizedValue])
 }
 
 // The "you are here" pin binding a physical screen to a floor coordinate — mirrors how
@@ -1108,6 +1142,52 @@ model RouteEdge {
 
   @@index([fromNodeId])
   @@index([toNodeId])
+}
+
+// ─── AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6) ─────────────
+// A separately purchasable module (WAYFINDING_AI) dependent on WAYFINDING (see
+// packages/types/src/modules.ts). Additive to the existing Wayfinding domain: it adds no new
+// route-computation authority (routing.ts's local Dijkstra remains the only one) and never
+// stores provider prompts/keys/model names — those are environment configuration only.
+
+// One-to-one optional configuration owned through Screen — enabling the assistant is always an
+// explicit per-kiosk administrator action, never implied by owning the module (§6.4).
+model WayfindingAiScreenConfig {
+  id               String   @id @default(cuid())
+  enabled          Boolean  @default(true)
+  welcomeMessage   String   @default("How can I help you find your destination?")
+  welcomeMessageAr String   @default("كيف يمكنني مساعدتك في العثور على وجهتك؟")
+  maxTurns         Int      @default(8)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  screenId String @unique
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+}
+
+// Operational/cost record — no raw conversation text, ever (§3.7/§11.3). `resolvedPoiId` is
+// deliberately an un-enforced historical identifier (no relation, no FK) so deleting a POI later
+// never deletes cost/usage history and this log is never a cascade dependency of Poi.
+model WayfindingAiUsageLog {
+  id           String   @id @default(cuid())
+  language     String
+  outcome      String
+  provider     String
+  model        String
+  inputTokens  Int?
+  outputTokens Int?
+  latencyMs    Int
+  usedModel    Boolean
+  createdAt    DateTime @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  screenId       String
+  screen         Screen       @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  resolvedPoiId  String?
+
+  @@index([organizationId, createdAt])
+  @@index([screenId, createdAt])
 }
 
 // ─── Scheduling ───────────────────────────────────────────────────────────────

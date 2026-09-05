@@ -54,6 +54,24 @@ const EnvSchema = z.object({
   // ConfigModule.forRoot's `load` factory shadows this validated value with the raw string.
   // This entry exists so a malformed value still fails loudly at boot.
   PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS: z.coerce.number().int().positive().default(168),
+
+  // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §3.6) — deliberately
+  // environment-based, never persisted on a tenant row: a model upgrade or provider swap is an
+  // operational decision, not a tenant migration. All optional so a deployment with no AI tenant
+  // configured yet still boots; WayfindingAiService fails closed (UNAVAILABLE) at request time,
+  // not at boot, when the provider isn't actually configured.
+  AI_WAYFINDING_PROVIDER: z.enum(['openai']).default('openai'),
+  AI_WAYFINDING_MODEL: z.string().min(1).optional(),
+  AI_WAYFINDING_API_KEY: z.string().min(1).optional(),
+  AI_WAYFINDING_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  AI_WAYFINDING_MAX_INPUT_CHARS: z.coerce.number().int().positive().default(500),
+  AI_WAYFINDING_MAX_TURNS: z.coerce.number().int().positive().default(8),
+  AI_WAYFINDING_DAILY_REQUEST_LIMIT_PER_SCREEN: z.coerce.number().int().positive().default(200),
+  AI_WAYFINDING_DAILY_REQUEST_LIMIT_PER_TENANT: z.coerce.number().int().positive().default(2000),
+  // Pending product/legal decision (docs/modules/ai_wayfinding_module_plan.md §11.3) — default
+  // is a conservative placeholder, not a considered retention policy; must be set deliberately
+  // before production use.
+  AI_WAYFINDING_USAGE_LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

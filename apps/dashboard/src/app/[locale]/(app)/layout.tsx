@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown, Building2 } from 'lucide-react';
+import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown, Building2, Sparkles } from 'lucide-react';
 import type { ModuleKey } from '@lumina/types';
 import { useAuth } from '@/context/AuthContext';
 import { AppSidebarProvider } from '@/context/AppSidebarContext';
@@ -46,6 +46,11 @@ const navSections: NavSection[] = [
   ] },
   { titleKey: 'operations', items: [
     { href: '/wayfinding', key: 'wayfinding', icon: MapPin, requiredModule: 'WAYFINDING' },
+    // Deliberately a top-level sibling, not a `wayfinding` submenu child — the sidebar's
+    // existing child-item rendering (below) doesn't filter children by requiredModule at all,
+    // so a module-gated page must stay a top-level item to go through the real capability
+    // filter (docs/modules/ai_wayfinding_module_plan.md §8.1: hidden until hasModule() passes).
+    { href: '/wayfinding/ai', key: 'wayfindingAi', icon: Sparkles, requiredModule: 'WAYFINDING_AI' },
     { href: '/schedules', key: 'schedules', icon: CalendarClock },
     { href: '/power-schedule', key: 'powerSchedule', icon: PowerCircle },
   ] },

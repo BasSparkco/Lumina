@@ -1,5 +1,5 @@
 import type { ResolvedDesignPayload } from '@lumina/design-schema';
-import type { PlayerContentManifest, PlayerModuleLease } from '@lumina/types';
+import type { PlayerContentManifest, PlayerModuleLease, WayfindingAiPlayerConfig, WayfindingAiResolution } from '@lumina/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
@@ -379,6 +379,10 @@ export interface WayfindingDirectory {
   // Idle/attract-loop content (Phase 7.2) — at most one is ever non-null.
   attractPlaylist: Playlist | null;
   attractTheme: HydratedTheme | null;
+  // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §5) — non-null only when the tenant
+  // owns WAYFINDING_AI, an administrator enabled it for this exact screen, and normal
+  // non-emergency Wayfinding is being served. Never populated during the evacuation bypass.
+  aiAssistant: WayfindingAiPlayerConfig | null;
 }
 
 export interface PlayerState {
@@ -444,6 +448,14 @@ export const api = {
   // wrapper callers actually use.
   logWayfindingEvents: (events: { type: 'SESSION_START' | 'SEARCH' | 'POI_VIEW'; query?: string; poiId?: string; poiName?: string }[]) =>
     request('/player/wayfinding-events', { method: 'POST', body: JSON.stringify({ events }) }),
+  // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §7.2) — the server derives
+  // screenId/organizationId/building/destination catalog from the authenticated screen token;
+  // this body carries only what the visitor actually typed. `signal` lets the caller abort on
+  // close/timeout/session-reset (§9.3) without leaving a dangling request.
+  resolveWayfindingAi: (
+    body: { message: string; language: 'en' | 'ar'; recentTurns?: { role: 'user' | 'assistant'; text: string }[] },
+    signal?: AbortSignal,
+  ) => request<WayfindingAiResolution>('/player/wayfinding-ai/resolve', { method: 'POST', body: JSON.stringify(body), signal }),
   // playsetting.md Phase 4 — authorized by `token` alone, not player_token; see PreviewPlaylist.
   previewPlaylist: (playlistId: string, token: string) =>
     request<PreviewPlaylist>(`/playlists/${playlistId}/preview?token=${encodeURIComponent(token)}`),

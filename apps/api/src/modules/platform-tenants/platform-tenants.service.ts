@@ -148,6 +148,20 @@ export class PlatformTenantsService {
       }
     }
 
+    // docs/modules/ai_wayfinding_module_plan.md §10 — same pattern as the WAYFINDING case above,
+    // scoped to screens actually configured for AI (a WayfindingAiScreenConfig row exists)
+    // rather than every WAYFINDING-mode screen in the org, since an entitlement change is only
+    // player-visible on a kiosk an administrator already opted into the assistant.
+    if (assignments.some((a) => a.key === 'WAYFINDING_AI')) {
+      const screens = await this.prisma.screen.findMany({
+        where: { organizationId: tenantId, streamingType: 'WAYFINDING', wayfindingAiConfig: { isNot: null } },
+        select: { id: true },
+      });
+      for (const screen of screens) {
+        this.gateway.sendToScreen(screen.id, { type: 'reload' });
+      }
+    }
+
     return result;
   }
 

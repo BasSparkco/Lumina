@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { DesignDocumentSchema, resolveElementBindings, type DesignElement, type ResolvedDesignPayload, type ResolvedElement, type ResolvedScene, type VariableMap } from '@lumina/design-schema';
-import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerModuleLease, PlayerNetworkDependency } from '@lumina/types';
+import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerModuleLease, PlayerNetworkDependency, WayfindingAiPlayerConfig } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
@@ -183,6 +183,11 @@ export class PlayerService {
             attractTheme: true,
           },
         },
+        // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §9.1) — loaded alongside
+        // kioskLocation regardless of entitlement/emergency state; buildWayfindingPayload always
+        // returns `aiAssistant: null`, and only getState()'s normal (non-suspended,
+        // non-emergency) path may ever overwrite it with a real value.
+        wayfindingAiConfig: true,
         group: { select: { volume: true } },
       },
     });
@@ -312,6 +317,12 @@ export class PlayerService {
             elements: await this.hydrateThemeElements(screen.organizationId, kioskLocation.attractTheme.elements),
           }
         : null,
+      // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §5/§9.1) — this shared builder
+      // never populates it; only getState()'s normal (non-suspended, non-emergency) path may
+      // overwrite this after the fact, once it has separately confirmed live WAYFINDING_AI
+      // entitlement, per-screen enablement, and !screen.emergencyActive. The suspended-emergency
+      // evacuation path always leaves this null, by construction, not by an extra check.
+      aiAssistant: null as WayfindingAiPlayerConfig | null,
     };
 
     return { configured, entitled, renderable, payload };
@@ -463,14 +474,36 @@ export class PlayerService {
     }
 
     const moduleLeases: PlayerModuleLease[] = [];
+    const issuedAt = new Date();
+    const graceHours = Number(process.env.PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS) || DEFAULT_OFFLINE_GRACE_HOURS;
+    const validUntil = new Date(issuedAt.getTime() + graceHours * 60 * 60 * 1000).toISOString();
     if (wayfinding.entitled) {
-      const issuedAt = new Date();
-      const graceHours = Number(process.env.PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS) || DEFAULT_OFFLINE_GRACE_HOURS;
-      moduleLeases.push({
-        key: 'WAYFINDING',
-        issuedAt: issuedAt.toISOString(),
-        validUntil: new Date(issuedAt.getTime() + graceHours * 60 * 60 * 1000).toISOString(),
-      });
+      moduleLeases.push({ key: 'WAYFINDING', issuedAt: issuedAt.toISOString(), validUntil });
+    }
+
+    // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §9.1/§11.4) — computed as two
+    // separate booleans, but unlike ordinary Wayfinding's entitled/renderable split, AI's lease
+    // is gated on `!screen.emergencyActive` too: "an emergency bypass must never expose the
+    // assistant or earn a WAYFINDING_AI lease" (§5) is deliberately read broadly here — any
+    // active emergency blacks out AI entirely, lease renewal included, not only the case where
+    // WAYFINDING's own bypass is what's rendering the payload. A provider/AI outage or a stale
+    // cached lease must never affect evacuation, and evacuation must never quietly keep AI's
+    // cache warm either.
+    const wayfindingAiEntitled = wayfinding.configured && !screen.emergencyActive
+      ? !screen.organizationId || (await this.entitlements.hasModule(screen.organizationId, 'WAYFINDING_AI'))
+      : false;
+    const wayfindingAiRenderable = wayfindingAiEntitled && screen.wayfindingAiConfig?.enabled === true;
+
+    if (wayfindingAiRenderable && wayfinding.payload) {
+      wayfinding.payload.aiAssistant = {
+        enabled: true,
+        welcomeMessage: screen.wayfindingAiConfig!.welcomeMessage,
+        welcomeMessageAr: screen.wayfindingAiConfig!.welcomeMessageAr,
+        maxTurns: screen.wayfindingAiConfig!.maxTurns,
+      };
+    }
+    if (wayfindingAiEntitled) {
+      moduleLeases.push({ key: 'WAYFINDING_AI', issuedAt: issuedAt.toISOString(), validUntil });
     }
 
     return {

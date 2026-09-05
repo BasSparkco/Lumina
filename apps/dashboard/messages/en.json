@@ -15,6 +15,7 @@
     "adminTemplates": "Design Templates",
     "adminTenants": "Tenants",
     "wayfinding": "Wayfinding",
+    "wayfindingAi": "AI Wayfinding",
     "schedules": "Schedules",
     "powerSchedule": "Display power",
     "members": "Members",
@@ -980,6 +981,7 @@
   "wayfinding": {
     "title": "Wayfinding",
     "subtitle": "Manage buildings, floor plans, and points of interest for directory and kiosk screens",
+    "aiSettingsLink": "AI Wayfinding settings",
     "buildings": "Buildings",
     "newBuilding": "New building",
     "buildingName": "Building name",
@@ -1094,6 +1096,32 @@
       "noOtherFloorNodes": "No nodes on other floors yet",
       "selectNodeHint": "Select a node to edit its label, delete it, or connect it to another floor"
     }
+  },
+  "wayfindingAi": {
+    "title": "AI Wayfinding",
+    "subtitle": "Let visitors ask a Wayfinding kiosk where something is, in English or Arabic",
+    "eligibleKiosks": "Eligible kiosks",
+    "noEligibleKiosks": "No Wayfinding kiosks yet — configure a building and kiosk location first",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "configure": "Configure",
+    "enableForThisScreen": "Enable the assistant on this screen",
+    "welcomeMessageEn": "Welcome message (English)",
+    "welcomeMessageAr": "Welcome message (Arabic)",
+    "maxTurns": "Max conversation turns",
+    "save": "Save",
+    "aliases": "Destination aliases",
+    "building": "Building",
+    "selectBuilding": "Select a building…",
+    "addAliasPlaceholder": "Add an alias…",
+    "testAssistant": "Test assistant",
+    "testMessagePlaceholder": "Type a sample visitor question…",
+    "send": "Send",
+    "usageSummary": "Usage summary",
+    "requests": "Requests",
+    "modelCallRate": "Model call rate",
+    "noMatchRate": "No-match rate",
+    "avgLatency": "Avg. latency"
   },
   "schedules": {
     "title": "Schedules",

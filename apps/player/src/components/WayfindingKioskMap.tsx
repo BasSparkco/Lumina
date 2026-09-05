@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { X, Locate, Search, Navigation, Accessibility, QrCode, Languages, Type, Volume2, VolumeX } from 'lucide-react';
+import { X, Locate, Search, Navigation, Accessibility, QrCode, Languages, Type, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import type { PlayerState, WayfindingPoi } from '../lib/api';
 import { CategoryIcon } from './WayfindingDirectoryBoard';
 import WayfindingDirectoryPanel from './WayfindingDirectoryPanel';
+import WayfindingAiAssistant from './WayfindingAiAssistant';
 import QrCodeWidget from './QrCodeWidget';
 import ZonePlayer from './ZonePlayer';
 import ThemeRenderer from './ThemeRenderer';
@@ -63,6 +64,7 @@ export default function WayfindingKioskMap({ state, onAssetChange }: { state: Pl
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [aspect, setAspect] = useState(4 / 3);
   const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [attractActive, setAttractActive] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [accessibleRoute, setAccessibleRoute] = useState(false);
@@ -378,6 +380,15 @@ export default function WayfindingKioskMap({ state, onAssetChange }: { state: Pl
               <Languages size={18} />
               <span style={styles.langLabel}>{lang.toUpperCase()}</span>
             </button>
+            {directory.aiAssistant && (
+              <button
+                style={{ ...styles.aiButton, fontSize: `${1.1 * A}vw`, padding: `${0.9 * A}vh ${1.4 * A}vw` }}
+                onClick={() => setAiOpen(true)}
+              >
+                <Sparkles size={18 * A} />
+                {lang === 'ar' ? 'اسأل المساعد' : 'Ask the Assistant'}
+              </button>
+            )}
             <button style={{ ...styles.directoryButton, fontSize: `${1.1 * A}vw`, padding: `${0.9 * A}vh ${1.4 * A}vw` }} onClick={() => setDirectoryOpen(true)}>
               <Search size={18 * A} color="#0f172a" />
               {t('directory', lang)}
@@ -598,6 +609,18 @@ export default function WayfindingKioskMap({ state, onAssetChange }: { state: Pl
         />
       )}
 
+      {aiOpen && directory.aiAssistant && (
+        <WayfindingAiAssistant
+          directory={directory}
+          lang={lang}
+          attractActive={attractActive}
+          kioskNode={kioskNode}
+          onClose={() => setAiOpen(false)}
+          onSelect={selectFromDirectory}
+          onUseDirectory={() => { setAiOpen(false); setDirectoryOpen(true); }}
+        />
+      )}
+
       {attractActive && (directory.attractPlaylist ?? directory.attractTheme) && (
         <div style={styles.attractOverlay}>
           {directory.attractTheme ? (
@@ -642,6 +665,11 @@ const styles: Record<string, React.CSSProperties> = {
   directoryButton: {
     display: 'flex', alignItems: 'center', gap: '0.5vw', fontSize: '1.1vw', fontWeight: 700,
     color: '#0f172a', background: '#f1f5f9', border: 'none', borderRadius: 999,
+    padding: '0.9vh 1.4vw', cursor: 'pointer', flex: '0 0 auto',
+  },
+  aiButton: {
+    display: 'flex', alignItems: 'center', gap: '0.5vw', fontSize: '1.1vw', fontWeight: 700,
+    color: '#fff', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', borderRadius: 999,
     padding: '0.9vh 1.4vw', cursor: 'pointer', flex: '0 0 auto',
   },
   tabs: { display: 'flex', gap: '0.6vw', flexWrap: 'wrap' },

@@ -15,6 +15,7 @@
     "adminTemplates": "قوالب التصميم",
     "adminTenants": "المستأجرون",
     "wayfinding": "الإرشاد",
+    "wayfindingAi": "الإرشاد الذكي",
     "schedules": "الجداول",
     "powerSchedule": "طاقة الشاشة",
     "members": "الأعضاء",
@@ -980,6 +981,7 @@
   "wayfinding": {
     "title": "الإرشاد",
     "subtitle": "إدارة المباني ومخططات الطوابق ونقاط الاهتمام لشاشات الدليل والأكشاك",
+    "aiSettingsLink": "إعدادات الإرشاد الذكي",
     "buildings": "المباني",
     "newBuilding": "مبنى جديد",
     "buildingName": "اسم المبنى",
@@ -1094,6 +1096,32 @@
       "noOtherFloorNodes": "لا توجد نقاط في طوابق أخرى بعد",
       "selectNodeHint": "حدد نقطة لتعديل تسميتها أو حذفها أو ربطها بطابق آخر"
     }
+  },
+  "wayfindingAi": {
+    "title": "الإرشاد الذكي",
+    "subtitle": "دع الزوار يسألون كشك الإرشاد عن مكان شيء ما، بالعربية أو الإنجليزية",
+    "eligibleKiosks": "الأكشاك المؤهلة",
+    "noEligibleKiosks": "لا توجد أكشاك إرشاد بعد — قم بتهيئة مبنى وموقع كشك أولاً",
+    "enabled": "مفعّل",
+    "disabled": "معطّل",
+    "configure": "تهيئة",
+    "enableForThisScreen": "تفعيل المساعد على هذه الشاشة",
+    "welcomeMessageEn": "رسالة الترحيب (إنجليزي)",
+    "welcomeMessageAr": "رسالة الترحيب (عربي)",
+    "maxTurns": "الحد الأقصى لأدوار المحادثة",
+    "save": "حفظ",
+    "aliases": "أسماء الوجهات البديلة",
+    "building": "المبنى",
+    "selectBuilding": "اختر مبنى…",
+    "addAliasPlaceholder": "أضف اسمًا بديلاً…",
+    "testAssistant": "اختبار المساعد",
+    "testMessagePlaceholder": "اكتب سؤال زائر تجريبي…",
+    "send": "إرسال",
+    "usageSummary": "ملخص الاستخدام",
+    "requests": "الطلبات",
+    "modelCallRate": "معدل استدعاء النموذج",
+    "noMatchRate": "معدل عدم التطابق",
+    "avgLatency": "متوسط زمن الاستجابة"
   },
   "schedules": {
     "title": "الجداول",

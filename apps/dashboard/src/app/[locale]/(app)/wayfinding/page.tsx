@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import {
   MapPin, Building2, Layers, Plus, Trash2, Pencil, X, Upload, ChevronRight, Loader2,
-  Route, Link2, MousePointer2, CirclePlus, AlertTriangle, Users2,
+  Route, Link2, MousePointer2, CirclePlus, AlertTriangle, Users2, Sparkles,
 } from 'lucide-react';
+import NextLink from 'next/link';
+import { useLocale } from 'next-intl';
 import * as LucideIcons from 'lucide-react';
 import { POI_CATEGORY_PRESETS } from '@lumina/types';
 import {
@@ -20,6 +22,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { useModuleRouteGuard } from '@/hooks/useModuleRouteGuard';
+import { useCapabilities } from '@/hooks/useCapabilities';
 import { useAuth } from '@/context/AuthContext';
 
 const POI_STATUSES: PoiStatus[] = ['OPEN', 'CLOSED', 'RELOCATED'];
@@ -94,6 +97,8 @@ export default function WayfindingPage() {
   // A direct URL visit by a tenant without the WAYFINDING module redirects away and never
   // starts any of the queries below — see docs/adr/platform-modules-and-entitlements.md.
   const canRender = useModuleRouteGuard('WAYFINDING');
+  const { hasModule } = useCapabilities();
+  const locale = useLocale();
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
@@ -253,6 +258,16 @@ export default function WayfindingPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
         </div>
+        {/* §8.1 — small AI settings link from the ordinary Wayfinding page when entitled;
+            ordinary Wayfinding stays fully usable regardless of whether this shows. */}
+        {hasModule('WAYFINDING_AI') && (
+          <NextLink
+            href={`/${locale}/wayfinding/ai`}
+            className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:underline"
+          >
+            <Sparkles className="w-4 h-4" /> {t('aiSettingsLink')}
+          </NextLink>
+        )}
       </div>
 
       {error && (

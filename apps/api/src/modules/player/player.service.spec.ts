@@ -259,7 +259,11 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
     },
   };
 
-  function makeService(screenOverrides: Record<string, unknown>, hasModule: boolean) {
+  // `hasModuleAi` defaults to false — WAYFINDING_AI is a separate purchasable entitlement
+  // (docs/modules/ai_wayfinding_module_plan.md §3.1), never implied by owning WAYFINDING, so a
+  // realistic mock must distinguish the two keys rather than answering every hasModule() call
+  // with the same boolean.
+  function makeService(screenOverrides: Record<string, unknown>, hasModule: boolean, hasModuleAi = false) {
     const prisma = {
       screen: {
         findUnique: jest.fn().mockResolvedValue({
@@ -283,6 +287,7 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
           asset: null,
           playlist: null,
           kioskLocation: kioskFixture,
+          wayfindingAiConfig: null,
           ...screenOverrides,
         }),
       },
@@ -293,7 +298,9 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
     const schedules = { getSchedulesForScreen: jest.fn().mockResolvedValue([]), resolveNow: jest.fn() } as unknown as SchedulesService;
     const powerSchedules = { resolveForScreen: jest.fn().mockResolvedValue({ poweredOn: true, rules: [] }) } as unknown as PowerSchedulesService;
     const screens = {} as ScreensService;
-    const entitlements = { hasModule: jest.fn().mockResolvedValue(hasModule) } as unknown as EntitlementsService;
+    const entitlements = {
+      hasModule: jest.fn((_orgId: string, key: string) => Promise.resolve(key === 'WAYFINDING_AI' ? hasModuleAi : hasModule)),
+    } as unknown as EntitlementsService;
     return { service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements), entitlements };
   }
 
@@ -343,6 +350,67 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
     await service.getState('s1');
 
     expect(entitlements.hasModule).not.toHaveBeenCalled();
+  });
+
+  // docs/modules/ai_wayfinding_module_plan.md §3.1/§5/§9.1/§11.4 — a separate purchasable
+  // entitlement, never implied by owning WAYFINDING, additive to the existing Wayfinding payload
+  // rather than a second player-state branch, and always suppressed during any active emergency
+  // (not just the suspended one) — never through the evacuation bypass.
+  describe('WAYFINDING_AI entitlement, per-screen enablement, and emergency suppression', () => {
+    const aiConfigFixture = { enabled: true, welcomeMessage: 'Hi', welcomeMessageAr: 'مرحبا', maxTurns: 5 };
+
+    it('includes aiAssistant and issues a WAYFINDING_AI lease when entitled, enabled, and non-emergency', async () => {
+      const { service, entitlements } = makeService({ wayfindingAiConfig: aiConfigFixture }, true, true);
+
+      const state = await service.getState('s1');
+
+      expect(entitlements.hasModule).toHaveBeenCalledWith('org_1', 'WAYFINDING_AI');
+      expect(state.wayfinding?.aiAssistant).toEqual({
+        enabled: true, welcomeMessage: 'Hi', welcomeMessageAr: 'مرحبا', maxTurns: 5,
+      });
+      expect(state.moduleLeases).toEqual(expect.arrayContaining([
+        expect.objectContaining({ key: 'WAYFINDING_AI' }),
+      ]));
+    });
+
+    it('omits aiAssistant and the lease when the tenant does not own WAYFINDING_AI, even though WAYFINDING is entitled', async () => {
+      const { service } = makeService({ wayfindingAiConfig: aiConfigFixture }, true, false);
+
+      const state = await service.getState('s1');
+
+      expect(state.wayfinding).not.toBeNull();
+      expect(state.wayfinding?.aiAssistant).toBeNull();
+      expect(state.moduleLeases.some((l) => l.key === 'WAYFINDING_AI')).toBe(false);
+    });
+
+    it('omits aiAssistant but still issues no lease when entitled but not enabled per-screen (no administrator opt-in yet)', async () => {
+      const { service } = makeService({ wayfindingAiConfig: { ...aiConfigFixture, enabled: false } }, true, true);
+
+      const state = await service.getState('s1');
+
+      expect(state.wayfinding?.aiAssistant).toBeNull();
+    });
+
+    it('omits aiAssistant when no WayfindingAiScreenConfig row exists at all', async () => {
+      const { service } = makeService({ wayfindingAiConfig: null }, true, true);
+
+      const state = await service.getState('s1');
+
+      expect(state.wayfinding?.aiAssistant).toBeNull();
+    });
+
+    it('suppresses aiAssistant and the lease during an active emergency even though this is not the suspended-tenant path', async () => {
+      const { service } = makeService({ wayfindingAiConfig: aiConfigFixture, emergencyActive: true }, true, true);
+
+      const state = await service.getState('s1');
+
+      // The evacuation bypass still renders the ordinary wayfinding/evacuation payload...
+      expect(state.wayfinding).not.toBeNull();
+      // ...but never the assistant, and never its lease — §11.4's "evacuation always overrides
+      // and closes AI," not just during tenant suspension.
+      expect(state.wayfinding?.aiAssistant).toBeNull();
+      expect(state.moduleLeases.some((l) => l.key === 'WAYFINDING_AI')).toBe(false);
+    });
   });
 
   // docs/modules/modules_shared_preflight_plan.md §4.1/§5.2/§5.3 — tenant suspension must not

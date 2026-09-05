@@ -8,6 +8,7 @@ export * from './fonts';
 export * from './wayfinding';
 export * from './playlist-transitions';
 export * from './modules';
+export * from './wayfinding-ai';
 
 // Explicit re-exports of runtime values (schemas, functions) alongside the `export *`
 // above: `export *` compiles to a dynamic re-export loop that bundlers' CJS/ESM interop
@@ -68,3 +69,19 @@ export {
   ORGANIZATION_STATUSES,
   OrganizationStatusSchema,
 } from './modules';
+export {
+  WAYFINDING_AI_LANGUAGES,
+  WayfindingAiLanguageSchema,
+  WAYFINDING_AI_MAX_INPUT_CHARS,
+  WAYFINDING_AI_MAX_RECENT_TURNS,
+  WAYFINDING_AI_MAX_ALTERNATIVES,
+  WAYFINDING_AI_MAX_CANDIDATES,
+  WAYFINDING_AI_MAX_MESSAGE_CHARS,
+  ResolveWayfindingAiRequestSchema,
+  WayfindingAiResolutionSchema,
+  ProviderResolutionSchema,
+  WAYFINDING_AI_USAGE_OUTCOMES,
+  WayfindingAiUsageOutcomeSchema,
+  UpdateWayfindingAiScreenConfigSchema,
+  TestResolveWayfindingAiSchema,
+} from './wayfinding-ai';
