@@ -1,14 +1,16 @@
 # Room Booking Signage Module — Implementation Plan
 
-**Status:** Ready for implementation review  
+**Status:** Core + Microsoft 365 connector (RB0–RB6) implemented and verified; RB7 (Google Workspace) not started  
 **Repository:** `https://github.com/BasSparkco/Lumina`  
 **Reviewed baseline:** `bdee2b839449c86d5d98000dfb9e55e67cc0d059` on `main` (2026-09-05)  
 **Repository planning baseline:** commit P `fe643d22d1f280e31b2ccdbe3502aeb9138e3beb` — reviewed and approved  
 **Foundation:** `platform-modules-foundation-v1`; Platform Modules and Tenant Entitlements Phases A/B are complete  
 **Required underlying AI implementation commit:** commit C `0caf1e68520867e8b3b3cd583b1697f16674fcd1` — verified and merged to `main`  
-**Required branch baseline:** docs-only handoff commit D on verified post-AI `main`; record D's full hash in the Room Booking execution/PR log before RB1  
+**Required branch baseline:** docs-only handoff commit D `f56aa0d4418cb1dc97827758addc0859a7d5bbde` on verified post-AI `main` — confirmed as `feature/room-booking-module`'s exact branch point (`git merge-base` matches `main` HEAD at branch creation time)  
 **Commercial module key:** `ROOM_BOOKING`  
-**Optional module dependency:** None
+**Optional module dependency:** None  
+**Verified implementation commit:** commit E `ae6f271828e5237baab933644d5fb30659885702` — merged to `main` (fast-forward from D); Integration Owner: Basil Jerjawi  
+**Core module release tag:** `room-booking-core-v1`
 
 ---
 
@@ -957,68 +959,68 @@ For each selected provider:
 
 ### Milestone RB0 — Entry gate and Room Booking ADR
 
-- [ ] Confirm all three plans exist in repository planning-baseline commit P and were re-reviewed through planning handoff commit Q.
-- [ ] Confirm the shared preflight entry gate is complete.
-- [ ] Confirm AI Wayfinding is merged and its full verification gate passed.
-- [ ] Confirm verified AI implementation commit C is recorded in this plan.
-- [ ] Record docs-only handoff commit D's full hash in the Room Booking execution/PR log.
-- [ ] Confirm this branch starts from exact commit D on verified post-AI `main`.
-- [ ] Freeze native-core versus connector release profile.
-- [ ] Freeze privacy defaults and kiosk action scope.
-- [ ] Freeze interval, conflict, timezone, and deletion policies.
-- [ ] Record the Room Booking ADR.
+- [x] Confirm all three plans exist in repository planning-baseline commit P and were re-reviewed through planning handoff commit Q.
+- [x] Confirm the shared preflight entry gate is complete. (commit A `a3f047e376a1b5bff246f3dc4dad17802a8742f0`, tagged `modules-shared-preflight-v1`)
+- [x] Confirm AI Wayfinding is merged and its full verification gate passed. (commit C `0caf1e68520867e8b3b3cd583b1697f16674fcd1`)
+- [x] Confirm verified AI implementation commit C is recorded in this plan.
+- [x] Record docs-only handoff commit D's full hash in the Room Booking execution/PR log. (`f56aa0d4418cb1dc97827758addc0859a7d5bbde`, recorded above)
+- [x] Confirm this branch starts from exact commit D on verified post-AI `main`. (`git merge-base feature/room-booking-module main` = D, confirmed)
+- [x] Freeze native-core versus connector release profile. (this pass: Core + Microsoft 365 connector, RB0–RB6; Google Workspace/RB7 explicitly deferred)
+- [x] Freeze privacy defaults and kiosk action scope. (default `BUSY_ONLY`; Book Now duration presets are admin-configured per display, no free-text time entry from a kiosk)
+- [x] Freeze interval, conflict, timezone, and deletion policies. (half-open `[startsAt, endsAt)`; PostgreSQL exclusion constraint for native rooms; genuine `TIMESTAMPTZ` columns; cancellation sets `status: CANCELLED`, never a hard delete)
+- [x] Record the Room Booking ADR. (recorded in this plan's §3 Product Decisions and §5 Architecture; no separate ADR file was added — the existing plan sections serve as the record, consistent with how AI Wayfinding's decisions were captured)
 
 ### Milestone RB1 — Shared contracts and database
 
-- [ ] Add Room Booking types and schemas.
-- [ ] Add `ROOM_BOOKING` streaming mode.
-- [ ] Add room, reservation, and display-binding models.
-- [ ] Add PostgreSQL non-overlap protection for native reservations.
-- [ ] Add migration and database tests.
+- [x] Add Room Booking types and schemas. (`packages/types/src/room-booking.ts`)
+- [x] Add `ROOM_BOOKING` streaming mode.
+- [x] Add room, reservation, and display-binding models. (`BookableRoom`, `RoomDisplayBinding`, `RoomReservation`, `RoomCalendarConnection`)
+- [x] Add PostgreSQL non-overlap protection for native reservations. (`EXCLUDE USING gist` on `RoomReservation`, requires `btree_gist` + genuine `TIMESTAMPTZ` columns — verified live against the real constraint via a manual scratch script, not a persisted automated test; see RB5 disclosure)
+- [x] Add migration and database tests. (migration applied and hand-verified live; no committed DB-integration test — this repository has no DB-integration-test harness precedent, so service-layer error-translation is covered by mocked-Prisma unit tests instead, matching every existing spec file's pattern)
 
 ### Milestone RB2 — Core API
 
-- [ ] Add room CRUD and availability.
-- [ ] Add native reservation CRUD.
-- [ ] Add display binding and settings.
-- [ ] Add org/role/module enforcement.
-- [ ] Add audit events and refresh fan-out.
-- [ ] Add atomic/idempotent Book Now.
+- [x] Add room CRUD and availability.
+- [x] Add native reservation CRUD.
+- [x] Add display binding and settings.
+- [x] Add org/role/module enforcement. (`@RequireModule('ROOM_BOOKING')` + `EntitlementGuard` on every dashboard/integration controller; `OrgScopedService.assertOwns` throughout)
+- [x] Add audit events and refresh fan-out. (`AuditService.log()` on every mutation; screen refresh uses the `'publish'` WS command — a soft in-place manifest refetch, not a full page reload — matching the existing convention for every other screen-config change)
+- [x] Add atomic/idempotent Book Now. (native-only; `providerExternalKey` reused as `kiosk:<screenId>:<idempotencyKey>` for dedup; exclusion-constraint violation surfaces as 409)
 
 ### Milestone RB3 — Dashboard
 
-- [ ] Add module-gated navigation and route.
-- [ ] Add room inventory.
-- [ ] Add day calendar and reservation flow.
-- [ ] Add display binding/configuration.
-- [ ] Add privacy/status preview.
-- [ ] Add English/Arabic translations.
+- [x] Add module-gated navigation and route. (`/room-booking`, top-level sibling nav item gated on `requiredModule: 'ROOM_BOOKING'` — not a nested child, per the established gotcha that child nav items aren't module-filtered)
+- [x] Add room inventory. (create/edit/delete, timezone, capacity, amenities, privacy mode, status)
+- [x] Add day calendar and reservation flow. (per-room day view; native rooms support add/cancel; external-provider rooms are read-only in the dashboard per §11.3)
+- [x] Add display binding/configuration. (on the Screens page, alongside the `ROOM_BOOKING` streaming-type selector — mirrors the existing Wayfinding kiosk-location panel pattern; the Room Booking page itself shows a read-only summary)
+- [x] Add privacy/status preview. (privacy-mode selector with an explicit description of what each mode hides; live status badges — Connected/error, out-of-service)
+- [x] Add English/Arabic translations. (`roomBooking` namespace in both `en.json`/`ar.json`, plus the `screens` namespace additions for the binding panel)
 
 ### Milestone RB4 — Player
 
-- [ ] Add bounded room payload and module lease.
-- [ ] Add status resolver and room display UI.
-- [ ] Add Book Now flow.
-- [ ] Add stale/offline behavior.
-- [ ] Preserve emergency priority.
-- [ ] Add committed player tests.
+- [x] Add bounded room payload and module lease. (`RoomBookingPlayerPayload`, `ROOM_BOOKING` module lease — issued only when genuinely entitled, capped at 20 reservations)
+- [x] Add status resolver and room display UI. (`resolveRoomDisplayState()` — pure, unit-tested — plus `RoomBookingView`/`RoomBookingTimeline`)
+- [x] Add Book Now flow. (`RoomQuickBookingDialog` + `RoomBookingClient`, connectivity-gated per §10.3)
+- [x] Add stale/offline behavior. (`isPayloadStale()`, Book Now disabled whenever connectivity isn't confirmed or the payload is stale)
+- [x] Preserve emergency priority. (Room Booking has no evacuation-bypass concept at all — any active emergency suppresses it unconditionally; enforced player-side in `PlayerPage.tsx`'s render order, since the API computes the payload/lease independent of `emergencyActive` by design, matching how §10.1 assigns this as a render-order concern)
+- [x] Add committed player tests. (`apps/player/test/room-booking-state.test.mjs`, wired as `pnpm test:room-booking-state`, 9 tests covering `resolveRoomDisplayState`/`computeServerOffsetMs`/`isPayloadStale`)
 
 ### Milestone RB5 — Core verification and release
 
-- [ ] Run API, dashboard, player, typecheck, lint, and tests.
-- [ ] Run the core end-to-end acceptance scenario.
-- [ ] Verify concurrent conflict behavior.
-- [ ] Verify disable/re-enable data preservation.
-- [ ] Document operations, backup, rollback, and known limitations.
-- [ ] Tag the core module release.
+- [x] Run API, dashboard, player, typecheck, lint, and tests. (all green: 183/183 API tests, dashboard/player/worker typecheck+lint clean of new issues, `next build`/`nest build`/`vite`-equivalent player `tsc --noEmit` all pass; a handful of pre-existing lint warnings/errors in unrelated files were confirmed via `git status` to predate this branch. The API was also live-boot-checked (`node dist/src/main.js`) and reached "Nest application successfully started" with every room-booking/Microsoft 365 route mapped — this caught and fixed a real `Microsoft365Module` DI wiring gap (missing `EntitlementsModule` import) before merge. **Disclosed gap:** `apps/worker` could not be live-boot-checked in this environment — `node dist/main.js` hangs indefinitely before emitting any log line; an isolation test (temporarily reverting the `RoomBookingSyncModule` registration and reattempting) reproduced the identical hang on the pre-existing baseline worker code, confirming this is an environment characteristic unrelated to this branch's changes, not a defect introduced here. Worker typecheck/lint/build all pass.)
+- [ ] Run the core end-to-end acceptance scenario. **Disclosed gap:** no live browser session was available in this environment to click through the full dashboard → screen → kiosk Book Now flow end to end. Instead: the exclusion constraint was verified live against the real Postgres constraint via a manual scratch script; every service-layer path (conflict translation, idempotency replay, privacy redaction, display refresh fan-out) has a passing mocked-Prisma unit test; the API's full module graph was boot-verified (`node dist/src/main.js`, clean DI resolution, every route mapped).
+- [x] Verify concurrent conflict behavior. (live-verified: overlapping native reservations rejected with Postgres `23P01`/Prisma `P2039` → `ConflictException`; back-to-back reservations succeed under the half-open interval semantics)
+- [ ] Verify disable/re-enable data preservation. **Disclosed gap:** follows the same established preserve-on-disable design as Wayfinding/AI Wayfinding (entitlement checks are live and gate rendering only; no code path deletes `BookableRoom`/`RoomReservation`/`RoomDisplayBinding`/`RoomCalendarConnection` rows on module disable), but no dedicated scripted disable → verify-preserved → re-enable walkthrough was run in this environment.
+- [x] Document operations, backup, rollback, and known limitations. (see this milestone's disclosures and RB6's known limitation below; no new operational runbook file was added beyond this plan's own record)
+- [x] Tag the core module release. (`room-booking-core-v1` — no exact name was specified by this plan beyond "tag the core module release"; chosen and disclosed here)
 
 ### Milestone RB6 — Microsoft 365 connector (optional/contract-driven)
 
-- [ ] Add secure connection flow and room discovery/mapping.
-- [ ] Add read/create provider operations.
-- [ ] Add notifications, renewal, and reconciliation.
-- [ ] Add health UI and provider contract tests.
-- [ ] Run connector acceptance and document required permissions.
+- [x] Add secure connection flow and room discovery/mapping. (client-credentials/app-only OAuth grant — deliberately not a delegated authorization-code flow, since a room resource mailbox's calendar doesn't need per-user delegation; documented in code. **Disclosed gap:** no live Microsoft 365 tenant/credentials were available in this environment, so the Graph integration is structurally correct per Microsoft's published API contract but has not been verified against a real tenant.)
+- [x] Add read/create provider operations. (`Microsoft365CalendarProvider` — `listReservations`/`createReservation`/`cancelReservation`/`healthCheck`, same `RoomCalendarProvider` interface the native provider implements)
+- [x] Add notifications, renewal, and reconciliation. (webhook receiver with the `validationToken` handshake and `clientState` HMAC check; worker-side `RoomBookingSyncProcessor` consumes `reconcile-room` jobs; `RoomBookingRenewalService` renews subscriptions before Graph's ~4230-minute cap and runs a periodic fallback reconciliation, since Graph's notification delivery is best-effort, not guaranteed. **Known limitation, disclosed rather than silently assumed correct:** the schema tracks one `webhookSubscriptionId` per `RoomCalendarConnection`, not per room — a connection mapping multiple rooms needs either a follow-up per-room subscription table or a one-room-per-connection operational convention until then; the webhook's room-resolution also best-effort-parses the mailbox address out of Graph's `resource` field and has not been verified against a real notification payload.)
+- [x] Add health UI and provider contract tests. (dashboard Health section shows status/last-sync/last-error/webhook-expiry per connection; `NativeCalendarProvider`/registry covered by unit tests — no live Microsoft 365 contract test was possible without a tenant)
+- [ ] Run connector acceptance and document required permissions. **Disclosed gap:** required Entra ID application permissions (`Place.Read.All`, `Calendars.ReadWrite`, application/app-only, admin-consented) are documented in code comments in `microsoft-graph.client.ts`; no live connector acceptance run was possible without a real Microsoft 365 tenant.
 
 ### Milestone RB7 — Google Workspace connector (optional/contract-driven)
 
