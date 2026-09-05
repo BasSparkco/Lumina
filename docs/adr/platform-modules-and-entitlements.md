@@ -199,3 +199,44 @@ capability endpoint, or competing navigation-gating mechanism — both consume t
 as-is. `AI Wayfinding` uses `@RequireModule('WAYFINDING_AI')` and depends on `WAYFINDING` through
 `MODULE_DEPENDENCIES`; `Room Booking` uses `@RequireModule('ROOM_BOOKING')` as an independent
 domain module.
+
+## Addendum (Shared Module Preflight): tenant-suspension evacuation exemption and dashboard dependency walking
+
+Resolves the open policy question recorded in `platform_modules_and_tenants_foundation_plan.md`
+§16 (flagged during Milestones B3 and B5, left undecided at Phase A/B completion). This is the
+first ADR statement on tenant-suspension-and-evacuation policy — it does not replace or duplicate
+anything above; it extends the player-side module enforcement pattern already recorded there to
+a second suppression mechanism (tenant suspension) beyond the two this ADR already covered
+(module disablement, offline lease expiry).
+
+**Decision:**
+
+- Emergency content — an assigned emergency playlist, or the Wayfinding evacuation route on a
+  configured Wayfinding kiosk — survives tenant suspension without ever earning a module lease,
+  the same evacuation exemption `PlayerService.getState()` already applies to Wayfinding
+  entitlement disablement and lease expiry.
+- Normal (non-emergency) tenant content remains fully suppressed while a tenant is suspended,
+  unchanged from the original suspended-neutral-state behavior.
+- Dashboard capability checks (`CapabilitiesContext.hasModule()`, via
+  `apps/dashboard/src/lib/moduleCapabilities.ts`) now walk the shared `MODULE_DEPENDENCIES`
+  catalog recursively, mirroring `EntitlementsService.hasModule()`'s existing server-side
+  dependency walk, so an expired or disabled `WAYFINDING` also hides and blocks a dependent
+  module (`WAYFINDING_AI`, `INDOOR_POSITIONING`) in the dashboard UI exactly as the API already
+  rejects it.
+- New player payloads and runtime schemas introduced by either downstream module belong in
+  `@lumina/types`, imported by both API and player — neither module branch introduces another
+  hand-duplicated, module-specific payload type.
+
+**Why this is stricter than the foundation plan's "one-line" shorthand:** §16 anticipated fixing
+this by adding the same bypass condition used for module disablement directly to the suspended
+early return. Doing that naively — falling through the existing state builder once suspended —
+would hydrate and transmit *all* lower-priority ordinary content (asset, default playlist,
+schedule rules, attract content) merely because the player's render order happens to show the
+emergency branch first, silently reintroducing the "preserve everything, hide the content
+client-side" anti-pattern this ADR's evacuation-exemption principle exists to avoid. The actual
+implementation instead extracts one private Wayfinding-payload builder
+(`PlayerService.buildWayfindingPayload()`, parameterized by `includeAttract` and
+`allowEmergencyEntitlementBypass`) shared by normal rendering and the suspended-emergency path,
+and two explicit suspended-response builders (`buildSuspendedNeutralState()`,
+`buildSuspendedEmergencyState()`) that each construct only the fields their case is allowed to
+return — a safety and data-minimization correction, not a scope expansion.

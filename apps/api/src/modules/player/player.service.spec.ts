@@ -344,4 +344,149 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
 
     expect(entitlements.hasModule).not.toHaveBeenCalled();
   });
+
+  // docs/modules/modules_shared_preflight_plan.md §4.1/§5.2/§5.3 — tenant suspension must not
+  // suppress an already-active emergency playlist or Wayfinding evacuation route, the same
+  // safety exemption this suite already covers for module disablement/lease expiry above. These
+  // cases reuse this suite's own makeService()/kioskFixture rather than reconstructing a second
+  // Wayfinding fixture, per the plan's explicit instruction not to duplicate that hydration.
+  describe('suspended tenant with an active emergency', () => {
+    const emergencyPlaylistFixture = {
+      id: 'ep1',
+      name: 'Fire Evacuation',
+      transitionStyle: 'NONE',
+      transitionDurationMs: 0,
+      playbackOrder: 'SEQUENTIAL',
+      items: [],
+    };
+
+    it('suspended + no emergency: returns neutral HTTP-200-shaped content, no lease, entitlement never checked', async () => {
+      const { service, entitlements } = makeService(
+        { organization: { status: 'SUSPENDED' }, emergencyActive: false },
+        true,
+      );
+
+      const state = await service.getState('s1');
+
+      expect(state).toEqual(
+        expect.objectContaining({
+          screenId: 's1',
+          emergencyActive: false,
+          emergencyPlaylist: null,
+          asset: null,
+          wayfinding: null,
+          scheduleRules: [],
+          resolvedPlaylistId: null,
+          defaultPlaylist: null,
+          poweredOn: true,
+          powerScheduleRules: [],
+          moduleLeases: [],
+        }),
+      );
+      expect(entitlements.hasModule).not.toHaveBeenCalled();
+    });
+
+    it('suspended + emergency playlist assigned: returns only the emergency playlist, no lease, no wayfinding, no wayfinding entitlement check', async () => {
+      const { service, entitlements } = makeService(
+        {
+          organization: { status: 'SUSPENDED' },
+          emergencyActive: true,
+          emergencyPlaylist: emergencyPlaylistFixture,
+        },
+        true,
+      );
+
+      const state = await service.getState('s1');
+
+      expect(state.emergencyActive).toBe(true);
+      expect(state.emergencyPlaylist).not.toBeNull();
+      expect(state.emergencyPlaylist?.id).toBe('ep1');
+      expect(state.wayfinding).toBeNull();
+      expect(state.moduleLeases).toEqual([]);
+      expect(state.asset).toBeNull();
+      expect(state.scheduleRules).toEqual([]);
+      expect(state.defaultPlaylist).toBeNull();
+      // Emergency playlist takes priority over evacuation (§4.2) — the entitlement bypass path
+      // for the evacuation view must not even be consulted when a playlist already won.
+      expect(entitlements.hasModule).not.toHaveBeenCalled();
+    });
+
+    it('suspended + no emergency playlist + configured Wayfinding kiosk: returns the evacuation payload with no lease, regardless of entitlement', async () => {
+      const { service, entitlements } = makeService(
+        {
+          organization: { status: 'SUSPENDED' },
+          emergencyActive: true,
+          emergencyPlaylist: null,
+        },
+        false, // unentitled — the bypass, not genuine entitlement, must be what renders this
+      );
+
+      const state = await service.getState('s1');
+
+      expect(state.emergencyActive).toBe(true);
+      expect(state.emergencyPlaylist).toBeNull();
+      expect(state.wayfinding).not.toBeNull();
+      expect(state.wayfinding?.building.id).toBe('building_1');
+      expect(state.moduleLeases).toEqual([]);
+      expect(state.asset).toBeNull();
+      expect(state.scheduleRules).toEqual([]);
+      expect(state.defaultPlaylist).toBeNull();
+      // Live entitlement is still re-checked even though the bypass, not the result, is what
+      // renders this — a lease must never be issued off the back of an unentitled bypass.
+      expect(entitlements.hasModule).toHaveBeenCalledWith('org_1', 'WAYFINDING');
+    });
+
+    it('suspended + evacuation response never includes attract playlist/theme even when configured', async () => {
+      const { service } = makeService(
+        {
+          organization: { status: 'SUSPENDED' },
+          emergencyActive: true,
+          emergencyPlaylist: null,
+          kioskLocation: {
+            ...kioskFixture,
+            attractPlaylist: { id: 'attract1', name: 'Idle Loop', transitionStyle: 'NONE', transitionDurationMs: 0, playbackOrder: 'SEQUENTIAL', items: [] },
+            attractTheme: null,
+          },
+        },
+        true,
+      );
+
+      const state = await service.getState('s1');
+
+      expect(state.wayfinding?.attractPlaylist).toBeNull();
+      expect(state.wayfinding?.attractTheme).toBeNull();
+    });
+
+    it('suspended + emergency active but neither a playlist nor a configured Wayfinding kiosk: renders no ordinary content and no evacuation payload', async () => {
+      const { service } = makeService(
+        {
+          organization: { status: 'SUSPENDED' },
+          streamingType: 'PLAYLIST',
+          emergencyActive: true,
+          emergencyPlaylist: null,
+          kioskLocation: null,
+        },
+        true,
+      );
+
+      const state = await service.getState('s1');
+
+      expect(state.emergencyActive).toBe(true);
+      expect(state.emergencyPlaylist).toBeNull();
+      expect(state.wayfinding).toBeNull();
+      expect(state.moduleLeases).toEqual([]);
+    });
+
+    it('removing suspension restores normal rendering without reconstructing configuration', async () => {
+      const { service, entitlements } = makeService({ organization: { status: 'ACTIVE' } }, true);
+
+      const state = await service.getState('s1');
+
+      expect(state.wayfinding).not.toBeNull();
+      expect(state.moduleLeases).toEqual([
+        expect.objectContaining({ key: 'WAYFINDING' }),
+      ]);
+      expect(entitlements.hasModule).toHaveBeenCalledWith('org_1', 'WAYFINDING');
+    });
+  });
 });

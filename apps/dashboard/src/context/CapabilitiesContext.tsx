@@ -3,6 +3,7 @@ import { createContext, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ModuleKey, TenantCapabilities } from '@lumina/types';
 import { orgApi } from '@/lib/api';
+import { hasUsableModule } from '@/lib/moduleCapabilities';
 import { useAuth } from './AuthContext';
 
 export interface CapabilitiesCtx {
@@ -31,18 +32,15 @@ export function CapabilitiesProvider({ children }: { children: ReactNode }) {
   });
 
   // Mirrors EntitlementsService's own usability rule (org ACTIVE; module ACTIVE, or TRIAL and
-  // not expired) so the nav/route guard hides exactly what the API would also reject — but this
-  // is a UI convenience only, not the security boundary; the API always re-checks for real (see
-  // Section 3.3 of the ADR). Deliberately doesn't walk MODULE_DEPENDENCIES here — nothing in the
-  // dashboard today gates a dependent module's own nav entry, only WAYFINDING itself.
+  // not expired; every declared MODULE_DEPENDENCIES entry recursively usable too) so the
+  // nav/route guard hides exactly what the API would also reject — but this is a UI convenience
+  // only, not the security boundary; the API always re-checks for real (see Section 3.3 of the
+  // ADR). The pure recursive resolver lives in moduleCapabilities.ts so it can be unit-tested
+  // without a provider tree or React Query.
   const hasModule = useMemo(() => {
     return (key: ModuleKey): boolean => {
-      if (!data || data.tenantStatus !== 'ACTIVE') return false;
-      const mod = data.modules.find((m) => m.key === key);
-      if (!mod) return false;
-      if (mod.status === 'ACTIVE') return true;
-      if (mod.status === 'TRIAL') return !mod.expiresAt || new Date(mod.expiresAt) > new Date();
-      return false;
+      if (!data) return false;
+      return hasUsableModule(data, key, new Date());
     };
   }, [data]);
 

@@ -140,20 +140,12 @@ export class PlayerService {
     return this.hydratePlaylist(screen.organizationId, screen.playlist);
   }
 
-  /**
-   * Full player state:
-   *   - poweredOn + powerScheduleRules (highest priority — outside its window the display
-   *     blanks to black regardless of everything below, including stopped/emergency)
-   *   - stopped (blanks the screen regardless of everything below, including an active
-   *     emergency override)
-   *   - emergencyActive + emergencyPlaylist (takes priority over layout/schedule)
-   *   - layout with signed-URL playlists per zone (if a layout is assigned)
-   *   - scheduleRules (with their playlists pre-fetched) for local resolver
-   *   - defaultPlaylist as fallback when no schedule rule matches
-   *   - volume (0-100): the screen's own value, else its group's, else 100
-   */
-  async getState(screenId: string) {
-    const screen = await this.prisma.screen.findUnique({
+  // The single source of the screen relationships every getState() response variant (normal,
+  // suspended-neutral, suspended-emergency) needs — extracted so its return type can be reused
+  // as the parameter type for the private helpers below (same `Awaited<ReturnType<...>>` pattern
+  // getManifest() already uses for getState() itself).
+  private async loadScreenForState(screenId: string) {
+    return this.prisma.screen.findUnique({
       where: { id: screenId },
       include: {
         organization: { select: { status: true } },
@@ -194,41 +186,230 @@ export class PlayerService {
         group: { select: { volume: true } },
       },
     });
+  }
+
+  // The scalar screen fields identical across every getState() response variant — factored out
+  // so the normal/suspended-neutral/suspended-emergency builders below don't each restate them.
+  private commonScreenFields(screen: NonNullable<Awaited<ReturnType<PlayerService['loadScreenForState']>>>, screenId: string) {
+    return {
+      screenId,
+      streamingType: screen.streamingType,
+      timezone: screen.timezone,
+      latitude: screen.latitude,
+      longitude: screen.longitude,
+      prayerMethod: screen.prayerMethod,
+      athanEnabled: screen.athanEnabled,
+      stopped: screen.stopped,
+      showClock: screen.showClock,
+      orientation: screen.orientation,
+      aspectRatio: screen.aspectRatio,
+      volume: screen.volume ?? screen.group?.volume ?? 100,
+    };
+  }
+
+  // docs/modules/modules_shared_preflight_plan.md §5.1 — the one private Wayfinding
+  // hydration implementation shared by normal rendering and the suspended-emergency evacuation
+  // path, so entitlement/renderability/route-graph logic is never duplicated or allowed to drift
+  // between the two callers. `includeAttract` forces attract playlist/theme to null in the
+  // suspended-emergency response even when a bypass makes the rest of the payload renderable;
+  // `allowEmergencyEntitlementBypass` mirrors the pre-existing evacuation-bypass rule (docs/adr/
+  // platform-modules-and-entitlements.md) without ever earning an offline lease — callers decide
+  // lease issuance from the returned `entitled` flag, never from `renderable`.
+  private async buildWayfindingPayload(
+    screen: NonNullable<Awaited<ReturnType<PlayerService['loadScreenForState']>>>,
+    opts: { includeAttract: boolean; allowEmergencyEntitlementBypass: boolean },
+  ) {
+    const configured = screen.streamingType === 'WAYFINDING' && !!screen.kioskLocation;
+    const entitled = configured
+      ? !screen.organizationId || (await this.entitlements.hasModule(screen.organizationId, 'WAYFINDING'))
+      : false;
+    const renderable = entitled || (configured && opts.allowEmergencyEntitlementBypass);
+
+    const kioskLocation = screen.kioskLocation;
+    if (!renderable || !kioskLocation) {
+      return { configured, entitled, renderable, payload: null };
+    }
+
+    // Route graph edges (Phase 7.3) — can't be pulled through the floors->pois nested include
+    // above since an edge connects two RouteNodes that may sit on different floors, so it's
+    // fetched separately, scoped to the kiosk's whole building, same as RoutesService.graph.
+    const routeEdges = await this.prisma.routeEdge.findMany({
+      where: { fromNode: { floor: { buildingId: kioskLocation.floor.building.id } } },
+    });
+
+    const payload = {
+      kiosk: {
+        floorId: kioskLocation.floorId,
+        x: kioskLocation.x,
+        y: kioskLocation.y,
+      },
+      building: {
+        id: kioskLocation.floor.building.id,
+        name: kioskLocation.floor.building.name,
+      },
+      floors: kioskLocation.floor.building.floors.map(f => ({
+        id: f.id,
+        level: f.level,
+        label: f.label,
+        floorPlanAssetId: f.floorPlanAsset?.id ?? null,
+        floorPlanUrl: f.floorPlanAsset ? this.storage.publicUrl(f.floorPlanAsset.storageKey) : null,
+      })),
+      pois: kioskLocation.floor.building.floors.flatMap(f => f.pois.map(p => ({
+        id: p.id,
+        name: p.name,
+        nameAr: p.nameAr,
+        x: p.x,
+        y: p.y,
+        description: p.description,
+        descriptionAr: p.descriptionAr,
+        status: p.status,
+        floorId: f.id,
+        floorLabel: f.label,
+        category: {
+          id: p.category.id,
+          label: p.category.label,
+          labelAr: p.category.labelAr,
+          icon: p.category.icon,
+          color: p.category.color,
+        },
+        iconAssetId: p.iconAsset?.id ?? null,
+        iconUrl: p.iconAsset ? this.storage.publicUrl(p.iconAsset.storageKey) : null,
+      }))),
+      // Route graph (Phase 7.3) — the whole building's nodes/edges, so the player can
+      // compute a shortest path to any POI on any floor entirely on-device (offline-capable,
+      // same philosophy as the local schedule resolver).
+      routeNodes: kioskLocation.floor.building.floors.flatMap(f => f.routeNodes.map(n => ({
+        id: n.id,
+        floorId: f.id,
+        x: n.x,
+        y: n.y,
+        label: n.label,
+      }))),
+      routeEdges: routeEdges.map(e => ({
+        id: e.id,
+        fromNodeId: e.fromNodeId,
+        toNodeId: e.toNodeId,
+        type: e.type,
+        weight: e.weight,
+      })),
+      // Idle/attract-loop content (Phase 7.2) — at most one of these is ever set
+      // (ScreensService.setKioskAttractPlaylist/setKioskAttractTheme each clear the
+      // other), the player just shows whichever is non-null after its idle timeout.
+      // `includeAttract: false` (suspended-emergency evacuation) forces both to null even when
+      // the underlying rows exist — a de-licensed/suspended kiosk's emergency response must
+      // never resume idle/attract content.
+      attractPlaylist: opts.includeAttract && kioskLocation.attractPlaylist
+        ? await this.hydratePlaylist(screen.organizationId, kioskLocation.attractPlaylist)
+        : null,
+      attractTheme: opts.includeAttract && kioskLocation.attractTheme
+        ? {
+            id: kioskLocation.attractTheme.id,
+            name: kioskLocation.attractTheme.name,
+            category: kioskLocation.attractTheme.category,
+            aspectRatio: kioskLocation.attractTheme.aspectRatio,
+            palette: kioskLocation.attractTheme.palette,
+            typography: kioskLocation.attractTheme.typography,
+            elements: await this.hydrateThemeElements(screen.organizationId, kioskLocation.attractTheme.elements),
+          }
+        : null,
+    };
+
+    return { configured, entitled, renderable, payload };
+  }
+
+  // Suspended tenant, no active emergency: return 200 with neutral content, never a 401/404.
+  // Both players (web and the Flutter native player) treat 401/404 on this endpoint as "this
+  // screen's own credential is dead" (unpaired/deleted) and react by wiping local pairing state
+  // and returning to the pairing screen — see ScreenRevokedException in the Flutter app. A
+  // suspended tenant is a temporary, reversible business state, not a dead credential, so it
+  // must never trigger that path. This also means `Screen.streamingType`/`KioskLocation`/etc.
+  // are never touched here — same "preserve everything, hide the content" pattern as a disabled
+  // module (see docs/adr/platform-modules-and-entitlements.md). Never calls
+  // buildWayfindingPayload — there is nothing to render.
+  private buildSuspendedNeutralState(screen: NonNullable<Awaited<ReturnType<PlayerService['loadScreenForState']>>>, screenId: string) {
+    return {
+      ...this.commonScreenFields(screen, screenId),
+      emergencyActive: false,
+      emergencyPlaylist: null,
+      asset: null,
+      wayfinding: null,
+      scheduleRules: [],
+      resolvedPlaylistId: null,
+      defaultPlaylist: null,
+      poweredOn: true,
+      powerScheduleRules: [],
+      moduleLeases: [],
+    };
+  }
+
+  // Suspended tenant with an active emergency: docs/modules/modules_shared_preflight_plan.md
+  // §4.1/§5.2/§5.3 — an already-active emergency playlist or Wayfinding evacuation route must
+  // keep rendering even though the tenant is suspended, exactly as it already survives module
+  // disablement and lease expiry. This branch is deliberately never reached by falling through
+  // the normal state builder (that would hydrate and transmit lower-priority ordinary content
+  // just because the player happens to render the emergency branch first) — it hydrates only
+  // the one allowed emergency source and nothing else. No module lease is ever issued here: the
+  // response is read-only and does not reactivate the tenant.
+  private async buildSuspendedEmergencyState(screen: NonNullable<Awaited<ReturnType<PlayerService['loadScreenForState']>>>, screenId: string) {
+    const base = {
+      ...this.commonScreenFields(screen, screenId),
+      emergencyActive: true,
+      asset: null,
+      scheduleRules: [],
+      resolvedPlaylistId: null,
+      defaultPlaylist: null,
+      poweredOn: true,
+      powerScheduleRules: [],
+      moduleLeases: [],
+    };
+
+    // Emergency playlist takes priority over the Wayfinding evacuation view (§4.2's existing
+    // precedence, unchanged by this preflight) — wayfinding stays null here rather than also
+    // hydrating the evacuation payload nobody will render.
+    if (screen.emergencyPlaylist) {
+      return {
+        ...base,
+        emergencyPlaylist: await this.hydratePlaylist(screen.organizationId, screen.emergencyPlaylist),
+        wayfinding: null,
+      };
+    }
+
+    // No emergency playlist: fall back to the Wayfinding evacuation route if (and only if) this
+    // screen is a configured Wayfinding kiosk. `buildWayfindingPayload` returns a null payload on
+    // its own when the screen isn't a configured kiosk, so a suspended screen with
+    // emergencyActive but no playlist and no kiosk correctly renders nothing extra here.
+    const wayfinding = await this.buildWayfindingPayload(screen, {
+      includeAttract: false,
+      allowEmergencyEntitlementBypass: true,
+    });
+
+    return {
+      ...base,
+      emergencyPlaylist: null,
+      wayfinding: wayfinding.payload,
+    };
+  }
+
+  /**
+   * Full player state:
+   *   - poweredOn + powerScheduleRules (highest priority — outside its window the display
+   *     blanks to black regardless of everything below, including stopped/emergency)
+   *   - stopped (blanks the screen regardless of everything below, including an active
+   *     emergency override)
+   *   - emergencyActive + emergencyPlaylist (takes priority over layout/schedule)
+   *   - layout with signed-URL playlists per zone (if a layout is assigned)
+   *   - scheduleRules (with their playlists pre-fetched) for local resolver
+   *   - defaultPlaylist as fallback when no schedule rule matches
+   *   - volume (0-100): the screen's own value, else its group's, else 100
+   */
+  async getState(screenId: string) {
+    const screen = await this.loadScreenForState(screenId);
     if (!screen) throw new NotFoundException('Screen not found');
 
-    // Suspended tenant: return 200 with neutral content, never a 401/404. Both players (web
-    // and the Flutter native player) treat 401/404 on this endpoint as "this screen's own
-    // credential is dead" (unpaired/deleted) and react by wiping local pairing state and
-    // returning to the pairing screen — see ScreenRevokedException in the Flutter app. A
-    // suspended tenant is a temporary, reversible business state, not a dead credential, so it
-    // must never trigger that path. This also means `Screen.streamingType`/`KioskLocation`/etc.
-    // are never touched here — same "preserve everything, hide the content" pattern as a
-    // disabled module (see docs/adr/platform-modules-and-entitlements.md).
     if (screen.organization?.status === 'SUSPENDED') {
-      return {
-        screenId,
-        streamingType: screen.streamingType,
-        timezone: screen.timezone,
-        latitude: screen.latitude,
-        longitude: screen.longitude,
-        prayerMethod: screen.prayerMethod,
-        athanEnabled: screen.athanEnabled,
-        stopped: screen.stopped,
-        showClock: screen.showClock,
-        orientation: screen.orientation,
-        aspectRatio: screen.aspectRatio,
-        emergencyActive: false,
-        emergencyPlaylist: null,
-        asset: null,
-        wayfinding: null,
-        scheduleRules: [],
-        resolvedPlaylistId: null,
-        defaultPlaylist: null,
-        poweredOn: true,
-        powerScheduleRules: [],
-        volume: screen.volume ?? screen.group?.volume ?? 100,
-        moduleLeases: [],
-      };
+      return screen.emergencyActive
+        ? this.buildSuspendedEmergencyState(screen, screenId)
+        : this.buildSuspendedNeutralState(screen, screenId);
     }
 
     // Schedule rules only ever resolve a *playlist* to swap in/out — meaningless (and, if left
@@ -263,25 +444,26 @@ export class PlayerService {
     // Item 10 (volume control) — screen's own value wins, else its group's, else full volume.
     const volume = screen.volume ?? screen.group?.volume ?? 100;
 
-    // Module entitlement (docs/adr/platform-modules-and-entitlements.md §8.3). `wayfindingEntitled`
-    // is the real check — used to decide whether to issue an offline lease. `wayfindingRenderable`
-    // additionally bypasses that check while an evacuation is active: WayfindingEvacuationView
-    // depends on a populated `wayfinding` payload, and an active emergency must never be
-    // suppressed by unrelated business-rule enforcement (mirrors ScreensService.setEmergency's
-    // existing autoPublish bypass for the same reason). A lease is never issued off the back of
-    // this bypass — only genuine entitlement earns one.
-    const wayfindingConfigured = screen.streamingType === 'WAYFINDING' && !!screen.kioskLocation;
-    const wayfindingEntitled = wayfindingConfigured
-      ? !screen.organizationId || (await this.entitlements.hasModule(screen.organizationId, 'WAYFINDING'))
-      : false;
-    const wayfindingRenderable = wayfindingEntitled || (wayfindingConfigured && screen.emergencyActive);
+    // Module entitlement (docs/adr/platform-modules-and-entitlements.md §8.3), via the shared
+    // buildWayfindingPayload helper. `wayfinding.entitled` is the real check — used to decide
+    // whether to issue an offline lease. `includeAttract: true` because this is normal
+    // (non-suspended) rendering; `allowEmergencyEntitlementBypass: screen.emergencyActive`
+    // reproduces the pre-existing evacuation bypass — WayfindingEvacuationView depends on a
+    // populated `wayfinding` payload, and an active emergency must never be suppressed by
+    // unrelated business-rule enforcement (mirrors ScreensService.setEmergency's existing
+    // autoPublish bypass for the same reason). A lease is never issued off the back of this
+    // bypass — only genuine entitlement (`wayfinding.entitled`, never `.renderable`) earns one.
+    const wayfinding = await this.buildWayfindingPayload(screen, {
+      includeAttract: true,
+      allowEmergencyEntitlementBypass: screen.emergencyActive,
+    });
 
-    if (wayfindingConfigured && !wayfindingRenderable) {
+    if (wayfinding.configured && !wayfinding.renderable) {
       this.logger.log(`Screen ${screenId} is configured for WAYFINDING but the module is not entitled for its organization — no active module payload will be returned.`);
     }
 
     const moduleLeases: PlayerModuleLease[] = [];
-    if (wayfindingEntitled) {
+    if (wayfinding.entitled) {
       const issuedAt = new Date();
       const graceHours = Number(process.env.PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS) || DEFAULT_OFFLINE_GRACE_HOURS;
       moduleLeases.push({
@@ -290,15 +472,6 @@ export class PlayerService {
         validUntil: new Date(issuedAt.getTime() + graceHours * 60 * 60 * 1000).toISOString(),
       });
     }
-
-    // Route graph edges (Phase 7.3) — can't be pulled through the floors->pois nested include
-    // above since an edge connects two RouteNodes that may sit on different floors, so it's
-    // fetched separately, scoped to the kiosk's whole building, same as RoutesService.graph.
-    const routeEdges = wayfindingRenderable && screen.kioskLocation
-      ? await this.prisma.routeEdge.findMany({
-          where: { fromNode: { floor: { buildingId: screen.kioskLocation.floor.building.id } } },
-        })
-      : [];
 
     return {
       screenId,
@@ -317,81 +490,7 @@ export class PlayerService {
         ? await this.hydratePlaylist(screen.organizationId, screen.emergencyPlaylist)
         : null,
       asset: screen.streamingType === 'ASSET' && screen.asset ? await this.hydrateAssetAsPlaylist(screen.organizationId, screen.asset) : null,
-      wayfinding: wayfindingRenderable && screen.kioskLocation
-        ? {
-            kiosk: {
-              floorId: screen.kioskLocation.floorId,
-              x: screen.kioskLocation.x,
-              y: screen.kioskLocation.y,
-            },
-            building: {
-              id: screen.kioskLocation.floor.building.id,
-              name: screen.kioskLocation.floor.building.name,
-            },
-            floors: screen.kioskLocation.floor.building.floors.map(f => ({
-              id: f.id,
-              level: f.level,
-              label: f.label,
-              floorPlanAssetId: f.floorPlanAsset?.id ?? null,
-              floorPlanUrl: f.floorPlanAsset ? this.storage.publicUrl(f.floorPlanAsset.storageKey) : null,
-            })),
-            pois: screen.kioskLocation.floor.building.floors.flatMap(f => f.pois.map(p => ({
-              id: p.id,
-              name: p.name,
-              nameAr: p.nameAr,
-              x: p.x,
-              y: p.y,
-              description: p.description,
-              descriptionAr: p.descriptionAr,
-              status: p.status,
-              floorId: f.id,
-              floorLabel: f.label,
-              category: {
-                id: p.category.id,
-                label: p.category.label,
-                labelAr: p.category.labelAr,
-                icon: p.category.icon,
-                color: p.category.color,
-              },
-              iconAssetId: p.iconAsset?.id ?? null,
-              iconUrl: p.iconAsset ? this.storage.publicUrl(p.iconAsset.storageKey) : null,
-            }))),
-            // Route graph (Phase 7.3) — the whole building's nodes/edges, so the player can
-            // compute a shortest path to any POI on any floor entirely on-device (offline-capable,
-            // same philosophy as the local schedule resolver).
-            routeNodes: screen.kioskLocation.floor.building.floors.flatMap(f => f.routeNodes.map(n => ({
-              id: n.id,
-              floorId: f.id,
-              x: n.x,
-              y: n.y,
-              label: n.label,
-            }))),
-            routeEdges: routeEdges.map(e => ({
-              id: e.id,
-              fromNodeId: e.fromNodeId,
-              toNodeId: e.toNodeId,
-              type: e.type,
-              weight: e.weight,
-            })),
-            // Idle/attract-loop content (Phase 7.2) — at most one of these is ever set
-            // (ScreensService.setKioskAttractPlaylist/setKioskAttractTheme each clear the
-            // other), the player just shows whichever is non-null after its idle timeout.
-            attractPlaylist: screen.kioskLocation.attractPlaylist
-              ? await this.hydratePlaylist(screen.organizationId, screen.kioskLocation.attractPlaylist)
-              : null,
-            attractTheme: screen.kioskLocation.attractTheme
-              ? {
-                  id: screen.kioskLocation.attractTheme.id,
-                  name: screen.kioskLocation.attractTheme.name,
-                  category: screen.kioskLocation.attractTheme.category,
-                  aspectRatio: screen.kioskLocation.attractTheme.aspectRatio,
-                  palette: screen.kioskLocation.attractTheme.palette,
-                  typography: screen.kioskLocation.attractTheme.typography,
-                  elements: await this.hydrateThemeElements(screen.organizationId, screen.kioskLocation.attractTheme.elements),
-                }
-              : null,
-          }
-        : null,
+      wayfinding: wayfinding.payload,
       scheduleRules: await Promise.all(rules.map(async r => ({
         id: r.id,
         name: r.name,

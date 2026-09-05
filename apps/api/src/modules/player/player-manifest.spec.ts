@@ -97,6 +97,78 @@ describe('player manifest canonicalization', () => {
   });
 });
 
+// docs/modules/modules_shared_preflight_plan.md §8/§10 step 16 — getManifest() wraps getState(),
+// so it must inherit the suspended-emergency fix without any manifest-specific code change.
+// player.service.spec.ts already proves getState() itself returns the correct shape; this
+// confirms the manifest/offline-caching pipeline built on top of it doesn't leak ordinary
+// content back in and correctly prioritizes the one allowed emergency source for download.
+describe('PlayerService.getManifest — suspended tenant with an active emergency', () => {
+  function wayfindingEvacuationState() {
+    return {
+      screenId: 'screen-1',
+      streamingType: 'WAYFINDING',
+      emergencyActive: true,
+      emergencyPlaylist: null,
+      asset: null,
+      wayfinding: {
+        kiosk: { floorId: 'floor-1', x: 50, y: 50 },
+        building: { id: 'building-1', name: 'Test Mall' },
+        floors: [{ id: 'floor-1', level: 0, label: 'Ground', floorPlanAssetId: null, floorPlanUrl: null }],
+        pois: [],
+        routeNodes: [],
+        routeEdges: [],
+        attractPlaylist: null,
+        attractTheme: null,
+      },
+      scheduleRules: [],
+      resolvedPlaylistId: null,
+      defaultPlaylist: null,
+    };
+  }
+
+  it('produces a valid manifest for the evacuation-only response with no ordinary content leaking into the asset graph', async () => {
+    const { service } = makeService([]);
+    jest.spyOn(service, 'getState').mockResolvedValue(wayfindingEvacuationState() as never);
+
+    const manifest = await service.getManifest('screen-1');
+
+    expect(manifest.desiredState).toEqual(expect.objectContaining({
+      emergencyActive: true,
+      asset: null,
+      defaultPlaylist: null,
+      scheduleRules: [],
+    }));
+    expect((manifest.desiredState as unknown as { wayfinding: unknown }).wayfinding).not.toBeNull();
+    expect(manifest.assets).toEqual([]);
+    expect(manifest.networkDependencies).toEqual([]);
+  });
+
+  it('produces a valid manifest for the suspended emergency-playlist response and prioritizes its assets as current', async () => {
+    const record = {
+      id: 'evac-video', type: 'VIDEO', status: 'READY', appConfig: null, appProviderId: null,
+      sourceUrl: null, pageCount: null,
+      binaries: [{ id: 'b1', kind: 'PRIMARY', ordinal: 0, storageKey: 'evac.mp4', mimeType: 'video/mp4', sizeBytes: 10n, sha256: SHA_A }],
+    };
+    const { service } = makeService([record]);
+    const desiredState = {
+      screenId: 'screen-1',
+      streamingType: 'PLAYLIST',
+      emergencyActive: true,
+      emergencyPlaylist: { id: 'ep1', name: 'Fire Evacuation', items: [playlistAsset('evac-video')] },
+      asset: null,
+      wayfinding: null,
+      scheduleRules: [],
+      resolvedPlaylistId: null,
+      defaultPlaylist: null,
+    };
+    jest.spyOn(service, 'getState').mockResolvedValue(desiredState as never);
+
+    const manifest = await service.getManifest('screen-1');
+
+    expect(manifest.assets).toEqual([expect.objectContaining({ assetId: 'evac-video', priority: 'current' })]);
+  });
+});
+
 describe('PlayerService.getManifest', () => {
   it('returns deterministic revision and binary version for identical content', async () => {
     const records = [{

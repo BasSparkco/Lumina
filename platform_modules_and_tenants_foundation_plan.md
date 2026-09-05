@@ -748,7 +748,7 @@ Verified live in a real browser (Playwright against the actual dev server, not j
 - [x] Refresh affected screens after entitlement changes via a `ScreenGateway.sendToScreen` fan-out over the org's screens (Section 8.4). (`PlatformTenantsService.setModules()` fans out `{type:'reload'}` to every `WAYFINDING`-mode screen in the org whenever `WAYFINDING` is among the changed assignments — same pattern as `BuildingsService.setEvacuation`, no second notification mechanism.)
 - [x] Verify disable/re-enable preserves data. (Verified live: disabled `WAYFINDING`, confirmed the kiosk fell back to the neutral splash with the building/floor/POI data and `KioskLocation` row untouched in the database, re-enabled, confirmed the exact same "Lumina Galleria Mall" configuration rendered again immediately with no reconstruction.)
 
-### ai_wayfinding_module_plan — Verification and handoff — complete
+### Milestone B6 — Verification and handoff — complete
 
 - [x] Run API, dashboard, player, type-check, lint, and relevant unit suites. (Full-project — not just per-file — typecheck/lint/tests across all three apps, run for the first time as one consolidated pass rather than the scoped per-milestone checks: found and fixed 8 real pre-existing lint errors in this plan's own test files that the scoped checks had missed (unnecessary `async`, `import type`, unused vars, optional-chain). 99/99 API tests, 0 dashboard errors, 0 player errors in any file this plan touched — the 4 remaining player lint errors are pre-existing and in files unrelated to this plan.)
 - [x] Run the end-to-end acceptance scenario. (Section 10.4's exact 13 steps, run as one continuous live pass, not the piecemeal per-milestone testing done earlier: created two fresh tenants through the real Super Admin flow — Tenant A with `WAYFINDING`, Tenant B without — accepted both owner invitations, confirmed Tenant B is blocked at the nav, direct-URL, API, and screen-mode layers with zero Wayfinding-exclusive requests fired, built a real building/floor/POI/kiosk for Tenant A and confirmed it rendering live in the actual player app, disabled `WAYFINDING` and confirmed the dashboard API 403s and the player falls back to the neutral splash while every row stayed in the database, re-enabled and confirmed the exact same content rendered again with zero reconstruction, then suspended Tenant A and confirmed login/existing-session/API all 401 while the player gets a neutral `200` — never a `401` — and all data remained intact throughout.)
@@ -914,14 +914,16 @@ Recorded per Milestone B6's requirement to document known limitations without ex
 phase's scope — none of these block Phases A/B from being complete; they're carried forward as
 explicit, deliberate boundaries rather than left implicit.
 
-**One open policy question, unresolved — the most important item on this list:** the tenant-
-suspension neutral state (`PlayerService.getState()`, §6.4) sets `emergencyActive: false`
+**Resolved policy question, formerly the most important item on this list:** the tenant-
+suspension neutral state (`PlayerService.getState()`, §6.4) used to set `emergencyActive: false`
 unconditionally, meaning an active fire evacuation would be suppressed if its tenant were
-suspended mid-emergency. The module-disable case (§8.3) explicitly carries an evacuation
-exemption; the suspension case, as shipped, does not. This was flagged during both Milestone B3
-and B5 and never decided either way — confirm the intended behavior before this reaches a real
-customer, since fixing it later is a one-line change (add the same bypass) but shipping the wrong
-default silently is a life-safety question, not a UX one.
+suspended mid-emergency. The module-disable case (§8.3) already carried an evacuation exemption;
+this was flagged as an inconsistency during both Milestone B3 and B5 and left undecided until the
+Shared Module Preflight (`docs/modules/modules_shared_preflight_plan.md`) resolved it — suspension
+now follows the same evacuation exemption as module disablement and lease expiry, implemented as
+a stricter response-construction change rather than the one-line bypass anticipated here (see
+the ADR addendum below for why). See `docs/adr/platform-modules-and-entitlements.md` for the
+recorded decision.
 
 **Testing infrastructure gaps, pre-existing, not introduced by this plan:**
 - No end-to-end/integration test harness exists anywhere in this repo (`apps/api/test/

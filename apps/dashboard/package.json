@@ -7,7 +7,8 @@
     "dev": "next dev --port 3000",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:module-capabilities": "tsc --ignoreConfig --target ES2022 --module ES2022 --moduleResolution bundler --lib ES2022,DOM,DOM.Iterable --skipLibCheck --rootDir src/lib --outDir tsc-out/module-capabilities-test src/lib/moduleCapabilities.ts && cp test/esm-package.json tsc-out/module-capabilities-test/package.json && node test/module-capabilities.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
