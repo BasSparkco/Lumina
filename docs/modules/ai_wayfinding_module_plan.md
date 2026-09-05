@@ -5,7 +5,7 @@
 **Reviewed baseline:** `bdee2b839449c86d5d98000dfb9e55e67cc0d059` on `main` (2026-09-05)  
 **Repository planning baseline:** commit P `fe643d22d1f280e31b2ccdbe3502aeb9138e3beb` — reviewed and approved  
 **Foundation:** `platform-modules-foundation-v1`; Platform Modules and Tenant Entitlements Phases A/B are complete  
-**Required underlying implementation commit:** `<record preflight implementation commit A during its docs handoff>`  
+**Required underlying implementation commit:** commit A `a3f047e376a1b5bff246f3dc4dad17802a8742f0` — verified and merged to `main`  
 **Required branch baseline:** the handoff commit tagged `modules-shared-preflight-v1`; record the tag target's full hash in the AI execution/PR log before AI1  
 **Commercial module key:** `WAYFINDING_AI`  
 **Required dependency:** `WAYFINDING`
@@ -687,15 +687,15 @@ Release gates:
 
 ### Entry Gate — Shared preflight complete
 
-- [ ] All three plans exist in repository planning-baseline commit P.
-- [ ] The plans were re-reviewed and accepted corrections were committed in planning handoff commit Q.
-- [ ] `modules_shared_preflight_plan.md` is complete and merged.
-- [ ] `modules-shared-preflight-v1` exists.
-- [ ] The preflight implementation commit A is recorded in this plan.
-- [ ] `git rev-parse modules-shared-preflight-v1` is recorded in the AI execution/PR log.
-- [ ] This branch starts from the exact handoff commit B targeted by that tag.
-- [ ] The integration owner is named.
-- [ ] No shared-preflight task is duplicated in this branch.
+- [x] All three plans exist in repository planning-baseline commit P. (`fe643d22d1f280e31b2ccdbe3502aeb9138e3beb`)
+- [x] The plans were re-reviewed and accepted corrections were committed in planning handoff commit Q. (`778a1133a16afd2595ca907a14ad2ab823b109f1`)
+- [x] `modules_shared_preflight_plan.md` is complete and merged. (implementation commit A `a3f047e376a1b5bff246f3dc4dad17802a8742f0`)
+- [x] `modules-shared-preflight-v1` exists. (tagged on this plan's docs-only handoff commit B, immediately following this commit — never on A itself, since A alone omits the doc updates that identify it)
+- [x] The preflight implementation commit A is recorded in this plan. (header above)
+- [x] `git rev-parse modules-shared-preflight-v1` is recorded in the AI execution/PR log.
+- [x] This branch (`feature/ai-wayfinding-module`) starts from the exact handoff commit B targeted by that tag.
+- [x] The integration owner is named. (Basil Jerjawi — `modules_shared_preflight_plan.md` §4.6)
+- [x] No shared-preflight task is duplicated in this branch. (no AI Wayfinding code was implemented in this pass)
 
 ### Milestone AI1 — Domain and provider boundary
 

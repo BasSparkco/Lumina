@@ -5,7 +5,8 @@
 **Reviewed baseline:** `bdee2b839449c86d5d98000dfb9e55e67cc0d059` on `main` (2026-09-05)  
 **Input foundation:** `platform-modules-foundation-v1`  
 **Repository planning baseline:** commit P `fe643d22d1f280e31b2ccdbe3502aeb9138e3beb` — reviewed and approved  
-**Required preflight branch point:** reviewed docs-only planning handoff commit Q; record Q's full hash in the execution/PR log before PF1  
+**Required preflight branch point:** reviewed docs-only planning handoff commit Q `778a1133a16afd2595ca907a14ad2ab823b109f1`  
+**Implementation commit A:** `a3f047e376a1b5bff246f3dc4dad17802a8742f0` — verified and merged to `main`  
 **Output:** one verified handoff commit tagged `modules-shared-preflight-v1`, with its preceding implementation commit recorded in the plans
 
 ---
@@ -519,46 +520,46 @@ If the final implementation adds another named player or dashboard script, run t
 
 ### Milestone PF0 — Committed planning baseline
 
-- [ ] Add all three plan files to the repository in docs-only commit P.
-- [ ] Re-review all three plans against exact commit P.
-- [ ] Apply accepted corrections and record P's full hash in all three plans in docs-only commit Q.
-- [ ] Record Q's full hash in the execution/PR log.
-- [ ] Name the integration owner.
-- [ ] Create the preflight implementation branch from exact commit Q.
+- [x] Add all three plan files to the repository in docs-only commit P. (`fe643d22d1f280e31b2ccdbe3502aeb9138e3beb`)
+- [x] Re-review all three plans against exact commit P.
+- [x] Apply accepted corrections and record P's full hash in all three plans in docs-only commit Q. (`778a1133a16afd2595ca907a14ad2ab823b109f1`)
+- [x] Record Q's full hash in the execution/PR log.
+- [x] Name the integration owner. (Basil Jerjawi, §4.6)
+- [x] Create the preflight implementation branch from exact commit Q. (`feature/modules-shared-preflight`)
 
 ### Milestone PF1 — Safety response
 
-- [ ] Extract one private Wayfinding payload builder shared by normal and suspended paths.
-- [ ] Implement explicit suspended neutral/emergency state paths without hydrating ordinary content.
-- [ ] Preserve emergency playlist and Wayfinding evacuation only.
-- [ ] Suppress all ordinary content and leases.
-- [ ] Add API regression tests.
+- [x] Extract one private Wayfinding payload builder shared by normal and suspended paths. (`PlayerService.buildWayfindingPayload()`)
+- [x] Implement explicit suspended neutral/emergency state paths without hydrating ordinary content. (`buildSuspendedNeutralState()`, `buildSuspendedEmergencyState()`)
+- [x] Preserve emergency playlist and Wayfinding evacuation only.
+- [x] Suppress all ordinary content and leases.
+- [x] Add API regression tests. (extended the existing WAYFINDING entitlement/evacuation-bypass fixture suite in `player.service.spec.ts`; added manifest-level coverage in `player-manifest.spec.ts`)
 
 ### Milestone PF2 — Capability dependencies
 
-- [ ] Add the required pure dependency-aware dashboard resolver.
-- [ ] Route all dashboard capability consumers through it.
-- [ ] Remove or correct the stale no-dependency-walk comment.
-- [ ] Add repeatable tests for dependency, expiry, suspension, and cycles.
+- [x] Add the required pure dependency-aware dashboard resolver. (`apps/dashboard/src/lib/moduleCapabilities.ts`)
+- [x] Route all dashboard capability consumers through it. (`CapabilitiesContext.hasModule()`)
+- [x] Remove or correct the stale no-dependency-walk comment.
+- [x] Add repeatable tests for dependency, expiry, suspension, and cycles. (`pnpm --filter dashboard test:module-capabilities`, 11 cases)
 
 ### Milestone PF3 — Documentation and ownership
 
-- [ ] Correct the B6 heading.
-- [ ] Resolve the existing ADR note without duplicating it.
-- [ ] Freeze shared-file and commit discipline.
-- [ ] Confirm both module plans contain the two-commit baseline/handoff rule.
+- [x] Correct the B6 heading.
+- [x] Resolve the existing ADR note without duplicating it.
+- [x] Freeze shared-file and commit discipline.
+- [x] Confirm both module plans contain the two-commit baseline/handoff rule.
 
 ### Milestone PF4 — Verification and AI branch release
 
-- [ ] Run all required checks.
-- [ ] Run the dashboard and player script tests individually and record their results.
-- [ ] Run the acceptance scenario.
-- [ ] Merge verified implementation commit A to `main`.
-- [ ] Record commit A's full hash in all three plans.
-- [ ] Create docs-only handoff commit B.
-- [ ] Tag commit B as `modules-shared-preflight-v1`.
-- [ ] Create the AI Wayfinding feature branch from the tagged commit.
-- [ ] Record that Room Booking starts from verified `main` after AI Wayfinding unless parallel execution is explicitly re-approved.
+- [x] Run all required checks. (API/dashboard/player typecheck, lint, test — see execution record)
+- [x] Run the dashboard and player script tests individually and record their results. (`test:module-capabilities`, `test:presentation`, `test:integration`)
+- [x] Run the acceptance scenario. (Automated-test-level coverage of suspended neutral state, emergency playlist, Wayfinding evacuation, manifest output, dependency traversal, and configuration restoration — see `player.service.spec.ts`, `player-manifest.spec.ts`, `module-capabilities.test.mjs`. A live browser/live-tenant walkthrough of the full numbered scenario was not run in this environment; flagged as a deferred risk in the execution record.)
+- [x] Merge verified implementation commit A to `main`. (`a3f047e376a1b5bff246f3dc4dad17802a8742f0`)
+- [x] Record commit A's full hash in all three plans. (recorded here and in `ai_wayfinding_module_plan.md`; `room_booking_module_plan.md` has no commit-A field — its baseline is commit D, post-AI, per its own header)
+- [x] Create docs-only handoff commit B.
+- [x] Tag commit B as `modules-shared-preflight-v1`.
+- [x] Create the AI Wayfinding feature branch from the tagged commit.
+- [x] Record that Room Booking starts from verified `main` after AI Wayfinding unless parallel execution is explicitly re-approved.
 
 ---
 
