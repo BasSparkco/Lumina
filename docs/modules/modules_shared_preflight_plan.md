@@ -4,7 +4,7 @@
 **Repository:** `https://github.com/BasSparkco/Lumina`  
 **Reviewed baseline:** `bdee2b839449c86d5d98000dfb9e55e67cc0d059` on `main` (2026-09-05)  
 **Input foundation:** `platform-modules-foundation-v1`  
-**Repository planning baseline:** `<record commit P after all three plans are first added to the repository>`  
+**Repository planning baseline:** commit P `fe643d22d1f280e31b2ccdbe3502aeb9138e3beb` — reviewed and approved  
 **Required preflight branch point:** reviewed docs-only planning handoff commit Q; record Q's full hash in the execution/PR log before PF1  
 **Output:** one verified handoff commit tagged `modules-shared-preflight-v1`, with its preceding implementation commit recorded in the plans
 

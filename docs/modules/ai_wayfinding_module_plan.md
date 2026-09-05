@@ -3,7 +3,7 @@
 **Status:** Ready for implementation review  
 **Repository:** `https://github.com/BasSparkco/Lumina`  
 **Reviewed baseline:** `bdee2b839449c86d5d98000dfb9e55e67cc0d059` on `main` (2026-09-05)  
-**Repository planning baseline:** `<record commit P after all three module plans are first added>`  
+**Repository planning baseline:** commit P `fe643d22d1f280e31b2ccdbe3502aeb9138e3beb` — reviewed and approved  
 **Foundation:** `platform-modules-foundation-v1`; Platform Modules and Tenant Entitlements Phases A/B are complete  
 **Required underlying implementation commit:** `<record preflight implementation commit A during its docs handoff>`  
 **Required branch baseline:** the handoff commit tagged `modules-shared-preflight-v1`; record the tag target's full hash in the AI execution/PR log before AI1  
