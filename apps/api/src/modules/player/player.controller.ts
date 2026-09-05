@@ -11,6 +11,8 @@ import { KioskAnalyticsService } from '../kiosk-analytics/kiosk-analytics.servic
 import { IngestKioskEventsDto } from '../kiosk-analytics/dto/ingest-kiosk-events.dto';
 import { IngestCrashReportsDto } from './dto/ingest-crash-reports.dto';
 import { PlayerJwtGuard } from '../../common/guards/player-jwt.guard';
+import { EntitlementGuard } from '../entitlements/entitlement.guard';
+import { RequireModule } from '../entitlements/require-module.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { ScreenJwtUser } from '../../common/types/jwt-user';
 
@@ -134,8 +136,11 @@ export class PlayerController {
   // Kiosk analytics (7.4) — popular searches/destinations, session counts. Fire-and-forget from
   // the kiosk (see apps/player/src/lib/kioskAnalytics.ts), same batched-ingest shape as proof-of-
   // play above, just wayfinding-specific events instead of played assets.
+  // EntitlementGuard runs after PlayerJwtGuard here and reads req.user.orgId from the *screen's*
+  // token — never a dashboard JWT's org — per docs/adr/platform-modules-and-entitlements.md §8.1.
   @Post('wayfinding-events')
-  @UseGuards(PlayerJwtGuard)
+  @UseGuards(PlayerJwtGuard, EntitlementGuard)
+  @RequireModule('WAYFINDING')
   ingestKioskEvents(@CurrentUser() screen: ScreenJwtUser, @Body() dto: IngestKioskEventsDto) {
     return this.kioskAnalytics.ingest(screen.orgId, screen.sub, dto.events);
   }

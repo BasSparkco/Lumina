@@ -1,5 +1,5 @@
 import type { ResolvedDesignPayload } from '@lumina/design-schema';
-import type { PlayerContentManifest } from '@lumina/types';
+import type { PlayerContentManifest, PlayerModuleLease } from '@lumina/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
@@ -405,6 +405,10 @@ export interface PlayerState {
   poweredOn: boolean;
   powerScheduleRules: PowerRule[];
   volume: number;
+  // Bounds how long protected module content (currently just wayfinding) may keep rendering
+  // from a cached/offline restore of this state, independent of whatever's live right now — see
+  // docs/adr/platform-modules-and-entitlements.md and moduleLease.ts's isModuleLeaseValid().
+  moduleLeases: PlayerModuleLease[];
 }
 
 // Phase 12 (update_payer.md) sync telemetry — mirrors player.service.ts's HeartbeatTelemetry.

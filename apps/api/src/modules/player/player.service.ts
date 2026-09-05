@@ -1,15 +1,18 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { DesignDocumentSchema, resolveElementBindings, type DesignElement, type ResolvedDesignPayload, type ResolvedElement, type ResolvedScene, type VariableMap } from '@lumina/design-schema';
-import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerNetworkDependency } from '@lumina/types';
+import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerModuleLease, PlayerNetworkDependency } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import { SchedulesService } from '../schedules/schedules.service';
 import { PowerSchedulesService } from '../power-schedules/power-schedules.service';
 import { ScreensService } from '../screens/screens.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import type { ScreenJwtUser } from '../../common/types/jwt-user';
 import { collectManifestReferences, manifestRevision } from './player-manifest';
+
+const DEFAULT_OFFLINE_GRACE_HOURS = 168;
 
 // Phase 12 (update_payer.md) sync telemetry — every field independently optional, see heartbeat().
 export interface HeartbeatTelemetry {
@@ -74,6 +77,7 @@ export class PlayerService {
   // regardless of whether the data actually cycles: depth 0 is the screen's own playlist, depth 1
   // is one level of THEME/LAYOUT nesting inside it; past that, THEME/LAYOUT items stop expanding.
   private static readonly MAX_PLAYLIST_ITEM_DEPTH = 2;
+  private readonly logger = new Logger(PlayerService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -82,6 +86,7 @@ export class PlayerService {
     private readonly schedules: SchedulesService,
     private readonly powerSchedules: PowerSchedulesService,
     private readonly screens: ScreensService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   // Device-initiated unpair (PlayerControlPanel's "Unpair" button) — delegates to
@@ -222,6 +227,7 @@ export class PlayerService {
         poweredOn: true,
         powerScheduleRules: [],
         volume: screen.volume ?? screen.group?.volume ?? 100,
+        moduleLeases: [],
       };
     }
 
@@ -257,10 +263,38 @@ export class PlayerService {
     // Item 10 (volume control) — screen's own value wins, else its group's, else full volume.
     const volume = screen.volume ?? screen.group?.volume ?? 100;
 
+    // Module entitlement (docs/adr/platform-modules-and-entitlements.md §8.3). `wayfindingEntitled`
+    // is the real check — used to decide whether to issue an offline lease. `wayfindingRenderable`
+    // additionally bypasses that check while an evacuation is active: WayfindingEvacuationView
+    // depends on a populated `wayfinding` payload, and an active emergency must never be
+    // suppressed by unrelated business-rule enforcement (mirrors ScreensService.setEmergency's
+    // existing autoPublish bypass for the same reason). A lease is never issued off the back of
+    // this bypass — only genuine entitlement earns one.
+    const wayfindingConfigured = screen.streamingType === 'WAYFINDING' && !!screen.kioskLocation;
+    const wayfindingEntitled = wayfindingConfigured
+      ? !screen.organizationId || (await this.entitlements.hasModule(screen.organizationId, 'WAYFINDING'))
+      : false;
+    const wayfindingRenderable = wayfindingEntitled || (wayfindingConfigured && screen.emergencyActive);
+
+    if (wayfindingConfigured && !wayfindingRenderable) {
+      this.logger.log(`Screen ${screenId} is configured for WAYFINDING but the module is not entitled for its organization — no active module payload will be returned.`);
+    }
+
+    const moduleLeases: PlayerModuleLease[] = [];
+    if (wayfindingEntitled) {
+      const issuedAt = new Date();
+      const graceHours = Number(process.env.PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS) || DEFAULT_OFFLINE_GRACE_HOURS;
+      moduleLeases.push({
+        key: 'WAYFINDING',
+        issuedAt: issuedAt.toISOString(),
+        validUntil: new Date(issuedAt.getTime() + graceHours * 60 * 60 * 1000).toISOString(),
+      });
+    }
+
     // Route graph edges (Phase 7.3) — can't be pulled through the floors->pois nested include
     // above since an edge connects two RouteNodes that may sit on different floors, so it's
     // fetched separately, scoped to the kiosk's whole building, same as RoutesService.graph.
-    const routeEdges = screen.streamingType === 'WAYFINDING' && screen.kioskLocation
+    const routeEdges = wayfindingRenderable && screen.kioskLocation
       ? await this.prisma.routeEdge.findMany({
           where: { fromNode: { floor: { buildingId: screen.kioskLocation.floor.building.id } } },
         })
@@ -283,7 +317,7 @@ export class PlayerService {
         ? await this.hydratePlaylist(screen.organizationId, screen.emergencyPlaylist)
         : null,
       asset: screen.streamingType === 'ASSET' && screen.asset ? await this.hydrateAssetAsPlaylist(screen.organizationId, screen.asset) : null,
-      wayfinding: screen.streamingType === 'WAYFINDING' && screen.kioskLocation
+      wayfinding: wayfindingRenderable && screen.kioskLocation
         ? {
             kiosk: {
               floorId: screen.kioskLocation.floorId,
@@ -382,6 +416,7 @@ export class PlayerService {
         endTime: r.endTime,
       })),
       volume,
+      moduleLeases,
     };
   }
 

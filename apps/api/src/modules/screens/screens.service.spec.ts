@@ -6,6 +6,7 @@ import type { JwtService } from '@nestjs/jwt';
 import type { StorageService } from '../storage/storage.service';
 import type { ScreenGateway } from '../ws/screen.gateway';
 import type { AuditService } from '../audit/audit.service';
+import type { EntitlementsService } from '../entitlements/entitlements.service';
 
 // Regression coverage for the pairing race fixed this audit: confirmPairing used to read
 // `screen.paired`, then separately `update` the row — two concurrent pair attempts on the same
@@ -32,7 +33,8 @@ describe('ScreensService.confirmPairing — pairing race', () => {
     const storage = {} as StorageService;
     const orgScoped = new OrgScopedService();
     const audit = { log: jest.fn() } as unknown as AuditService;
-    return { service: new ScreensService(prisma, jwt, gateway, storage, orgScoped, audit), prisma };
+    const entitlements = { assertModule: jest.fn() } as unknown as EntitlementsService;
+    return { service: new ScreensService(prisma, jwt, gateway, storage, orgScoped, audit, entitlements), prisma };
   }
 
   it('the write is conditional on paired: false, not just the earlier read', async () => {

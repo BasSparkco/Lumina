@@ -236,7 +236,9 @@
       "ASSET": "Asset",
       "PLAYLIST": "Playlist",
       "WAYFINDING": "Wayfinding",
-      "assetLabel": "Asset to play"
+      "assetLabel": "Asset to play",
+      "wayfindingUnavailable": "The Wayfinding module isn't available for this tenant.",
+      "wayfindingConfigHidden": "This screen's Wayfinding configuration is preserved but hidden while the module is unavailable."
     },
     "kiosk": {
       "floor": "Kiosk floor",

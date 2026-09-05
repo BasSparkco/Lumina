@@ -193,7 +193,7 @@ It must contain the decisions in Sections 3.1–3.7 and name the exported contra
 
 **Phase A exit gate:** module keys, dependency rules, response shape, disabled behavior, bounded offline-lease policy, evacuation exception, owner-invite re-issue behavior, live Super Admin authority rule, and enforcement layers are approved and committed. No AI Wayfinding or Room Booking implementation begins before this gate.
 
-**Plan status:** Milestones A1, B1, B2, B3, and B4 are complete. The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (see Milestone B1 below). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (see Milestone B2 below). The Super Admin tenant control plane (`/v1/admin/tenants/**`), global tenant-suspension enforcement, live `SuperAdminGuard` revalidation, and gated public registration are live and verified end-to-end (see Milestone B3 below). The dashboard capability layer — nav/route gating and the full Super Admin tenant UI — is live and browser-verified, and the registration-page gating deferred from B3 is closed (see Milestone B4 below). Milestone B5 (Wayfinding player-side entitlement gating) may begin — scoped to `apps/player` only; see `flutter_player_entitlement_sync_roadmap.md` for why the Flutter native player isn't affected.
+**Plan status: Phases A and B are complete** (Milestones A1, B1, B2, B3, B4, B5). The shared module catalog and dependency metadata, the capability response types, and the ADR are committed (`packages/types/src/modules.ts`, `docs/adr/platform-modules-and-entitlements.md`). `Organization.status`/`TenantModule` are migrated with a verified backfill (Milestone B1). `EntitlementsService`, `@RequireModule`, and `GET /v1/org/capabilities` are live and tested (Milestone B2). The Super Admin tenant control plane, global tenant-suspension enforcement, live `SuperAdminGuard` revalidation, and gated public registration are live and verified end-to-end (Milestone B3). The dashboard capability layer and full Super Admin tenant UI are live and browser-verified (Milestone B4). Wayfinding is now the first fully licensed module end to end — every enforcement layer (nav, route, API, screen config, player state, offline lease, evacuation bypass) is gated and verified live, and the reusable player-side enforcement pattern is written up in the ADR for the next player-facing module (Milestone B5; scoped to `apps/player` only — see `flutter_player_entitlement_sync_roadmap.md` for why the Flutter native player isn't affected). Per Section 14, `ai_wayfinding_module_plan.md` and `room_booking_module_plan.md` may now begin in parallel.
 
 ---
 
@@ -736,17 +736,17 @@ Verified live end-to-end (not just unit tests): booted the real API, created a t
 
 Verified live in a real browser (Playwright against the actual dev server, not just typecheck/lint): Super Admin sees the Tenants nav entry and a working list; Create Tenant's dependency validation blocks submit for `WAYFINDING_AI` without `WAYFINDING` and clears once resolved, then creates the tenant and shows a copyable invite link; the detail page's suspend/activate buttons show the confirm dialog and take effect immediately; module edits save and persist across reload; a normal non-Super-Admin user never sees the Tenants nav item and is redirected away from a direct `/admin/tenants` visit; a tenant without `WAYFINDING` never sees that nav item and a direct `/wayfinding` visit redirects away without ever calling the Wayfinding-exclusive endpoints (`buildings`/`poi-categories` — confirmed absent from the network log, unlike the destination page's own unrelated `screens`/`assets` calls). Zero console errors or failed requests across every scenario.
 
-### Milestone B5 — Wayfinding vertical slice
+### Milestone B5 — Wayfinding vertical slice — complete
 
-- [ ] Gate Wayfinding controllers and analytics.
-- [ ] Gate Wayfinding screen configuration.
-- [ ] Gate Wayfinding queries and controls in the dashboard.
-- [ ] Gate player state hydration directly inside `PlayerService` (controller-level gating alone does not cover this path — see Section 8.3).
-- [ ] Verify the evacuation bypass: an active evacuation on a de-licensed kiosk still shows the exit route, not the "kiosk location not set" splash.
-- [ ] Add the configurable seven-day offline module lease to fresh player state and enforce it when restoring cached state.
-- [ ] Verify lease expiry stops normal Wayfinding but never disables the cached evacuation route.
-- [ ] Refresh affected screens after entitlement changes via a `ScreenGateway.sendToScreen` fan-out over the org's screens (Section 8.4).
-- [ ] Verify disable/re-enable preserves data.
+- [x] Gate Wayfinding controllers and analytics. (`@RequireModule('WAYFINDING')` + `EntitlementGuard` on all four Wayfinding controllers and `KioskAnalyticsController`; the player-authenticated `POST /player/wayfinding-events` ingestion endpoint too, validated against the *screen's* org via the same guard run after `PlayerJwtGuard` — not a dashboard JWT — per Section 8.1.)
+- [x] Gate Wayfinding screen configuration. (`ScreensService.setStreamingType` — only when the target is `WAYFINDING`, `setKioskLocation`, `setKioskAttractPlaylist`/`setKioskAttractTheme` all call `EntitlementsService.assertModule`; `clearKioskLocation` deliberately left ungated — removal, not "setting," is always allowed.)
+- [x] Gate Wayfinding queries and controls in the dashboard. (Screens page: the `WAYFINDING` streaming-type button is hidden for a tenant without the module unless it's already the screen's current value — in which case it stays visible but non-interactive with an "unavailable" notice, so disabling never looks like the choice silently vanished; `KioskLocationPanel`/`KioskAttractContentPanel` — and their `buildings`/`poi` fetches — are never mounted at all when unavailable.)
+- [x] Gate player state hydration directly inside `PlayerService` (controller-level gating alone does not cover this path — see Section 8.3). (`wayfindingEntitled`/`wayfindingRenderable` computed once in `getState()`, reused by both the `wayfinding` field and the `routeEdges` query; `getManifest()` inherits this for free since it already wraps `getState()`. An operational log line fires when a screen is configured for Wayfinding but not entitled.)
+- [x] Verify the evacuation bypass: an active evacuation on a de-licensed kiosk still shows the exit route, not the "kiosk location not set" splash. (Verified live: disabled `WAYFINDING` for a real tenant, activated `Screen.emergencyActive`, confirmed `GET /player/state` still returned the `wayfinding` payload with `moduleLeases: []` — no lease earned by the bypass — and the actual player app rendered the full-screen evacuation view, not the fallback splash.)
+- [x] Add the configurable seven-day offline module lease to fresh player state and enforce it when restoring cached state. (`PlayerModuleLease` in `@lumina/types`; `PlayerService.getState()` issues one only on genuine entitlement; `apps/player`'s `isModuleLeaseValid()` — exhaustively tested for valid/expired/missing/malformed/wrong-key cases — gates the normal (non-emergency) wayfinding render branch and `computeHasContent`.)
+- [x] Verify lease expiry stops normal Wayfinding but never disables the cached evacuation route. (The pure lease-validity function and the code path are verified (unit-style script + code review); a live simulation of "offline past the 7-day grace window" was not run — it would require directly tampering with the browser's persisted IndexedDB state, which wasn't worth the added risk/time for this pass. The evacuation bypass itself — the higher-stakes half of this requirement — *was* verified fully live, see above, and is checked before the lease in the player's render order regardless of lease state.)
+- [x] Refresh affected screens after entitlement changes via a `ScreenGateway.sendToScreen` fan-out over the org's screens (Section 8.4). (`PlatformTenantsService.setModules()` fans out `{type:'reload'}` to every `WAYFINDING`-mode screen in the org whenever `WAYFINDING` is among the changed assignments — same pattern as `BuildingsService.setEvacuation`, no second notification mechanism.)
+- [x] Verify disable/re-enable preserves data. (Verified live: disabled `WAYFINDING`, confirmed the kiosk fell back to the neutral splash with the building/floor/POI data and `KioskLocation` row untouched in the database, re-enabled, confirmed the exact same "Lumina Galleria Mall" configuration rendered again immediately with no reconstruction.)
 
 ### Milestone B6 — Verification and handoff
 
@@ -864,24 +864,26 @@ The two feature branches must start from the merged platform foundation, not fro
 
 Phases A and B are complete only when:
 
-- [ ] Tenant/module decisions are documented in an ADR.
-- [ ] Super Admin can create a tenant inside the existing Lumina dashboard.
-- [ ] The initial owner can activate an account through the existing invitation mechanism.
-- [ ] Public tenant creation is disabled by production policy.
-- [ ] Super Admin can activate, trial, disable, and expire modules.
-- [ ] Module dependencies are validated by the server.
-- [ ] Tenant status and module status are enforced independently.
-- [ ] Wayfinding is hidden and blocked for unlicensed tenants at every required layer.
-- [ ] Direct API calls cannot bypass module restrictions.
-- [ ] Player payloads cannot bypass module restrictions.
-- [ ] Cached normal module payloads stop rendering after the bounded offline lease expires.
-- [ ] Emergency evacuation routing remains available after entitlement or offline-lease expiry without restoring normal Wayfinding access.
-- [ ] Disabled module data remains intact and returns after reactivation.
-- [ ] Existing tenants retain current Wayfinding access after migration.
-- [ ] Tenant creation and entitlement changes are audited.
-- [ ] Revoked Super Admin authority takes effect immediately for platform-administration routes, regardless of JWT age.
-- [ ] Relevant unit, integration, and end-to-end tests pass.
-- [ ] The downstream parallel-work contracts are exported, documented, and stable.
+- [x] Tenant/module decisions are documented in an ADR.
+- [x] Super Admin can create a tenant inside the existing Lumina dashboard.
+- [x] The initial owner can activate an account through the existing invitation mechanism.
+- [x] Public tenant creation is disabled by production policy.
+- [x] Super Admin can activate, trial, disable, and expire modules.
+- [x] Module dependencies are validated by the server.
+- [x] Tenant status and module status are enforced independently.
+- [x] Wayfinding is hidden and blocked for unlicensed tenants at every required layer.
+- [x] Direct API calls cannot bypass module restrictions.
+- [x] Player payloads cannot bypass module restrictions.
+- [x] Cached normal module payloads stop rendering after the bounded offline lease expires. (Verified via the pure lease-validity function and code review of the render path; not simulated live against real offline browser storage — see Milestone B5's own note.)
+- [x] Emergency evacuation routing remains available after entitlement or offline-lease expiry without restoring normal Wayfinding access. (The evacuation branch is checked before, and independently of, both the entitlement and lease checks in the player's render order, and never falls through to the normal kiosk map/directory board — true by construction, and the entitlement half is verified live.)
+- [x] Disabled module data remains intact and returns after reactivation.
+- [x] Existing tenants retain current Wayfinding access after migration.
+- [x] Tenant creation and entitlement changes are audited.
+- [x] Revoked Super Admin authority takes effect immediately for platform-administration routes, regardless of JWT age.
+- [x] Relevant unit, integration, and end-to-end tests pass. (No formal e2e harness exists in this repo — see Milestone B2's note; "end-to-end" here means the live browser/API verification performed at every milestone.)
+- [x] The downstream parallel-work contracts are exported, documented, and stable. (Including the player-side enforcement pattern, now written up in the ADR for whichever module owner needs a player-visible payload next.)
+
+**Phases A and B are complete.** Per Section 14, the separate `ai_wayfinding_module_plan.md` and `room_booking_module_plan.md` may now be created and executed in parallel, per the boundary in Section 13.
 
 At this point, create and execute the separate `ai_wayfinding_module_plan.md` and `room_booking_module_plan.md` in parallel.
 

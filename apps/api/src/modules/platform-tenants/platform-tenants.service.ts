@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EntitlementsService, type ModuleAssignmentInput } from '../entitlements/entitlements.service';
 import { OrgService } from '../org/org.service';
+import { ScreenGateway } from '../ws/screen.gateway';
 
 interface CreateTenantInput {
   name: string;
@@ -23,6 +24,7 @@ export class PlatformTenantsService {
     private readonly audit: AuditService,
     private readonly entitlements: EntitlementsService,
     private readonly org: OrgService,
+    private readonly gateway: ScreenGateway,
   ) {}
 
   async list() {
@@ -128,7 +130,25 @@ export class PlatformTenantsService {
   // explicitly, never substituted with the Super Admin's own orgId).
   async setModules(tenantId: string, assignments: ModuleAssignmentInput[], actorUserId: string) {
     await this.assertExists(tenantId);
-    return this.entitlements.setTenantModules(tenantId, assignments, actorUserId);
+    const result = await this.entitlements.setTenantModules(tenantId, assignments, actorUserId);
+
+    // §8.4 of the ADR: a WAYFINDING change must reach already-connected kiosks promptly rather
+    // than waiting for their next unrelated poll. No org-wide WS room includes players today
+    // (see ScreenGateway) — only dashboards join `org:${orgId}` — so this is a fan-out loop over
+    // the org's WAYFINDING-mode screens, the same pattern BuildingsService.setEvacuation already
+    // uses. `reload` makes the player re-fetch state, which now naturally reflects the new
+    // entitlement (PlayerService.getState() resolves it live) — no second notification mechanism.
+    if (assignments.some((a) => a.key === 'WAYFINDING')) {
+      const screens = await this.prisma.screen.findMany({
+        where: { organizationId: tenantId, streamingType: 'WAYFINDING' },
+        select: { id: true },
+      });
+      for (const screen of screens) {
+        this.gateway.sendToScreen(screen.id, { type: 'reload' });
+      }
+    }
+
+    return result;
   }
 
   async reissueOwnerInvite(tenantId: string, email: string, actorUserId: string) {

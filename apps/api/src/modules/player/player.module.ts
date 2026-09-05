@@ -10,6 +10,7 @@ import { PowerSchedulesModule } from '../power-schedules/power-schedules.module'
 import { ProofOfPlayModule } from '../proof-of-play/proof-of-play.module';
 import { KioskAnalyticsModule } from '../kiosk-analytics/kiosk-analytics.module';
 import { ScreensModule } from '../screens/screens.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ScreensModule } from '../screens/screens.module';
     // so both directions share one reset/audit/broadcast implementation instead of two drifting
     // copies of the pairing-code regeneration logic.
     ScreensModule,
+    EntitlementsModule,
   ],
   providers: [PlayerService, PlayerJwtStrategy],
   controllers: [PlayerController],

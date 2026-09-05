@@ -4,12 +4,15 @@ import { PoiCategoriesService } from './poi-categories.service';
 import { CreatePoiCategoryDto } from './dto/create-poi-category.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { EntitlementGuard } from '../entitlements/entitlement.guard';
+import { RequireModule } from '../entitlements/require-module.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
 @ApiTags('wayfinding')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
+@RequireModule('WAYFINDING')
 @Controller('poi-categories')
 export class PoiCategoriesController {
   constructor(private readonly categories: PoiCategoriesService) {}

@@ -6,12 +6,15 @@ import { CreateFloorDto } from './dto/create-floor.dto';
 import { SetEvacuationDto } from './dto/set-evacuation.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { EntitlementGuard } from '../entitlements/entitlement.guard';
+import { RequireModule } from '../entitlements/require-module.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
 @ApiTags('wayfinding')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
+@RequireModule('WAYFINDING')
 @Controller()
 export class BuildingsController {
   constructor(private readonly buildings: BuildingsService) {}

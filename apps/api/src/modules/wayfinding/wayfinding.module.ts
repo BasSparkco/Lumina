@@ -10,9 +10,10 @@ import { RoutesController } from './routes.controller';
 import { AuthModule } from '../auth/auth.module';
 import { WsModule } from '../ws/ws.module';
 import { ScreensModule } from '../screens/screens.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
-  imports: [AuthModule, WsModule, ScreensModule],
+  imports: [AuthModule, WsModule, ScreensModule, EntitlementsModule],
   providers: [BuildingsService, PoiCategoriesService, PoisService, RoutesService],
   controllers: [BuildingsController, PoiCategoriesController, PoisController, RoutesController],
   exports: [BuildingsService, PoiCategoriesService, PoisService, RoutesService],

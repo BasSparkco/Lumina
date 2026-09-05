@@ -6,6 +6,7 @@ import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import { AuditService } from '../audit/audit.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import type { CreateScreenDto } from './dto/create-screen.dto';
 import type { UpdatePrayerDto } from './dto/update-prayer.dto';
 
@@ -28,6 +29,7 @@ export class ScreensService {
     private readonly storage: StorageService,
     private readonly orgScoped: OrgScopedService,
     private readonly audit: AuditService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   // Screen setting changes push to the screen immediately only when the org has opted into
@@ -197,6 +199,10 @@ export class ScreensService {
   // were, so switching types and back restores whatever was last chosen in each.
   async setStreamingType(orgId: string, screenId: string, streamingType: StreamingType) {
     await this.findOne(orgId, screenId);
+    // Only WAYFINDING is gated — ASSET/PLAYLIST are the base product, never an optional
+    // entitlement. Does not rely on the dashboard to prevent this (docs/adr/
+    // platform-modules-and-entitlements.md §8.2) — the API is the actual boundary.
+    if (streamingType === 'WAYFINDING') await this.entitlements.assertModule(orgId, 'WAYFINDING');
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { streamingType } });
     await this.pushIfAutoPublish(orgId, screenId);
     return updated;
@@ -223,6 +229,7 @@ export class ScreensService {
   // lose the binding.
   async setKioskLocation(orgId: string, screenId: string, floorId: string, x: number, y: number) {
     await this.findOne(orgId, screenId);
+    await this.entitlements.assertModule(orgId, 'WAYFINDING');
     await this.orgScoped.assertOwns(
       () => this.prisma.floor.findFirst({ where: { id: floorId, building: { organizationId: orgId } } }),
       'Floor not found',
@@ -249,6 +256,7 @@ export class ScreensService {
   // as assignPlaylist clearing layoutId.
   async setKioskAttractPlaylist(orgId: string, screenId: string, playlistId: string | null) {
     await this.findOne(orgId, screenId);
+    await this.entitlements.assertModule(orgId, 'WAYFINDING');
     const kiosk = await this.prisma.kioskLocation.findUnique({ where: { screenId } });
     if (!kiosk) throw new NotFoundException('Set a kiosk floor/location before choosing attract-loop content');
     if (playlistId) {
@@ -270,6 +278,7 @@ export class ScreensService {
 
   async setKioskAttractTheme(orgId: string, screenId: string, themeId: string | null) {
     await this.findOne(orgId, screenId);
+    await this.entitlements.assertModule(orgId, 'WAYFINDING');
     const kiosk = await this.prisma.kioskLocation.findUnique({ where: { screenId } });
     if (!kiosk) throw new NotFoundException('Set a kiosk floor/location before choosing attract-loop content');
     if (themeId) {

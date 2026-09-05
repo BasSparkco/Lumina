@@ -154,6 +154,37 @@ user or revoking the flag takes effect immediately for tenant creation, tenant s
 assignment, and every other Super Admin route. This foundation does not require a live re-check
 on every ordinary tenant route — only on the small set of high-impact platform-authority routes.
 
+## Player-side module enforcement pattern (established in Wayfinding, Milestone B5)
+
+Wayfinding is the reference implementation for gating a player-visible payload; any future
+player-facing module (a player-visible Room Booking status, say) should follow the same shape
+rather than inventing a new one:
+
+1. **Compute an `<x>Entitled` boolean once per request**, live, via `EntitlementsService.hasModule()`
+   — never cached, never derived from the JWT. In `PlayerService.getState()` this is
+   `wayfindingEntitled`.
+2. **Compute a separate `<x>Renderable` boolean** that OR's in any safety/business-rule bypass
+   (evacuation, for Wayfinding) on top of the entitlement check. Use `Renderable` to decide what
+   the payload contains; use `Entitled` — never `Renderable` — to decide whether to issue an
+   offline lease. A bypass must never earn a lease, or an offline kiosk could keep rendering
+   protected content indefinitely off the back of one emergency.
+3. **Issue a lease only when genuinely entitled**: `{ key: ModuleKey, issuedAt, validUntil }`,
+   appended to the shared `moduleLeases: PlayerModuleLease[]` array (`@lumina/types`) — one array
+   for every player-facing module, not a parallel per-module mechanism. `validUntil` is
+   `issuedAt + PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS` (default 168h), read directly from
+   `process.env`, not `ConfigService.get()` — see the B3 addendum above for why.
+4. **On the player**, gate the module's normal (non-bypass) render branch on a pure
+   `isModuleLeaseValid(leases, key)` check (`apps/player/src/lib/moduleLease.ts`) that treats a
+   missing or malformed lease as expired — fail closed. This check is a no-op on the live path
+   (a freshly-issued lease is always valid) and only actually matters when a presentation is
+   restored from offline storage past its grace window. Never delete the cached presentation on
+   expiry; only suppress the protected branch until a fresh state renews the lease.
+5. **Any bypass branch (evacuation) must be checked before, and independently of, the lease
+   check**, so it renders regardless of entitlement, lease validity, or network state. Verified
+   live for Wayfinding: an active evacuation on a de-licensed kiosk still shows the exit route.
+6. **Write an operational log line when a module is configured but not renderable** — the
+   diagnostic signal an operator needs for "why does this kiosk have no active module payload."
+
 ## Exported contracts downstream modules must use
 
 - `ModuleKey`, `MODULE_KEYS`, `MODULE_DEPENDENCIES` — `@lumina/types` (`modules.ts`).

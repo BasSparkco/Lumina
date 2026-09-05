@@ -5,12 +5,15 @@ import { CreateRouteNodeDto } from './dto/create-route-node.dto';
 import { CreateRouteEdgeDto } from './dto/create-route-edge.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { EntitlementGuard } from '../entitlements/entitlement.guard';
+import { RequireModule } from '../entitlements/require-module.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
 @ApiTags('wayfinding')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)
+@RequireModule('WAYFINDING')
 @Controller()
 export class RoutesController {
   constructor(private readonly routes: RoutesService) {}

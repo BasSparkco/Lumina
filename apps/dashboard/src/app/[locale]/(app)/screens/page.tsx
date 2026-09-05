@@ -18,6 +18,7 @@ import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket, type PlaybackProgress } from '@/hooks/useScreenSocket';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
@@ -525,6 +526,7 @@ export default function ScreensPage() {
   const locale = useLocale();
   const { user } = useAuth();
   const { canEditContent, canManageBilling } = usePermissions();
+  const { allowed: hasWayfinding } = useModuleAccess('WAYFINDING');
   const { confirmDelete } = useConfirmBeforeDelete();
   const { enabled: faithEnabled } = useFaithFeatures();
   const { format: dateFormat } = useDateFormat();
@@ -1107,10 +1109,19 @@ export default function ScreensPage() {
                   <div>
                     <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.label')}</label>
                     <div className="grid grid-cols-3 gap-1">
-                      {(['ASSET', 'PLAYLIST', 'WAYFINDING'] as const).map(st => {
+                      {/* WAYFINDING is only offered as a *new* selection when the tenant has the
+                          module — but a screen already set to WAYFINDING before the module was
+                          disabled keeps showing (and staying selected) here, just non-interactive,
+                          so disabling never looks like the choice silently vanished. See
+                          docs/adr/platform-modules-and-entitlements.md §8.2. */}
+                      {(['ASSET', 'PLAYLIST', 'WAYFINDING'] as const)
+                        .filter(st => st !== 'WAYFINDING' || hasWayfinding || screen.streamingType === 'WAYFINDING')
+                        .map(st => {
                         const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : Navigation;
+                        const unavailable = st === 'WAYFINDING' && !hasWayfinding;
                         return (
-                          <button key={st} type="button" disabled={!canEditContent}
+                          <button key={st} type="button" disabled={!canEditContent || unavailable}
+                            title={unavailable ? t('streamingType.wayfindingUnavailable') : undefined}
                             onClick={() => streamingTypeMut.mutate({ id: screen.id, streamingType: st })}
                             className={`flex items-center justify-center gap-1 text-sm py-1.5 rounded-lg border font-medium disabled:opacity-50 ${
                               screen.streamingType === st
@@ -1122,6 +1133,9 @@ export default function ScreensPage() {
                         );
                       })}
                     </div>
+                    {screen.streamingType === 'WAYFINDING' && !hasWayfinding && (
+                      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-500">{t('streamingType.wayfindingUnavailable')}</p>
+                    )}
                   </div>
 
                   {screen.streamingType === 'ASSET' && (
@@ -1157,8 +1171,16 @@ export default function ScreensPage() {
                     </div>
                   )}
 
-                  {screen.streamingType === 'WAYFINDING' && <KioskLocationPanel screen={screen} />}
-                  {screen.streamingType === 'WAYFINDING' && screen.kioskLocation && <KioskAttractContentPanel screen={screen} />}
+                  {/* Never mounted for an unlicensed tenant — KioskLocationPanel/
+                      KioskAttractContentPanel fetch buildings/POIs internally, and per §8.2
+                      those requests must not fire at all when the module is unavailable. The
+                      preserved configuration (kioskLocation, attract content) stays in storage
+                      untouched; only the UI to view/edit it is hidden. */}
+                  {screen.streamingType === 'WAYFINDING' && hasWayfinding && <KioskLocationPanel screen={screen} />}
+                  {screen.streamingType === 'WAYFINDING' && hasWayfinding && screen.kioskLocation && <KioskAttractContentPanel screen={screen} />}
+                  {screen.streamingType === 'WAYFINDING' && !hasWayfinding && (
+                    <p className="text-xs text-gray-400 dark:text-gray-600">{t('streamingType.wayfindingConfigHidden')}</p>
+                  )}
 
                   <VolumeControl screen={screen} disabled={!canEditContent} />
 

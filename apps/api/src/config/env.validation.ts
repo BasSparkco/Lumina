@@ -46,6 +46,14 @@ const EnvSchema = z.object({
     .string()
     .default('false')
     .transform((v) => v === 'true'),
+
+  // Bounds how long a player may keep rendering a paid module's content from a cached/offline
+  // snapshot after its last successful live fetch (PlayerService.getState()'s module lease —
+  // see docs/adr/platform-modules-and-entitlements.md). Read directly from process.env in
+  // PlayerService, not via ConfigService.get(), for the same reason ALLOW_SELF_REGISTRATION is:
+  // ConfigModule.forRoot's `load` factory shadows this validated value with the raw string.
+  // This entry exists so a malformed value still fails loudly at boot.
+  PLAYER_ENTITLEMENT_OFFLINE_GRACE_HOURS: z.coerce.number().int().positive().default(168),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

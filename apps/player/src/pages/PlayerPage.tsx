@@ -13,6 +13,7 @@ import {
 } from '../lib/presentation';
 import { connectSocket, disconnectSocket, getSocket } from '../lib/socket';
 import { resolveSchedule, resolvePower, msUntilNextTransition } from '../lib/scheduler';
+import { isModuleLeaseValid } from '../lib/moduleLease';
 import { usePlayerStore } from '../store/playerStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { isAudioUnlocked, onAudioUnlock } from '../lib/audioUnlock';
@@ -58,7 +59,7 @@ type PlayerCommand =
 function computeHasContent(state: PlayerState, activePlaylist: Playlist | null): boolean {
   if (state.emergencyActive && state.emergencyPlaylist) return state.emergencyPlaylist.items.length > 0;
   if (state.emergencyActive && state.wayfinding) return true; // evacuation view always renders something
-  if (state.wayfinding) return state.wayfinding.pois.length > 0;
+  if (state.wayfinding && isModuleLeaseValid(state.moduleLeases, 'WAYFINDING')) return state.wayfinding.pois.length > 0;
   return !!activePlaylist && activePlaylist.items.length > 0;
 }
 
@@ -523,11 +524,26 @@ export default function PlayerPage() {
     );
   }
 
-  // Wayfinding mode — a real touchscreen gets the interactive pan/zoom/tap kiosk map (Phase
-  // 7.2); a cheap non-touch panel (still a real, supported deployment target per Phase 7.1)
-  // falls back to the passive auto-rotating directory board. No per-screen config needed: the
-  // browser's own touch-capability signal is the right source of truth here.
   if (state.wayfinding) {
+    // Offline module lease (docs/adr/platform-modules-and-entitlements.md §8.3) — bounds how
+    // long this kiosk keeps showing wayfinding content restored from local storage with no live
+    // check-in. A no-op on the live path (a freshly-fetched state's lease was just issued, so
+    // it's always valid); this only actually fires for a presentation restored offline past its
+    // grace period. The cached data itself is never deleted — a fresh state from the next
+    // successful sync (or coming back online) renews the lease and this splash goes away on its
+    // own, no reconstruction needed.
+    if (!isModuleLeaseValid(state.moduleLeases, 'WAYFINDING')) {
+      return (
+        <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
+          <Splash text="Reconnecting to restore Wayfinding content…" />
+        </FullscreenContainer>
+      );
+    }
+
+    // Wayfinding mode — a real touchscreen gets the interactive pan/zoom/tap kiosk map (Phase
+    // 7.2); a cheap non-touch panel (still a real, supported deployment target per Phase 7.1)
+    // falls back to the passive auto-rotating directory board. No per-screen config needed: the
+    // browser's own touch-capability signal is the right source of truth here.
     return (
       <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
         {isTouchCapable()

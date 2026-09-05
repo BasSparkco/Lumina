@@ -4,6 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
 import type { EntitlementsService } from '../entitlements/entitlements.service';
 import type { OrgService } from '../org/org.service';
+import type { ScreenGateway } from '../ws/screen.gateway';
 
 function makeService(overrides: { prisma?: Record<string, unknown>; entitlements?: Record<string, unknown> } = {}) {
   const prisma = {
@@ -11,6 +12,9 @@ function makeService(overrides: { prisma?: Record<string, unknown>; entitlements
       findUnique: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn(),
+    },
+    screen: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) =>
       fn({
@@ -29,8 +33,9 @@ function makeService(overrides: { prisma?: Record<string, unknown>; entitlements
     ...overrides.entitlements,
   } as unknown as EntitlementsService;
   const org = { createOwnerInvite: jest.fn().mockResolvedValue({ id: 'inv_1', email: 'owner@acme.com', token: 'tok_1', expiresAt: new Date() }) } as unknown as OrgService;
+  const gateway = { sendToScreen: jest.fn() } as unknown as ScreenGateway;
 
-  return { service: new PlatformTenantsService(prisma, audit, entitlements, org), prisma, audit, entitlements, org };
+  return { service: new PlatformTenantsService(prisma, audit, entitlements, org, gateway), prisma, audit, entitlements, org, gateway };
 }
 
 describe('PlatformTenantsService.create — atomic tenant creation', () => {
@@ -163,5 +168,49 @@ describe('PlatformTenantsService.setModules — delegates entirely to Entitlemen
       [{ key: 'WAYFINDING', status: 'DISABLED' }],
       'admin_1',
     );
+  });
+});
+
+// §8.4 of the ADR: a WAYFINDING change must reach already-connected kiosks promptly, via a
+// fan-out over the org's WAYFINDING-mode screens — the same pattern BuildingsService.setEvacuation
+// already uses, not a second notification mechanism.
+describe('PlatformTenantsService.setModules — WS fan-out on WAYFINDING changes', () => {
+  it('pushes a reload to every WAYFINDING-mode screen in the org when WAYFINDING is among the assignments', async () => {
+    const { service, gateway } = makeService({
+      prisma: {
+        organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) },
+        screen: { findMany: jest.fn().mockResolvedValue([{ id: 'screen_1' }, { id: 'screen_2' }]) },
+      },
+    });
+
+    await service.setModules('org_1', [{ key: 'WAYFINDING', status: 'DISABLED' }], 'admin_1');
+
+    expect(gateway.sendToScreen).toHaveBeenCalledTimes(2);
+    expect(gateway.sendToScreen).toHaveBeenCalledWith('screen_1', { type: 'reload' });
+    expect(gateway.sendToScreen).toHaveBeenCalledWith('screen_2', { type: 'reload' });
+  });
+
+  it('only queries screens scoped to this org and streamingType WAYFINDING', async () => {
+    const { service, prisma } = makeService({
+      prisma: { organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) } },
+    });
+
+    await service.setModules('org_1', [{ key: 'WAYFINDING', status: 'ACTIVE' }], 'admin_1');
+
+    expect(prisma.screen.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org_1', streamingType: 'WAYFINDING' },
+      select: { id: true },
+    });
+  });
+
+  it('does not touch the screen gateway at all when the assignment set has no WAYFINDING entry', async () => {
+    const { service, gateway, prisma } = makeService({
+      prisma: { organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) } },
+    });
+
+    await service.setModules('org_1', [{ key: 'ROOM_BOOKING', status: 'ACTIVE' }], 'admin_1');
+
+    expect(prisma.screen.findMany).not.toHaveBeenCalled();
+    expect(gateway.sendToScreen).not.toHaveBeenCalled();
   });
 });
