@@ -10,6 +10,7 @@ import { StorageService } from './storage/storage.service';
 import { PrismaService } from './prisma/prisma.service';
 import { ConnectorsModule } from './connectors/connectors.module';
 import { FleetMonitorModule } from './fleet-monitor/fleet-monitor.module';
+import { RoomBookingSyncModule } from './room-booking-sync/room-booking-sync.module';
 
 export const QUEUE_MEDIA = 'media';
 
@@ -56,6 +57,7 @@ loadDotenv({
     BullModule.registerQueue({ name: QUEUE_MEDIA }),
     ConnectorsModule,
     FleetMonitorModule,
+    RoomBookingSyncModule,
   ],
   providers: [MediaProcessor, StorageService, PrismaService],
 })

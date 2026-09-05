@@ -199,10 +199,11 @@ export class ScreensService {
   // were, so switching types and back restores whatever was last chosen in each.
   async setStreamingType(orgId: string, screenId: string, streamingType: StreamingType) {
     await this.findOne(orgId, screenId);
-    // Only WAYFINDING is gated — ASSET/PLAYLIST are the base product, never an optional
-    // entitlement. Does not rely on the dashboard to prevent this (docs/adr/
+    // Only WAYFINDING/ROOM_BOOKING are gated — ASSET/PLAYLIST are the base product, never an
+    // optional entitlement. Does not rely on the dashboard to prevent this (docs/adr/
     // platform-modules-and-entitlements.md §8.2) — the API is the actual boundary.
     if (streamingType === 'WAYFINDING') await this.entitlements.assertModule(orgId, 'WAYFINDING');
+    if (streamingType === 'ROOM_BOOKING') await this.entitlements.assertModule(orgId, 'ROOM_BOOKING');
     const updated = await this.prisma.screen.update({ where: { id: screenId }, data: { streamingType } });
     await this.pushIfAutoPublish(orgId, screenId);
     return updated;

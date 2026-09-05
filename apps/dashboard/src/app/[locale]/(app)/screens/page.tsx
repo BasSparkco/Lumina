@@ -11,8 +11,8 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical } from 'lucide-react';
-import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, type Screen, type StreamingType } from '@/lib/api';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical, DoorOpen } from 'lucide-react';
+import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, roomBookingApi, QUICK_BOOKING_DURATIONS_MINUTES, type Screen, type StreamingType } from '@/lib/api';
 import { PoiMapEditor } from '@/components/PoiMapEditor';
 import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
@@ -224,6 +224,112 @@ function KioskLocationPanel({ screen }: { screen: Screen }) {
                 onActivePinChange={(x, y) => setLocationMut.mutate({ x, y })}
                 disabled={!canEditContent}
               />
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Room Booking display binding (room_booking_module_plan.md §11.3) — which room this screen
+// shows, plus the per-display quick-booking policy. Mirrors KioskLocationPanel's "pick from a
+// dropdown, save immediately" shape rather than a modal, matching how every other screen setting
+// on this page behaves.
+function RoomBindingPanel({ screen }: { screen: Screen }) {
+  const qc = useQueryClient();
+  const { canEditContent } = usePermissions();
+  const t = useTranslations('screens');
+  const { data: rooms = [] } = useQuery({ queryKey: ['rooms'], queryFn: roomBookingApi.listRooms });
+  const { data: displays = [] } = useQuery({ queryKey: ['room-displays'], queryFn: roomBookingApi.listDisplays });
+  const binding = displays.find(d => d.id === screen.id)?.roomDisplayBinding ?? null;
+
+  const [roomId, setRoomId] = useState(binding?.roomId ?? '');
+  const [quickBookingEnabled, setQuickBookingEnabled] = useState(binding?.quickBookingEnabled ?? true);
+  const [durations, setDurations] = useState<number[]>(binding?.quickBookingDurationsMinutes ?? [15, 30, 60]);
+  const [startingSoonMinutes, setStartingSoonMinutes] = useState(binding?.startingSoonMinutes ?? 15);
+
+  const saveMut = useMutation({
+    mutationFn: () => roomBookingApi.updateDisplay(screen.id, { roomId, quickBookingEnabled, quickBookingDurationsMinutes: durations, startingSoonMinutes }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['room-displays'] }),
+  });
+  const clearMut = useMutation({
+    mutationFn: () => roomBookingApi.removeDisplay(screen.id),
+    onSuccess: () => { setRoomId(''); void qc.invalidateQueries({ queryKey: ['room-displays'] }); },
+  });
+
+  function toggleDuration(minutes: number) {
+    setDurations(prev => prev.includes(minutes) ? prev.filter(m => m !== minutes) : [...prev, minutes].sort((a, b) => a - b));
+  }
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300 font-medium text-sm">
+          <DoorOpen className="w-3.5 h-3.5" /> {t('room.title')}
+        </div>
+        {binding && canEditContent && (
+          <button onClick={() => clearMut.mutate()} disabled={clearMut.isPending}
+            className="text-sm text-gray-400 dark:text-gray-500 hover:text-red-500">
+            {t('room.clear')}
+          </button>
+        )}
+      </div>
+
+      {rooms.length === 0 ? (
+        <p className="text-sm text-gray-400 dark:text-gray-500 py-2">{t('room.noRooms')}</p>
+      ) : (
+        <>
+          {!binding && <p className="text-sm text-amber-700 dark:text-amber-400">{t('room.notConfiguredWarning')}</p>}
+          <select
+            value={roomId} disabled={!canEditContent}
+            onChange={e => setRoomId(e.target.value)}
+            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50">
+            <option value="">{t('room.noRoom')}</option>
+            {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+
+          {roomId && (
+            <>
+              <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                <input type="checkbox" checked={quickBookingEnabled} disabled={!canEditContent}
+                  onChange={e => setQuickBookingEnabled(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-indigo-500 disabled:opacity-50" />
+                {t('room.quickBookingEnabled')}
+              </label>
+
+              {quickBookingEnabled && (
+                <div>
+                  <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('room.durations')}</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_BOOKING_DURATIONS_MINUTES.map(m => (
+                      <button key={m} type="button" disabled={!canEditContent}
+                        onClick={() => toggleDuration(m)}
+                        className={`px-2 py-1 rounded-lg border text-xs font-medium disabled:opacity-50 ${
+                          durations.includes(m)
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                        }`}>
+                        {m}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('room.startingSoonMinutes')}</label>
+                <input type="number" min={1} max={120} disabled={!canEditContent}
+                  value={startingSoonMinutes} onChange={e => setStartingSoonMinutes(Number(e.target.value))}
+                  className="w-24 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50" />
+              </div>
+
+              <button
+                onClick={() => saveMut.mutate()}
+                disabled={!canEditContent || durations.length === 0 || saveMut.isPending}
+                className="w-full mt-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                {t('room.save')}
+              </button>
             </>
           )}
         </>
@@ -527,6 +633,7 @@ export default function ScreensPage() {
   const { user } = useAuth();
   const { canEditContent, canManageBilling } = usePermissions();
   const { allowed: hasWayfinding } = useModuleAccess('WAYFINDING');
+  const { allowed: hasRoomBooking } = useModuleAccess('ROOM_BOOKING');
   const { confirmDelete } = useConfirmBeforeDelete();
   const { enabled: faithEnabled } = useFaithFeatures();
   const { format: dateFormat } = useDateFormat();
@@ -1114,14 +1221,15 @@ export default function ScreensPage() {
                           disabled keeps showing (and staying selected) here, just non-interactive,
                           so disabling never looks like the choice silently vanished. See
                           docs/adr/platform-modules-and-entitlements.md §8.2. */}
-                      {(['ASSET', 'PLAYLIST', 'WAYFINDING'] as const)
+                      {(['ASSET', 'PLAYLIST', 'WAYFINDING', 'ROOM_BOOKING'] as const)
                         .filter(st => st !== 'WAYFINDING' || hasWayfinding || screen.streamingType === 'WAYFINDING')
+                        .filter(st => st !== 'ROOM_BOOKING' || hasRoomBooking || screen.streamingType === 'ROOM_BOOKING')
                         .map(st => {
-                        const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : Navigation;
-                        const unavailable = st === 'WAYFINDING' && !hasWayfinding;
+                        const Icon = st === 'ASSET' ? ImageIcon : st === 'PLAYLIST' ? ListVideo : st === 'WAYFINDING' ? Navigation : DoorOpen;
+                        const unavailable = (st === 'WAYFINDING' && !hasWayfinding) || (st === 'ROOM_BOOKING' && !hasRoomBooking);
                         return (
                           <button key={st} type="button" disabled={!canEditContent || unavailable}
-                            title={unavailable ? t('streamingType.wayfindingUnavailable') : undefined}
+                            title={unavailable ? t(st === 'WAYFINDING' ? 'streamingType.wayfindingUnavailable' : 'streamingType.roomBookingUnavailable') : undefined}
                             onClick={() => streamingTypeMut.mutate({ id: screen.id, streamingType: st })}
                             className={`flex items-center justify-center gap-1 text-sm py-1.5 rounded-lg border font-medium disabled:opacity-50 ${
                               screen.streamingType === st
@@ -1135,6 +1243,9 @@ export default function ScreensPage() {
                     </div>
                     {screen.streamingType === 'WAYFINDING' && !hasWayfinding && (
                       <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-500">{t('streamingType.wayfindingUnavailable')}</p>
+                    )}
+                    {screen.streamingType === 'ROOM_BOOKING' && !hasRoomBooking && (
+                      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-500">{t('streamingType.roomBookingUnavailable')}</p>
                     )}
                   </div>
 
@@ -1180,6 +1291,13 @@ export default function ScreensPage() {
                   {screen.streamingType === 'WAYFINDING' && hasWayfinding && screen.kioskLocation && <KioskAttractContentPanel screen={screen} />}
                   {screen.streamingType === 'WAYFINDING' && !hasWayfinding && (
                     <p className="text-xs text-gray-400 dark:text-gray-600">{t('streamingType.wayfindingConfigHidden')}</p>
+                  )}
+
+                  {/* Never mounted for an unlicensed tenant, same reasoning as the wayfinding
+                      panels above — the room/display list must not be requested at all. */}
+                  {screen.streamingType === 'ROOM_BOOKING' && hasRoomBooking && <RoomBindingPanel screen={screen} />}
+                  {screen.streamingType === 'ROOM_BOOKING' && !hasRoomBooking && (
+                    <p className="text-xs text-gray-400 dark:text-gray-600">{t('streamingType.roomBookingConfigHidden')}</p>
                   )}
 
                   <VolumeControl screen={screen} disabled={!canEditContent} />

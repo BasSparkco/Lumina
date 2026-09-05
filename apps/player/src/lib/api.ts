@@ -1,5 +1,5 @@
 import type { ResolvedDesignPayload } from '@lumina/design-schema';
-import type { PlayerContentManifest, PlayerModuleLease, WayfindingAiPlayerConfig, WayfindingAiResolution } from '@lumina/types';
+import type { PlayerContentManifest, PlayerModuleLease, WayfindingAiPlayerConfig, WayfindingAiResolution, RoomBookingPlayerPayload } from '@lumina/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/v1';
 
@@ -198,7 +198,7 @@ export interface Zone {
   audioVolume: number | null;
 }
 
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING' | 'ROOM_BOOKING';
 
 // A YouTube video/playlist from an APP-type asset (Assets page "Apps" tab), playable either as a
 // screen's ASSET-mode content or as a playlist item. Mirrors the two appConfig shapes
@@ -403,6 +403,10 @@ export interface PlayerState {
   // only non-null when streamingType is 'ASSET'.
   asset: Playlist | null;
   wayfinding: WayfindingDirectory | null;
+  // Room Booking (docs/modules/room_booking_module_plan.md §9.2) — non-null only when the tenant
+  // owns ROOM_BOOKING, this exact screen is bound to a room, and streamingType is ROOM_BOOKING.
+  // No emergency-driven bypass exists for this module, unlike wayfinding above.
+  roomBooking: RoomBookingPlayerPayload | null;
   scheduleRules: ScheduleRule[];
   resolvedPlaylistId: string | null;
   defaultPlaylist: Playlist | null;
@@ -456,6 +460,13 @@ export const api = {
     body: { message: string; language: 'en' | 'ar'; recentTurns?: { role: 'user' | 'assistant'; text: string }[] },
     signal?: AbortSignal,
   ) => request<WayfindingAiResolution>('/player/wayfinding-ai/resolve', { method: 'POST', body: JSON.stringify(body), signal }),
+  // Room Booking (docs/modules/room_booking_module_plan.md §8.4) — the server derives the room
+  // from the authenticated screen's binding; this body carries only duration + idempotency key.
+  bookNowRoom: (durationMinutes: number, idempotencyKey: string) =>
+    request<{ payload: RoomBookingPlayerPayload | null }>('/player/room-booking/book-now', {
+      method: 'POST',
+      body: JSON.stringify({ durationMinutes, idempotencyKey }),
+    }),
   // playsetting.md Phase 4 — authorized by `token` alone, not player_token; see PreviewPlaylist.
   previewPlaylist: (playlistId: string, token: string) =>
     request<PreviewPlaylist>(`/playlists/${playlistId}/preview?token=${encodeURIComponent(token)}`),

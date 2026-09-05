@@ -1,7 +1,8 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { DesignDocumentSchema, resolveElementBindings, type DesignElement, type ResolvedDesignPayload, type ResolvedElement, type ResolvedScene, type VariableMap } from '@lumina/design-schema';
-import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerModuleLease, PlayerNetworkDependency, WayfindingAiPlayerConfig } from '@lumina/types';
+import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerModuleLease, PlayerNetworkDependency, WayfindingAiPlayerConfig, RoomBookingPlayerPayload } from '@lumina/types';
+import { RoomPlayerStateService } from '../room-booking/room-player-state.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { ScreenGateway } from '../ws/screen.gateway';
@@ -87,6 +88,7 @@ export class PlayerService {
     private readonly powerSchedules: PowerSchedulesService,
     private readonly screens: ScreensService,
     private readonly entitlements: EntitlementsService,
+    private readonly roomPlayerState: RoomPlayerStateService,
   ) {}
 
   // Device-initiated unpair (PlayerControlPanel's "Unpair" button) — delegates to
@@ -188,6 +190,13 @@ export class PlayerService {
         // returns `aiAssistant: null`, and only getState()'s normal (non-suspended,
         // non-emergency) path may ever overwrite it with a real value.
         wayfindingAiConfig: true,
+        // Room Booking (docs/modules/room_booking_module_plan.md §9.1) — loaded regardless of
+        // entitlement/emergency state, same "always load, gate rendering separately" pattern as
+        // every other optional-module relation above. No Room Booking business-rule bypass
+        // exists (§9.2) — unlike Wayfinding, there is no emergency-driven reason to ever expose
+        // this during a suspended-emergency response, so the suspended builders below always
+        // leave `roomBooking: null` by construction, never by an extra check.
+        roomDisplayBinding: true,
         group: { select: { volume: true } },
       },
     });
@@ -344,6 +353,7 @@ export class PlayerService {
       emergencyPlaylist: null,
       asset: null,
       wayfinding: null,
+      roomBooking: null,
       scheduleRules: [],
       resolvedPlaylistId: null,
       defaultPlaylist: null,
@@ -366,6 +376,7 @@ export class PlayerService {
       ...this.commonScreenFields(screen, screenId),
       emergencyActive: true,
       asset: null,
+      roomBooking: null,
       scheduleRules: [],
       resolvedPlaylistId: null,
       defaultPlaylist: null,
@@ -506,6 +517,28 @@ export class PlayerService {
       moduleLeases.push({ key: 'WAYFINDING_AI', issuedAt: issuedAt.toISOString(), validUntil });
     }
 
+    // Room Booking (docs/modules/room_booking_module_plan.md §9.2) — independent of Wayfinding
+    // entirely; a screen is either WAYFINDING or ROOM_BOOKING mode, never both, so this and the
+    // wayfinding computation above are mutually exclusive in practice but computed the same way
+    // for consistency. "No Room Booking business-rule bypass exists" — entitlement is the only
+    // gate, there is no emergency-driven exception to reproduce here.
+    const roomBookingConfigured = screen.streamingType === 'ROOM_BOOKING' && !!screen.roomDisplayBinding;
+    const roomBookingEntitled = roomBookingConfigured
+      ? !screen.organizationId || (await this.entitlements.hasModule(screen.organizationId, 'ROOM_BOOKING'))
+      : false;
+    let roomBooking: RoomBookingPlayerPayload | null = null;
+    if (roomBookingEntitled && screen.roomDisplayBinding) {
+      roomBooking = await this.roomPlayerState.buildPayload(screen.roomDisplayBinding);
+      if (!roomBooking) {
+        this.logger.log(`Screen ${screenId} is configured for ROOM_BOOKING but its bound room could not be loaded — no active module payload will be returned.`);
+      }
+    } else if (roomBookingConfigured) {
+      this.logger.log(`Screen ${screenId} is configured for ROOM_BOOKING but the module is not entitled for its organization — no active module payload will be returned.`);
+    }
+    if (roomBookingEntitled && roomBooking) {
+      moduleLeases.push({ key: 'ROOM_BOOKING', issuedAt: issuedAt.toISOString(), validUntil });
+    }
+
     return {
       screenId,
       streamingType: screen.streamingType,
@@ -524,6 +557,7 @@ export class PlayerService {
         : null,
       asset: screen.streamingType === 'ASSET' && screen.asset ? await this.hydrateAssetAsPlaylist(screen.organizationId, screen.asset) : null,
       wayfinding: wayfinding.payload,
+      roomBooking,
       scheduleRules: await Promise.all(rules.map(async r => ({
         id: r.id,
         name: r.name,

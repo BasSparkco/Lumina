@@ -203,14 +203,47 @@ describe('PlatformTenantsService.setModules — WS fan-out on WAYFINDING changes
     });
   });
 
-  it('does not touch the screen gateway at all when the assignment set has no WAYFINDING entry', async () => {
+  it('does not touch the screen gateway at all for a module with no fan-out rule of its own', async () => {
     const { service, gateway, prisma } = makeService({
+      prisma: { organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) } },
+    });
+
+    // INDOOR_POSITIONING has no player-visible payload/fan-out implemented yet — WAYFINDING,
+    // WAYFINDING_AI, and ROOM_BOOKING each have their own dedicated fan-out below; this proves a
+    // module change never triggers one of those unrelated fan-outs by accident.
+    await service.setModules('org_1', [{ key: 'INDOOR_POSITIONING', status: 'ACTIVE' }], 'admin_1');
+
+    expect(prisma.screen.findMany).not.toHaveBeenCalled();
+    expect(gateway.sendToScreen).not.toHaveBeenCalled();
+  });
+});
+
+// docs/modules/room_booking_module_plan.md §12 — same dedicated fan-out pattern as WAYFINDING
+// above, scoped to ROOM_BOOKING-mode screens.
+describe('PlatformTenantsService.setModules — WS fan-out on ROOM_BOOKING changes', () => {
+  it('pushes a reload to every ROOM_BOOKING-mode screen in the org when ROOM_BOOKING is among the assignments', async () => {
+    const { service, gateway } = makeService({
+      prisma: {
+        organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) },
+        screen: { findMany: jest.fn().mockResolvedValue([{ id: 'screen_1' }]) },
+      },
+    });
+
+    await service.setModules('org_1', [{ key: 'ROOM_BOOKING', status: 'DISABLED' }], 'admin_1');
+
+    expect(gateway.sendToScreen).toHaveBeenCalledWith('screen_1', { type: 'reload' });
+  });
+
+  it('only queries screens scoped to this org and streamingType ROOM_BOOKING', async () => {
+    const { service, prisma } = makeService({
       prisma: { organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) } },
     });
 
     await service.setModules('org_1', [{ key: 'ROOM_BOOKING', status: 'ACTIVE' }], 'admin_1');
 
-    expect(prisma.screen.findMany).not.toHaveBeenCalled();
-    expect(gateway.sendToScreen).not.toHaveBeenCalled();
+    expect(prisma.screen.findMany).toHaveBeenCalledWith({
+      where: { organizationId: 'org_1', streamingType: 'ROOM_BOOKING' },
+      select: { id: true },
+    });
   });
 });

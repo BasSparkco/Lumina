@@ -72,6 +72,25 @@ const EnvSchema = z.object({
   // is a conservative placeholder, not a considered retention policy; must be set deliberately
   // before production use.
   AI_WAYFINDING_USAGE_LOG_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+
+  // Room Booking (docs/modules/room_booking_module_plan.md §7.4/§14) — optional so the app boots
+  // cleanly with no connector configured; a connector-specific check happens at connect time, not
+  // at startup. ROOM_BOOKING_ENCRYPTION_KEY must be a 32-byte key, base64-encoded, used for
+  // AES-256-GCM at-rest encryption of RoomCalendarConnection.encryptedCredential — a deployment
+  // secret outside the database, per §7.4. Generate with e.g. `openssl rand -base64 32`.
+  ROOM_BOOKING_ENCRYPTION_KEY: z.string().min(1).optional(),
+  ROOM_BOOKING_RECORD_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  // Public HTTPS base this API is reachable at, for registering Microsoft Graph/Google
+  // change-notification webhook callback URLs (§13.3). Not required until a connector is
+  // actually connected.
+  ROOM_BOOKING_WEBHOOK_BASE_URL: z.string().optional(),
+  MICROSOFT_365_CLIENT_ID: z.string().optional(),
+  MICROSOFT_365_CLIENT_SECRET: z.string().optional(),
+  // 'common' allows both work/school and personal accounts; most enterprise deployments pin
+  // this to their own Entra ID tenant id instead. Least-privilege scopes only (§13.4) — see
+  // Microsoft365OAuthService for the exact scope list.
+  MICROSOFT_365_TENANT_ID: z.string().default('common'),
+  MICROSOFT_365_REDIRECT_URI: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

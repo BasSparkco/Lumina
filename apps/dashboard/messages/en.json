@@ -16,6 +16,7 @@
     "adminTenants": "Tenants",
     "wayfinding": "Wayfinding",
     "wayfindingAi": "AI Wayfinding",
+    "roomBooking": "Room Booking",
     "schedules": "Schedules",
     "powerSchedule": "Display power",
     "members": "Members",
@@ -237,9 +238,23 @@
       "ASSET": "Asset",
       "PLAYLIST": "Playlist",
       "WAYFINDING": "Wayfinding",
+      "ROOM_BOOKING": "Room Booking",
       "assetLabel": "Asset to play",
       "wayfindingUnavailable": "The Wayfinding module isn't available for this tenant.",
-      "wayfindingConfigHidden": "This screen's Wayfinding configuration is preserved but hidden while the module is unavailable."
+      "wayfindingConfigHidden": "This screen's Wayfinding configuration is preserved but hidden while the module is unavailable.",
+      "roomBookingUnavailable": "The Room Booking module isn't available for this tenant.",
+      "roomBookingConfigHidden": "This screen's Room Booking configuration is preserved but hidden while the module is unavailable."
+    },
+    "room": {
+      "title": "Room binding",
+      "noRooms": "No rooms set up yet — add one from the Room Booking section first.",
+      "noRoom": "— Select a room —",
+      "notConfiguredWarning": "This screen is set to Room Booking but has no room assigned yet — the player will show a blank \"no room\" message until you pick one below.",
+      "clear": "Clear room",
+      "quickBookingEnabled": "Allow walk-up \"Book Now\" on this display",
+      "durations": "Quick-booking durations",
+      "startingSoonMinutes": "\"Starting soon\" window (minutes)",
+      "save": "Save"
     },
     "kiosk": {
       "floor": "Kiosk floor",
@@ -1122,6 +1137,86 @@
     "modelCallRate": "Model call rate",
     "noMatchRate": "No-match rate",
     "avgLatency": "Avg. latency"
+  },
+  "roomBooking": {
+    "title": "Room Booking",
+    "subtitle": "Bookable rooms, calendars, hallway displays, and calendar integrations",
+    "rooms": {
+      "title": "Rooms",
+      "add": "Add room",
+      "none": "No rooms yet — add one to get started",
+      "edit": "Edit",
+      "confirmDelete": "Delete this room? Any hallway display bound to it will stop showing its schedule.",
+      "outOfService": "Out of service",
+      "provider": {
+        "LUMINA": "Native",
+        "MICROSOFT_365": "Microsoft 365",
+        "GOOGLE_WORKSPACE": "Google Workspace"
+      },
+      "addTitle": "Add room",
+      "editTitle": "Edit room",
+      "name": "Name",
+      "locationLabel": "Location label",
+      "timezone": "Timezone",
+      "capacity": "Capacity",
+      "amenities": "Amenities",
+      "amenitiesPlaceholder": "Comma-separated, e.g. Projector, Whiteboard",
+      "privacyMode": "Privacy mode",
+      "privacy": {
+        "BUSY_ONLY": "Busy only — hide title and organizer",
+        "SHOW_TITLE": "Show title, hide organizer",
+        "SHOW_ORGANIZER": "Show title and organizer"
+      },
+      "status": "Status",
+      "statusActive": "Active",
+      "save": "Save"
+    },
+    "calendar": {
+      "title": "Calendar",
+      "selectRoom": "Select a room…",
+      "none": "No reservations for this day",
+      "untitled": "Reserved",
+      "addReservation": "Add reservation",
+      "externalReadOnly": "This room's calendar is synced from an external provider — create reservations there.",
+      "reservationTitle": "Title",
+      "organizer": "Organizer",
+      "startsAt": "Starts",
+      "endsAt": "Ends",
+      "save": "Save"
+    },
+    "displays": {
+      "title": "Displays",
+      "hint": "Bind a room to a screen from the Screens page — this is a read-only summary.",
+      "none": "No displays bound to a room yet",
+      "quickBookingOn": "Book Now enabled",
+      "quickBookingOff": "Book Now disabled"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "hint": "Connect Microsoft 365 to sync room calendars automatically. Credentials are encrypted at rest and never shown again.",
+      "displayName": "Connection name",
+      "tenantId": "Tenant ID",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "roomsMapped": "{count, plural, =0 {No rooms mapped} =1 {1 room mapped} other {# rooms mapped}}",
+      "mapRooms": "Map rooms",
+      "noMappableRooms": "No unmapped room resources found in this tenant",
+      "selectExternalRoom": "Microsoft 365 room…",
+      "selectLuminaRoom": "Lumina room…",
+      "map": "Map",
+      "subscribeWebhook": "Subscribe to calendar updates"
+    },
+    "health": {
+      "title": "Health",
+      "none": "No integrations connected yet",
+      "status": "Status",
+      "lastSync": "Last successful sync",
+      "lastError": "Last error",
+      "webhookExpires": "Webhook expires",
+      "never": "Never"
+    }
   },
   "schedules": {
     "title": "Schedules",

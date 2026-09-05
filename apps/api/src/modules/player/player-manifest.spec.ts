@@ -7,6 +7,7 @@ import type { SchedulesService } from '../schedules/schedules.service';
 import type { PowerSchedulesService } from '../power-schedules/power-schedules.service';
 import type { ScreensService } from '../screens/screens.service';
 import type { EntitlementsService } from '../entitlements/entitlements.service';
+import type { RoomPlayerStateService } from '../room-booking/room-player-state.service';
 
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
@@ -55,6 +56,7 @@ function makeService(records: unknown[]) {
     {} as PowerSchedulesService,
     {} as ScreensService,
     {} as EntitlementsService,
+    {} as RoomPlayerStateService,
   );
   return { service, prisma };
 }

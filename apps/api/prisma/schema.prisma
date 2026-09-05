@@ -59,6 +59,12 @@ model Organization {
   // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6.3) — operational cost/usage
   // history, kept even if the module is later disabled (see WayfindingAiUsageLog).
   wayfindingAiUsageLogs WayfindingAiUsageLog[]
+
+  // Room Booking (docs/modules/room_booking_module_plan.md §7) — native rooms and, once a
+  // connector milestone is implemented, external calendar connections. All preserved across
+  // ROOM_BOOKING disable/re-enable.
+  bookableRooms            BookableRoom[]
+  roomCalendarConnections  RoomCalendarConnection[]
 }
 
 // Per-tenant paid-module entitlement. `moduleKey` is a plain String constrained by
@@ -107,6 +113,11 @@ model User {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   auditLogs AuditLog[]
+
+  // Room Booking (docs/modules/room_booking_module_plan.md §7.3) — the dashboard user who
+  // created a native reservation; SetNull on user deletion since the reservation itself must
+  // outlive the account that made it.
+  roomReservations RoomReservation[]
 
   @@index([organizationId])
 }
@@ -250,6 +261,12 @@ model Screen {
   wayfindingAiConfig    WayfindingAiScreenConfig?
   wayfindingAiUsageLogs WayfindingAiUsageLog[]
 
+  // Room Booking (docs/modules/room_booking_module_plan.md §7.2) — at most one room binding per
+  // screen; a room may drive multiple screens. Preserved across streamingType mode changes and
+  // ROOM_BOOKING entitlement disable/re-enable, same "preserve everything, hide the content"
+  // pattern as every other optional module.
+  roomDisplayBinding RoomDisplayBinding?
+
   // Backs ScreensService.list — the org-scoped, createdAt-desc fleet listing every Screens page
   // load hits.
   @@index([organizationId, createdAt])
@@ -276,6 +293,7 @@ enum StreamingType {
   ASSET
   PLAYLIST
   WAYFINDING
+  ROOM_BOOKING
 }
 
 model ScreenGroup {
@@ -1043,6 +1061,11 @@ model Poi {
   // names the destination resolver matches before ever calling the AI provider.
   aliases PoiAlias[]
 
+  // Room Booking (docs/modules/room_booking_module_plan.md §7.1) — optional cross-module link
+  // only; a room's own creation and usability never depends on this being set, or on Wayfinding
+  // being purchased at all.
+  bookableRooms BookableRoom[]
+
   @@index([floorId])
   @@index([categoryId])
 }
@@ -1188,6 +1211,169 @@ model WayfindingAiUsageLog {
 
   @@index([organizationId, createdAt])
   @@index([screenId, createdAt])
+}
+
+// ─── Room Booking (docs/modules/room_booking_module_plan.md §7) ───────────────
+// A separately purchasable module (ROOM_BOOKING) with no optional-module dependency — usable
+// with or without Wayfinding. Deliberately its own domain, not a reuse of Schedule/Playlist:
+// meeting semantics, conflict rules, recurrence, and organizer privacy are unrelated to signage
+// content scheduling (§3.3).
+
+enum BookableRoomStatus {
+  ACTIVE
+  OUT_OF_SERVICE
+}
+
+enum RoomPrivacyMode {
+  SHOW_TITLE
+  SHOW_ORGANIZER
+  BUSY_ONLY
+}
+
+enum RoomCalendarProviderKey {
+  LUMINA
+  MICROSOFT_365
+  GOOGLE_WORKSPACE
+}
+
+model BookableRoom {
+  id                    String                  @id @default(cuid())
+  name                  String
+  // Server-owned normalization (trim/case-fold) for the per-tenant uniqueness check below —
+  // mirrors PoiAlias.normalizedValue's reasoning, kept as its own column rather than computed at
+  // query time so the unique index can enforce it.
+  normalizedName        String
+  locationLabel         String?
+  timezone              String
+  capacity              Int?
+  amenities             String[]                @default([])
+  status                BookableRoomStatus      @default(ACTIVE)
+  privacyMode           RoomPrivacyMode         @default(BUSY_ONLY)
+  providerKey           RoomCalendarProviderKey @default(LUMINA)
+  externalResourceId    String?
+  externalResourceEmail String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  calendarConnectionId String?
+  calendarConnection   RoomCalendarConnection? @relation(fields: [calendarConnectionId], references: [id], onDelete: SetNull)
+
+  // Optional cross-module link (§7.1) — enables a future "where is Meeting Room A?" AI Wayfinding
+  // answer once both modules are purchased. Never required: a tenant without Wayfinding leaves
+  // this null and Room Booking remains fully usable. The service must verify the POI belongs to
+  // the same organization before allowing the link.
+  wayfindingPoiId String?
+  wayfindingPoi   Poi?    @relation(fields: [wayfindingPoiId], references: [id], onDelete: SetNull)
+
+  reservations RoomReservation[]
+  displays     RoomDisplayBinding[]
+
+  @@unique([organizationId, normalizedName])
+  @@index([organizationId, status])
+  @@index([calendarConnectionId])
+}
+
+// At most one room per screen; a room may drive multiple screens (§7.2).
+model RoomDisplayBinding {
+  id                           String   @id @default(cuid())
+  quickBookingEnabled          Boolean  @default(false)
+  quickBookingDurationsMinutes Int[]    @default([15, 30, 60])
+  startingSoonMinutes          Int      @default(10)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  screenId String @unique
+  screen   Screen @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  roomId String
+  room   BookableRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+}
+
+enum RoomReservationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+enum RoomReservationOrigin {
+  DASHBOARD
+  KIOSK
+  EXTERNAL_SYNC
+}
+
+// Native (LUMINA) confirmed reservations get atomic non-overlap protection via a PostgreSQL
+// exclusion constraint added in a follow-up custom migration (§7.3) — Prisma schema syntax
+// cannot express `EXCLUDE USING gist`, so this model only declares the columns/indexes; see that
+// migration's own comment for the actual constraint SQL and scope.
+model RoomReservation {
+  id                   String                  @id @default(cuid())
+  title                String?
+  organizerDisplayName String?
+  // Genuine timestamptz, not this schema's usual naive-timestamp default (§3.8: "persist
+  // reservation instants in UTC") — required for tstzrange() below to be IMMUTABLE; casting a
+  // naive timestamp to timestamptz depends on the session TimeZone setting and Postgres refuses
+  // to build a gist index/exclusion-constraint on a non-immutable expression.
+  startsAt DateTime @db.Timestamptz
+  endsAt   DateTime @db.Timestamptz
+  status               RoomReservationStatus   @default(CONFIRMED)
+  providerKey          RoomCalendarProviderKey
+  origin               RoomReservationOrigin
+  externalEventId      String?
+  // Connection-scoped stable id for an external event (`<connectionId>:<externalEventId>`), set
+  // only for externally-sourced rows — prevents duplicate provider projections. Deliberately not
+  // the sole reconnect/reconciliation dedup key (it changes if the connection is replaced); see
+  // externalICalUid below and the provider integration's own reconciliation logic.
+  providerExternalKey String? @unique
+  // Provider-stable event identity that survives a RoomCalendarConnection reconnect (a new
+  // connectionId) — reconciliation must key on this first, falling back to providerExternalKey
+  // only when it's unavailable.
+  externalICalUid   String?
+  externalEtag      String?
+  providerUpdatedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  roomId String
+  room   BookableRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  createdByUserId String?
+  createdByUser   User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([roomId, startsAt, endsAt])
+  @@index([roomId, providerKey])
+  @@index([externalICalUid])
+}
+
+// Created alongside the core (rather than deferred to the connector milestone) so the core
+// migration and the connector migration never fight over the same table — the model exists from
+// the start, but no row is ever created until a connector is actually connected.
+model RoomCalendarConnection {
+  id                    String                  @id @default(cuid())
+  providerKey           RoomCalendarProviderKey
+  displayName           String
+  status                String
+  // AES-256-GCM ciphertext (see RoomBookingEncryptionService) — never returned from any API
+  // response, log, audit-metadata payload, or health endpoint.
+  encryptedCredential   Bytes?
+  externalTenantId      String?
+  lastSuccessfulSyncAt  DateTime?
+  lastErrorCode         String?
+  webhookSubscriptionId String?
+  webhookExpiresAt      DateTime?
+  syncCursor            String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  rooms BookableRoom[]
+
+  @@index([organizationId, providerKey])
 }
 
 // ─── Scheduling ───────────────────────────────────────────────────────────────

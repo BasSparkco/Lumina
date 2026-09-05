@@ -9,6 +9,7 @@ export * from './wayfinding';
 export * from './playlist-transitions';
 export * from './modules';
 export * from './wayfinding-ai';
+export * from './room-booking';
 
 // Explicit re-exports of runtime values (schemas, functions) alongside the `export *`
 // above: `export *` compiles to a dynamic re-export loop that bundlers' CJS/ESM interop
@@ -85,3 +86,35 @@ export {
   UpdateWayfindingAiScreenConfigSchema,
   TestResolveWayfindingAiSchema,
 } from './wayfinding-ai';
+export {
+  BOOKABLE_ROOM_STATUSES,
+  BookableRoomStatusSchema,
+  ROOM_PRIVACY_MODES,
+  RoomPrivacyModeSchema,
+  ROOM_CALENDAR_PROVIDER_KEYS,
+  RoomCalendarProviderKeySchema,
+  ROOM_RESERVATION_STATUSES,
+  RoomReservationStatusSchema,
+  ROOM_RESERVATION_ORIGINS,
+  RoomReservationOriginSchema,
+  QUICK_BOOKING_DURATIONS_MINUTES,
+  MAX_QUICK_BOOKING_DURATIONS,
+  MIN_ROOM_NAME_LENGTH,
+  MAX_ROOM_NAME_LENGTH,
+  MAX_AMENITIES,
+  RoomSummarySchema,
+  CreateRoomSchema,
+  UpdateRoomSchema,
+  ReservationSchema,
+  CreateReservationSchema,
+  UpdateReservationSchema,
+  AvailabilitySchema,
+  DisplayBindingSchema,
+  UpdateDisplayBindingSchema,
+  RoomBookingPlayerReservationSchema,
+  RoomBookingPlayerPayloadSchema,
+  BookNowRequestSchema,
+  BookNowResponseSchema,
+  IntegrationHealthSchema,
+  ROOM_DISPLAY_STATE_KINDS,
+} from './room-booking';

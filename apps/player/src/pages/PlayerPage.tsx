@@ -30,6 +30,7 @@ import ZonePlayer, { type ZonePlayerHandle } from '../components/ZonePlayer';
 import WayfindingDirectoryBoard from '../components/WayfindingDirectoryBoard';
 import WayfindingKioskMap from '../components/WayfindingKioskMap';
 import WayfindingEvacuationView from '../components/WayfindingEvacuationView';
+import RoomBookingView from '../components/RoomBookingView';
 import Splash from '../components/Splash';
 import PlayerControlPanel from '../components/PlayerControlPanel';
 
@@ -59,6 +60,7 @@ type PlayerCommand =
 function computeHasContent(state: PlayerState, activePlaylist: Playlist | null): boolean {
   if (state.emergencyActive && state.emergencyPlaylist) return state.emergencyPlaylist.items.length > 0;
   if (state.emergencyActive && state.wayfinding) return true; // evacuation view always renders something
+  if (!state.emergencyActive && state.roomBooking && isModuleLeaseValid(state.moduleLeases, 'ROOM_BOOKING')) return true;
   if (state.wayfinding && isModuleLeaseValid(state.moduleLeases, 'WAYFINDING')) return state.wayfinding.pois.length > 0;
   return !!activePlaylist && activePlaylist.items.length > 0;
 }
@@ -524,6 +526,28 @@ export default function PlayerPage() {
     );
   }
 
+  // Room Booking (room_booking_module_plan.md §10.1) — unlike Wayfinding, this module has no
+  // evacuation-bypass concept at all: an active emergency suppresses it unconditionally, which is
+  // why this check comes after both emergency-active blocks above rather than relying on them to
+  // have already returned (a Room-Booking-only screen with no wayfinding data and no chosen
+  // emergency playlist would otherwise fall through to here while still mid-emergency). The API
+  // still computes and returns `roomBooking`/the ROOM_BOOKING lease during an emergency (it has no
+  // opinion on render order), so this player-side guard is the actual enforcement point.
+  if (!state.emergencyActive && state.roomBooking) {
+    if (!isModuleLeaseValid(state.moduleLeases, 'ROOM_BOOKING')) {
+      return (
+        <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
+          <Splash text="Reconnecting to restore Room Booking content…" />
+        </FullscreenContainer>
+      );
+    }
+    return (
+      <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
+        <RoomBookingView payload={state.roomBooking} />
+      </FullscreenContainer>
+    );
+  }
+
   if (state.wayfinding) {
     // Offline module lease (docs/adr/platform-modules-and-entitlements.md §8.3) — bounds how
     // long this kiosk keeps showing wayfinding content restored from local storage with no live
@@ -561,6 +585,18 @@ export default function PlayerPage() {
     return (
       <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
         <Splash text="Wayfinding kiosk location not set — configure it for this screen in the dashboard" />
+      </FullscreenContainer>
+    );
+  }
+
+  // Streaming type is ROOM_BOOKING but state.roomBooking came back null — either no room is
+  // bound to this screen yet (dashboard: Room Booking > Displays), or an active emergency is
+  // suppressing it (handled above; a screen that reaches here mid-emergency with no binding falls
+  // through to this same diagnosable message rather than the generic "no content" splash below).
+  if (state.streamingType === 'ROOM_BOOKING') {
+    return (
+      <FullscreenContainer orientation={state.orientation} aspectRatio={state.aspectRatio}>
+        <Splash text="No room assigned to this display — configure it in Room Booking > Displays" />
       </FullscreenContainer>
     );
   }

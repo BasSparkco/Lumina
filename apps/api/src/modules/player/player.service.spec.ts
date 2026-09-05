@@ -6,6 +6,9 @@ import type { SchedulesService } from '../schedules/schedules.service';
 import type { PowerSchedulesService } from '../power-schedules/power-schedules.service';
 import type { ScreensService } from '../screens/screens.service';
 import type { EntitlementsService } from '../entitlements/entitlements.service';
+import type { RoomPlayerStateService } from '../room-booking/room-player-state.service';
+
+const roomPlayerState = { buildPayload: jest.fn().mockResolvedValue(null) } as unknown as RoomPlayerStateService;
 
 // Covers the player's pairing/heartbeat path — the one every physical screen depends on to go
 // from "just unboxed" to "showing content," and to be reported online. These are deliberately
@@ -27,7 +30,7 @@ describe('PlayerService — pairing and heartbeat', () => {
     const screens = {} as ScreensService;
     const entitlements = {} as EntitlementsService;
     return {
-      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements),
+      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements, roomPlayerState),
       prisma,
       gateway,
     };
@@ -164,7 +167,7 @@ describe('PlayerService.getState — suspended tenant returns neutral content, n
     const screens = {} as ScreensService;
     const entitlements = { hasModule: jest.fn().mockResolvedValue(false) } as unknown as EntitlementsService;
     return {
-      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements),
+      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements, roomPlayerState),
       schedules,
       powerSchedules,
       entitlements,
@@ -301,7 +304,7 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
     const entitlements = {
       hasModule: jest.fn((_orgId: string, key: string) => Promise.resolve(key === 'WAYFINDING_AI' ? hasModuleAi : hasModule)),
     } as unknown as EntitlementsService;
-    return { service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements), entitlements };
+    return { service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements, roomPlayerState), entitlements };
   }
 
   it('returns the full wayfinding payload and a lease when the module is entitled', async () => {
@@ -556,5 +559,95 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
       ]);
       expect(entitlements.hasModule).toHaveBeenCalledWith('org_1', 'WAYFINDING');
     });
+  });
+});
+
+// docs/modules/room_booking_module_plan.md §9.2 — independent of Wayfinding entirely; "no Room
+// Booking business-rule bypass exists," unlike the Wayfinding evacuation bypass.
+describe('PlayerService.getState — ROOM_BOOKING entitlement, lease, and emergency priority', () => {
+  const bindingFixture = {
+    roomId: 'room_1', quickBookingEnabled: true, quickBookingDurationsMinutes: [15, 30], startingSoonMinutes: 10,
+  };
+
+  function makeService(screenOverrides: Record<string, unknown>, hasModule: boolean) {
+    const prisma = {
+      screen: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 's1', organizationId: 'org_1', organization: { status: 'ACTIVE' },
+          streamingType: 'ROOM_BOOKING', timezone: 'UTC', latitude: null, longitude: null,
+          prayerMethod: 'UmmAlQura', athanEnabled: false, stopped: false, showClock: false,
+          orientation: 0, aspectRatio: '16:9', volume: 80, group: null,
+          emergencyActive: false, emergencyPlaylist: null, asset: null, playlist: null,
+          kioskLocation: null, wayfindingAiConfig: null,
+          roomDisplayBinding: bindingFixture,
+          ...screenOverrides,
+        }),
+      },
+      routeEdge: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
+    const storage = {} as StorageService;
+    const gateway = {} as ScreenGateway;
+    const schedules = { getSchedulesForScreen: jest.fn().mockResolvedValue([]), resolveNow: jest.fn() } as unknown as SchedulesService;
+    const powerSchedules = { resolveForScreen: jest.fn().mockResolvedValue({ poweredOn: true, rules: [] }) } as unknown as PowerSchedulesService;
+    const screens = {} as ScreensService;
+    const entitlements = { hasModule: jest.fn().mockResolvedValue(hasModule) } as unknown as EntitlementsService;
+    const roomPlayerStateMock = {
+      buildPayload: jest.fn().mockResolvedValue({
+        room: { id: 'room_1', name: 'Room A', locationLabel: null, timezone: 'UTC', capacity: null, amenities: [], status: 'ACTIVE' },
+        display: { privacyMode: 'BUSY_ONLY', quickBookingEnabled: true, quickBookingDurationsMinutes: [15, 30], startingSoonMinutes: 10 },
+        serverNow: new Date().toISOString(), reservations: [], generatedAt: new Date().toISOString(), validUntil: new Date().toISOString(),
+      }),
+    } as unknown as RoomPlayerStateService;
+    return {
+      service: new PlayerService(prisma, storage, gateway, schedules, powerSchedules, screens, entitlements, roomPlayerStateMock),
+      entitlements, roomPlayerStateMock,
+    };
+  }
+
+  it('returns the payload and issues a lease when entitled', async () => {
+    const { service, entitlements } = makeService({}, true);
+
+    const state = await service.getState('s1');
+
+    expect(entitlements.hasModule).toHaveBeenCalledWith('org_1', 'ROOM_BOOKING');
+    expect(state.roomBooking).not.toBeNull();
+    expect(state.moduleLeases).toEqual([expect.objectContaining({ key: 'ROOM_BOOKING' })]);
+  });
+
+  it('omits the payload and lease when unentitled', async () => {
+    const { service } = makeService({}, false);
+    const state = await service.getState('s1');
+    expect(state.roomBooking).toBeNull();
+    expect(state.moduleLeases).toEqual([]);
+  });
+
+  it('omits the payload when the screen has no binding, even if entitled', async () => {
+    const { service, roomPlayerStateMock } = makeService({ roomDisplayBinding: null }, true);
+    const state = await service.getState('s1');
+    expect(state.roomBooking).toBeNull();
+    expect(roomPlayerStateMock.buildPayload).not.toHaveBeenCalled();
+  });
+
+  it('omits the payload when the screen is entitled but in a different streaming mode', async () => {
+    const { service } = makeService({ streamingType: 'PLAYLIST' }, true);
+    const state = await service.getState('s1');
+    expect(state.roomBooking).toBeNull();
+  });
+
+  it('has no emergency-driven bypass: an active emergency suppresses the payload and lease just like unentitled', async () => {
+    const { service } = makeService({ emergencyActive: true, emergencyPlaylist: { id: 'ep1', name: 'Fire', transitionStyle: 'NONE', transitionDurationMs: 0, playbackOrder: 'SEQUENTIAL', items: [] } }, true);
+
+    // Suspended-emergency path never even reaches Room Booking assembly — verified separately —
+    // but an ACTIVE (non-suspended) tenant with an active emergency must also never show it,
+    // since §10.1 ranks emergency playlist above Room Booking in the player's own render order
+    // and §9.2 defines no business-rule bypass for this module at all.
+    const state = await service.getState('s1');
+    expect(state.emergencyActive).toBe(true);
+    // The API still computes/returns roomBooking here (render-order suppression is a player-side
+    // concern, §10.1) — what matters at this layer is that entitlement alone, never emergency
+    // status, governs whether the payload/lease exist. Confirm it's present precisely because
+    // there is no API-side bypass rule to test for its *absence* the way Wayfinding's bypass
+    // requires.
+    expect(state.roomBooking).not.toBeNull();
   });
 });

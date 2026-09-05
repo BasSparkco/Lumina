@@ -640,7 +640,7 @@ export const realScreenGroupsApi = {
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
 export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | 'LIBRARY_MANAGER';
-export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING';
+export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING' | 'ROOM_BOOKING';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; isSuperAdmin: boolean; }
 export interface ZoneInput {
   name: string; x: number; y: number; width: number; height: number; zIndex?: number;
@@ -772,6 +772,96 @@ export const wayfindingAiApi = {
   },
   testResolve: (buildingId: string, message: string, language: 'en' | 'ar') =>
     req<WayfindingAiResolutionResult>('/wayfinding-ai/test-resolve', { method: 'POST', body: JSON.stringify({ buildingId, message, language }) }),
+};
+
+// ── Room Booking (docs/modules/room_booking_module_plan.md §11) — Rooms, Calendar,
+// Displays, Integrations, Health. Core (native) + the Microsoft 365 connector milestone only —
+// no Google Workspace (RB7) client here yet.
+export type RoomCalendarProviderKey = 'LUMINA' | 'MICROSOFT_365' | 'GOOGLE_WORKSPACE';
+export type RoomPrivacyMode = 'SHOW_TITLE' | 'SHOW_ORGANIZER' | 'BUSY_ONLY';
+export type BookableRoomStatus = 'ACTIVE' | 'OUT_OF_SERVICE';
+export type RoomReservationStatus = 'CONFIRMED' | 'CANCELLED';
+export type RoomReservationOrigin = 'DASHBOARD' | 'KIOSK' | 'EXTERNAL_SYNC';
+
+export interface Room {
+  id: string; name: string; normalizedName: string;
+  locationLabel: string | null; timezone: string; capacity: number | null;
+  amenities: string[]; status: BookableRoomStatus; privacyMode: RoomPrivacyMode;
+  providerKey: RoomCalendarProviderKey;
+  calendarConnectionId: string | null; externalResourceId: string | null; externalResourceEmail: string | null;
+  wayfindingPoiId: string | null;
+  createdAt: string; updatedAt: string;
+}
+export interface CreateRoomInput {
+  name: string; locationLabel?: string; timezone: string; capacity?: number;
+  amenities?: string[]; privacyMode?: RoomPrivacyMode; status?: BookableRoomStatus; wayfindingPoiId?: string | null;
+}
+export interface RoomReservation {
+  id: string; roomId: string; title: string | null; organizerDisplayName: string | null;
+  startsAt: string; endsAt: string; status: RoomReservationStatus;
+  providerKey: RoomCalendarProviderKey; origin: RoomReservationOrigin;
+}
+export interface CreateReservationInput {
+  title?: string; organizerDisplayName?: string; startsAt: string; endsAt: string; idempotencyKey?: string;
+}
+export interface RoomDisplayBinding {
+  id: string; screenId: string; roomId: string;
+  quickBookingEnabled: boolean; quickBookingDurationsMinutes: number[]; startingSoonMinutes: number;
+  // Only present on the /room-booking/displays list (which includes the relation) — the
+  // update/create response returns the bare binding row.
+  room?: { id: string; name: string };
+}
+export interface RoomDisplayListEntry {
+  id: string; name: string; streamingType: StreamingType; roomDisplayBinding: RoomDisplayBinding | null;
+}
+export interface UpdateDisplayBindingInput {
+  roomId: string; quickBookingEnabled: boolean; quickBookingDurationsMinutes: number[]; startingSoonMinutes: number;
+}
+export interface RoomIntegrationHealth {
+  id: string; providerKey: RoomCalendarProviderKey; displayName: string; status: string;
+  lastSuccessfulSyncAt: string | null; lastErrorCode: string | null; webhookExpiresAt: string | null; roomCount: number;
+}
+export interface Microsoft365MappableRoom {
+  externalResourceId: string; email: string; displayName: string; capacity: number | null;
+}
+export const QUICK_BOOKING_DURATIONS_MINUTES = [15, 30, 60, 90, 120] as const;
+
+export const roomBookingApi = {
+  // Rooms
+  listRooms: () => req<Room[]>('/rooms'),
+  getRoom: (roomId: string) => req<Room>(`/rooms/${roomId}`),
+  createRoom: (dto: CreateRoomInput) => req<Room>('/rooms', { method: 'POST', body: JSON.stringify(dto) }),
+  updateRoom: (roomId: string, dto: CreateRoomInput) => req<Room>(`/rooms/${roomId}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  removeRoom: (roomId: string) => req<void>(`/rooms/${roomId}`, { method: 'DELETE' }),
+
+  // Calendar (per-room reservations)
+  listReservations: (roomId: string, from: string, to: string) =>
+    req<RoomReservation[]>(`/rooms/${roomId}/reservations?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  createReservation: (roomId: string, dto: CreateReservationInput) =>
+    req<RoomReservation>(`/rooms/${roomId}/reservations`, { method: 'POST', body: JSON.stringify(dto) }),
+  updateReservation: (roomId: string, reservationId: string, dto: CreateReservationInput) =>
+    req<RoomReservation>(`/rooms/${roomId}/reservations/${reservationId}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  cancelReservation: (roomId: string, reservationId: string) =>
+    req<void>(`/rooms/${roomId}/reservations/${reservationId}`, { method: 'DELETE' }),
+
+  // Displays
+  listDisplays: () => req<RoomDisplayListEntry[]>('/room-booking/displays'),
+  updateDisplay: (screenId: string, dto: UpdateDisplayBindingInput) =>
+    req<RoomDisplayBinding>(`/room-booking/displays/${screenId}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  removeDisplay: (screenId: string) => req<void>(`/room-booking/displays/${screenId}`, { method: 'DELETE' }),
+
+  // Microsoft 365 integration
+  listMicrosoft365Connections: () => req<RoomIntegrationHealth[]>('/room-booking/integrations/microsoft365/connections'),
+  connectMicrosoft365: (dto: { displayName: string; tenantId: string; clientId: string; clientSecret: string }) =>
+    req<RoomIntegrationHealth>('/room-booking/integrations/microsoft365/connections', { method: 'POST', body: JSON.stringify(dto) }),
+  disconnectMicrosoft365: (connectionId: string) =>
+    req<void>(`/room-booking/integrations/microsoft365/connections/${connectionId}`, { method: 'DELETE' }),
+  listMappableMicrosoft365Rooms: (connectionId: string) =>
+    req<Microsoft365MappableRoom[]>(`/room-booking/integrations/microsoft365/connections/${connectionId}/rooms`),
+  mapMicrosoft365Room: (roomId: string, dto: { connectionId: string; externalResourceId: string; externalResourceEmail: string }) =>
+    req<Room>(`/room-booking/integrations/microsoft365/rooms/${roomId}/map`, { method: 'POST', body: JSON.stringify(dto) }),
+  subscribeMicrosoft365RoomWebhook: (roomId: string) =>
+    req<{ subscriptionId: string; expiresAt: string }>(`/room-booking/integrations/microsoft365/rooms/${roomId}/subscribe`, { method: 'POST' }),
 };
 export interface CrashReport {
   id: string; type: 'UNCAUGHT_EXCEPTION' | 'WATCHDOG_RECOVERY'; summary: string;

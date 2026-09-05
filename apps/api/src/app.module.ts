@@ -30,6 +30,7 @@ import { ScreenGroupsModule } from './modules/screen-groups/screen-groups.module
 import { ProofOfPlayModule } from './modules/proof-of-play/proof-of-play.module';
 import { WayfindingModule } from './modules/wayfinding/wayfinding.module';
 import { WayfindingAiModule } from './modules/wayfinding-ai/wayfinding-ai.module';
+import { RoomBookingModule } from './modules/room-booking/room-booking.module';
 import { EntitlementsModule } from './modules/entitlements/entitlements.module';
 import { PlatformTenantsModule } from './modules/platform-tenants/platform-tenants.module';
 import { KioskAnalyticsModule } from './modules/kiosk-analytics/kiosk-analytics.module';
@@ -114,6 +115,7 @@ loadDotenv({
     ProofOfPlayModule,
     WayfindingModule,
     WayfindingAiModule,
+    RoomBookingModule,
     EntitlementsModule,
     PlatformTenantsModule,
     KioskAnalyticsModule,

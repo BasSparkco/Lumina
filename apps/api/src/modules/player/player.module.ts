@@ -11,6 +11,7 @@ import { ProofOfPlayModule } from '../proof-of-play/proof-of-play.module';
 import { KioskAnalyticsModule } from '../kiosk-analytics/kiosk-analytics.module';
 import { ScreensModule } from '../screens/screens.module';
 import { EntitlementsModule } from '../entitlements/entitlements.module';
+import { RoomBookingModule } from '../room-booking/room-booking.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { EntitlementsModule } from '../entitlements/entitlements.module';
     // copies of the pairing-code regeneration logic.
     ScreensModule,
     EntitlementsModule,
+    RoomBookingModule,
   ],
   providers: [PlayerService, PlayerJwtStrategy],
   controllers: [PlayerController],

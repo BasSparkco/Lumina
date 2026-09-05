@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown, Building2, Sparkles } from 'lucide-react';
+import { Monitor, ImageIcon, List, LogOut, Tv, LayoutTemplate, PenTool, Layers, CalendarClock, PowerCircle, Users, History, BarChart3, CreditCard, Settings, PanelLeftClose, PanelLeftOpen, LayoutDashboard, Menu, X, MapPin, ChevronDown, Building2, Sparkles, DoorOpen } from 'lucide-react';
 import type { ModuleKey } from '@lumina/types';
 import { useAuth } from '@/context/AuthContext';
 import { AppSidebarProvider } from '@/context/AppSidebarContext';
@@ -51,6 +51,9 @@ const navSections: NavSection[] = [
     // so a module-gated page must stay a top-level item to go through the real capability
     // filter (docs/modules/ai_wayfinding_module_plan.md §8.1: hidden until hasModule() passes).
     { href: '/wayfinding/ai', key: 'wayfindingAi', icon: Sparkles, requiredModule: 'WAYFINDING_AI' },
+    // Same top-level-sibling reasoning as wayfindingAi above — a module-gated page must go
+    // through the real capability filter, which only applies to top-level items.
+    { href: '/room-booking', key: 'roomBooking', icon: DoorOpen, requiredModule: 'ROOM_BOOKING' },
     { href: '/schedules', key: 'schedules', icon: CalendarClock },
     { href: '/power-schedule', key: 'powerSchedule', icon: PowerCircle },
   ] },

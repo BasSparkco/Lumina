@@ -16,6 +16,7 @@
     "adminTenants": "المستأجرون",
     "wayfinding": "الإرشاد",
     "wayfindingAi": "الإرشاد الذكي",
+    "roomBooking": "حجز الغرف",
     "schedules": "الجداول",
     "powerSchedule": "طاقة الشاشة",
     "members": "الأعضاء",
@@ -237,9 +238,23 @@
       "ASSET": "أصل",
       "PLAYLIST": "قائمة تشغيل",
       "WAYFINDING": "إرشاد",
+      "ROOM_BOOKING": "حجز الغرف",
       "assetLabel": "الأصل المراد تشغيله",
       "wayfindingUnavailable": "وحدة الإرشاد غير متاحة لهذا المستأجر.",
-      "wayfindingConfigHidden": "إعدادات الإرشاد لهذه الشاشة محفوظة لكنها مخفية أثناء عدم توفر الوحدة."
+      "wayfindingConfigHidden": "إعدادات الإرشاد لهذه الشاشة محفوظة لكنها مخفية أثناء عدم توفر الوحدة.",
+      "roomBookingUnavailable": "وحدة حجز الغرف غير متاحة لهذا المستأجر.",
+      "roomBookingConfigHidden": "إعدادات حجز الغرف لهذه الشاشة محفوظة لكنها مخفية أثناء عدم توفر الوحدة."
+    },
+    "room": {
+      "title": "ربط الغرفة",
+      "noRooms": "لا توجد غرف بعد — أضف واحدة من قسم حجز الغرف أولاً.",
+      "noRoom": "— اختر غرفة —",
+      "notConfiguredWarning": "هذه الشاشة معينة لحجز الغرف لكن لم يتم تعيين غرفة بعد — سيعرض المشغل رسالة \"لا توجد غرفة\" حتى تختار واحدة أدناه.",
+      "clear": "إزالة الغرفة",
+      "quickBookingEnabled": "السماح بحجز \"احجز الآن\" الفوري على هذه الشاشة",
+      "durations": "مدد الحجز السريع",
+      "startingSoonMinutes": "نافذة \"قريبًا\" (بالدقائق)",
+      "save": "حفظ"
     },
     "kiosk": {
       "floor": "طابق الكشك",
@@ -1122,6 +1137,86 @@
     "modelCallRate": "معدل استدعاء النموذج",
     "noMatchRate": "معدل عدم التطابق",
     "avgLatency": "متوسط زمن الاستجابة"
+  },
+  "roomBooking": {
+    "title": "حجز الغرف",
+    "subtitle": "الغرف القابلة للحجز، التقاويم، شاشات الممرات، وتكاملات التقويم",
+    "rooms": {
+      "title": "الغرف",
+      "add": "إضافة غرفة",
+      "none": "لا توجد غرف بعد — أضف واحدة للبدء",
+      "edit": "تعديل",
+      "confirmDelete": "حذف هذه الغرفة؟ ستتوقف أي شاشة ممر مرتبطة بها عن عرض جدولها.",
+      "outOfService": "خارج الخدمة",
+      "provider": {
+        "LUMINA": "أصلي",
+        "MICROSOFT_365": "Microsoft 365",
+        "GOOGLE_WORKSPACE": "Google Workspace"
+      },
+      "addTitle": "إضافة غرفة",
+      "editTitle": "تعديل الغرفة",
+      "name": "الاسم",
+      "locationLabel": "تسمية الموقع",
+      "timezone": "المنطقة الزمنية",
+      "capacity": "السعة",
+      "amenities": "المرافق",
+      "amenitiesPlaceholder": "مفصولة بفواصل، مثل: جهاز عرض، سبورة بيضاء",
+      "privacyMode": "وضع الخصوصية",
+      "privacy": {
+        "BUSY_ONLY": "مشغول فقط — إخفاء العنوان والمنظّم",
+        "SHOW_TITLE": "إظهار العنوان، إخفاء المنظّم",
+        "SHOW_ORGANIZER": "إظهار العنوان والمنظّم"
+      },
+      "status": "الحالة",
+      "statusActive": "نشطة",
+      "save": "حفظ"
+    },
+    "calendar": {
+      "title": "التقويم",
+      "selectRoom": "اختر غرفة…",
+      "none": "لا توجد حجوزات لهذا اليوم",
+      "untitled": "محجوز",
+      "addReservation": "إضافة حجز",
+      "externalReadOnly": "تقويم هذه الغرفة متزامن من مزود خارجي — أنشئ الحجوزات هناك.",
+      "reservationTitle": "العنوان",
+      "organizer": "المنظّم",
+      "startsAt": "البداية",
+      "endsAt": "النهاية",
+      "save": "حفظ"
+    },
+    "displays": {
+      "title": "الشاشات",
+      "hint": "اربط غرفة بشاشة من صفحة الشاشات — هذا ملخص للقراءة فقط.",
+      "none": "لا توجد شاشات مرتبطة بغرفة بعد",
+      "quickBookingOn": "الحجز الفوري مفعّل",
+      "quickBookingOff": "الحجز الفوري معطّل"
+    },
+    "integrations": {
+      "title": "التكاملات",
+      "hint": "اربط Microsoft 365 لمزامنة تقاويم الغرف تلقائيًا. بيانات الاعتماد مشفّرة ولا تُعرض مرة أخرى.",
+      "displayName": "اسم الاتصال",
+      "tenantId": "معرّف المستأجر",
+      "clientId": "معرّف العميل",
+      "clientSecret": "سر العميل",
+      "connect": "اتصال",
+      "disconnect": "قطع الاتصال",
+      "roomsMapped": "{count, plural, =0 {لا توجد غرف مرتبطة} =1 {غرفة واحدة مرتبطة} other {# غرف مرتبطة}}",
+      "mapRooms": "ربط الغرف",
+      "noMappableRooms": "لم يتم العثور على غرف غير مرتبطة في هذا المستأجر",
+      "selectExternalRoom": "غرفة Microsoft 365…",
+      "selectLuminaRoom": "غرفة Lumina…",
+      "map": "ربط",
+      "subscribeWebhook": "الاشتراك في تحديثات التقويم"
+    },
+    "health": {
+      "title": "الحالة الصحية",
+      "none": "لا توجد تكاملات متصلة بعد",
+      "status": "الحالة",
+      "lastSync": "آخر مزامنة ناجحة",
+      "lastError": "آخر خطأ",
+      "webhookExpires": "انتهاء صلاحية الاشتراك",
+      "never": "أبدًا"
+    }
   },
   "schedules": {
     "title": "الجداول",

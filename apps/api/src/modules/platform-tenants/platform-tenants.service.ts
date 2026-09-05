@@ -162,6 +162,21 @@ export class PlatformTenantsService {
       }
     }
 
+    // docs/modules/room_booking_module_plan.md §12 — reload every screen currently in
+    // ROOM_BOOKING mode, same pattern as the WAYFINDING case above. Unlike the AI case, this
+    // isn't further scoped to "has a display binding" — an entitlement change is what makes the
+    // mode itself renderable/not, so even an unbound ROOM_BOOKING screen (showing the neutral
+    // "no binding" state) should re-fetch and reflect the new entitlement immediately.
+    if (assignments.some((a) => a.key === 'ROOM_BOOKING')) {
+      const screens = await this.prisma.screen.findMany({
+        where: { organizationId: tenantId, streamingType: 'ROOM_BOOKING' },
+        select: { id: true },
+      });
+      for (const screen of screens) {
+        this.gateway.sendToScreen(screen.id, { type: 'reload' });
+      }
+    }
+
     return result;
   }
 
