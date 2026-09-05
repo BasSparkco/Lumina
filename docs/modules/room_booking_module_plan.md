@@ -5,7 +5,7 @@
 **Reviewed baseline:** `bdee2b839449c86d5d98000dfb9e55e67cc0d059` on `main` (2026-09-05)  
 **Repository planning baseline:** commit P `fe643d22d1f280e31b2ccdbe3502aeb9138e3beb` — reviewed and approved  
 **Foundation:** `platform-modules-foundation-v1`; Platform Modules and Tenant Entitlements Phases A/B are complete  
-**Required underlying AI implementation commit:** `<record verified AI implementation commit C during its docs handoff>`  
+**Required underlying AI implementation commit:** commit C `0caf1e68520867e8b3b3cd583b1697f16674fcd1` — verified and merged to `main`  
 **Required branch baseline:** docs-only handoff commit D on verified post-AI `main`; record D's full hash in the Room Booking execution/PR log before RB1  
 **Commercial module key:** `ROOM_BOOKING`  
 **Optional module dependency:** None

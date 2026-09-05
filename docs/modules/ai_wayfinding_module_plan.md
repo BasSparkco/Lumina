@@ -699,46 +699,46 @@ Release gates:
 
 ### Milestone AI1 — Domain and provider boundary
 
-- [ ] Add shared types and Zod schemas.
-- [ ] Add database models and migration.
-- [ ] Add provider interface and mocked provider tests.
-- [ ] Add environment validation and safe defaults.
-- [ ] Add deterministic name/alias resolver.
+- [x] Add shared types and Zod schemas. (`packages/types/src/wayfinding-ai.ts`)
+- [x] Add database models and migration. (`WayfindingAiScreenConfig`, `PoiAlias`, `WayfindingAiUsageLog`; one additive migration, no changes to existing tables)
+- [x] Add provider interface and mocked provider tests. (`providers/wayfinding-ai-provider.ts`; 6 + 19 tests mocking the interface, no external API credits spent)
+- [x] Add environment validation and safe defaults. (`env.validation.ts`; boots cleanly with `AI_WAYFINDING_API_KEY` unset via `NullWayfindingAiProvider`)
+- [x] Add deterministic name/alias resolver. (`DestinationResolverService.findExactMatch()`/`normalize()`)
 
 ### Milestone AI2 — Secure resolution API
 
-- [ ] Add dashboard configuration/test endpoints.
-- [ ] Add player resolution endpoint.
-- [ ] Add entitlement, tenant, screen, and building checks.
-- [ ] Add OpenAI adapter with strict structured output.
-- [ ] Add timeouts, throttling, quota, and usage logs.
+- [x] Add dashboard configuration/test endpoints.
+- [x] Add player resolution endpoint. (`POST /v1/player/wayfinding-ai/resolve`)
+- [x] Add entitlement, tenant, screen, and building checks.
+- [x] Add OpenAI adapter with strict structured output. (Responses API, `text.format: json_schema, strict: true`)
+- [x] Add timeouts, throttling, quota, and usage logs. (per-screen/per-tenant daily quota counted from `WayfindingAiUsageLog`; `@Throttle` burst guards)
 
 ### Milestone AI3 — Dashboard experience
 
-- [ ] Add dependency-gated navigation and route.
-- [ ] Add eligible-screen configuration.
-- [ ] Add alias management.
-- [ ] Add test console and usage summary.
-- [ ] Add English/Arabic translations.
+- [x] Add dependency-gated navigation and route. (`/wayfinding/ai`, hidden until `hasModule('WAYFINDING_AI')`)
+- [x] Add eligible-screen configuration.
+- [x] Add alias management. (endpoints added beyond §7.1's list, since §8.2 requires the UI section: `GET/POST /wayfinding-ai/pois/:poiId/aliases`, `DELETE /wayfinding-ai/aliases/:aliasId`)
+- [x] Add test console and usage summary.
+- [x] Add English/Arabic translations.
 
 ### Milestone AI4 — Player integration
 
-- [ ] Add player-state AI config and module lease.
-- [ ] Add the assistant overlay.
-- [ ] Unify Directory/AI destination selection.
-- [ ] Add online failure and offline fallback behavior.
-- [ ] Preserve emergency priority and idle reset.
+- [x] Add player-state AI config and module lease.
+- [x] Add the assistant overlay. (`WayfindingAiAssistant.tsx`)
+- [x] Unify Directory/AI destination selection. (both call `WayfindingKioskMap`'s `selectFromDirectory`)
+- [x] Add online failure and offline fallback behavior.
+- [x] Preserve emergency priority and idle reset. (gated on `!screen.emergencyActive`, broader than just the evacuation-bypass case — see ADR-equivalent note in the implementation commit)
 
 ### Milestone AI5 — Verification and handoff
 
-- [ ] Run API, dashboard, player, typecheck, lint, and committed tests.
-- [ ] Run the bilingual resolver evaluation set.
-- [ ] Run the end-to-end acceptance scenario.
-- [ ] Verify disable/re-enable preserves all AI configuration.
-- [ ] Document provider operations, quotas, privacy defaults, and rollback.
-- [ ] Create verified AI implementation commit C on `main`.
-- [ ] Record C's full hash in this plan and the Room Booking plan in following docs-only handoff commit D.
-- [ ] Record D's full hash in the Room Booking execution/PR log before its branch is created.
+- [x] Run API, dashboard, player, typecheck, lint, and committed tests. (151 API tests, 11 dashboard, 36 player script tests, all green; `next build`/`nest build`/`vite build` all succeed; live boot confirmed clean DI wiring and correct route mapping)
+- [ ] Run the bilingual resolver evaluation set. **Not run as a live corpus** — measuring accuracy on misspellings/fuzzy phrasing requires real provider calls, which unit tests must never spend credits on (§13.1). The deterministic and validation-boundary cases (exact match, alias match, Arabic normalization, unknown-POI rejection, closed/relocated handling) are covered by `destination-resolver.service.spec.ts` instead. Flagged as a deferred risk — run this against a real provider key before general availability.
+- [ ] Run the end-to-end acceptance scenario. **Not run as a live two-tenant browser walkthrough** — no live environment in this session. Automated tests cover org isolation (org-scoped queries + rejection tests), entitlement gating, evacuation suppression, and config-preservation-by-construction (no delete path exists for AI config/aliases/usage on disable). Flagged as a deferred risk, same disclosure pattern as the shared preflight's PF4.
+- [x] Verify disable/re-enable preserves all AI configuration. (by construction: `updateScreenConfig` only ever upserts; no code path deletes `WayfindingAiScreenConfig`, `PoiAlias`, or `WayfindingAiUsageLog` rows on entitlement change)
+- [ ] Document provider operations, quotas, privacy defaults, and rollback. **Not written as a separate ops document** — quotas/privacy defaults are documented inline in `env.validation.ts` and this plan; a dedicated runbook was not produced in this pass.
+- [x] Create verified AI implementation commit C on `main`. (`0caf1e68520867e8b3b3cd583b1697f16674fcd1`)
+- [x] Record C's full hash in this plan and the Room Booking plan in following docs-only handoff commit D.
+- [ ] Record D's full hash in the Room Booking execution/PR log before its branch is created. (pending — Room Booking has not started)
 
 ---
 
