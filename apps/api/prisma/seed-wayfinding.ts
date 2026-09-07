@@ -191,6 +191,7 @@ async function main() {
     const asset = await uploadFloorPlan(org.id, floorDef.file, `${BUILDING_NAME} — ${floorDef.label}`);
     const floor = await prisma.floor.create({
       data: {
+        organizationId: org.id,
         level: floorDef.level,
         label: floorDef.label,
         buildingId: building.id,
@@ -204,6 +205,7 @@ async function main() {
       const category = categoryByLabel.get(poi.category)!;
       await prisma.poi.create({
         data: {
+          organizationId: org.id,
           name: poi.name,
           nameAr: poi.nameAr,
           x: poi.x,
@@ -218,7 +220,7 @@ async function main() {
     console.log(`    Added ${floorDef.pois.length} POIs`);
 
     const createdNodes = await Promise.all(
-      NODES.map((n) => prisma.routeNode.create({ data: { x: n.x, y: n.y, label: n.label ?? null, floorId: floor.id } })),
+      NODES.map((n) => prisma.routeNode.create({ data: { organizationId: org.id, x: n.x, y: n.y, label: n.label ?? null, floorId: floor.id } })),
     );
     createdNodes.forEach((n, i) => nodeIdByLevelKey.set(`${floorDef.level}:${NODES[i]!.key}`, n.id));
 
@@ -227,6 +229,7 @@ async function main() {
       const toDef = NODES.find((n) => n.key === edge.to)!;
       await prisma.routeEdge.create({
         data: {
+          organizationId: org.id,
           type: edge.type ?? 'WALK',
           weight: dist(fromDef, toDef),
           fromNodeId: nodeIdByLevelKey.get(`${floorDef.level}:${edge.from}`)!,
@@ -244,6 +247,7 @@ async function main() {
     const upper = levels[i + 1];
     await prisma.routeEdge.create({
       data: {
+        organizationId: org.id,
         type: 'ELEVATOR',
         weight: 15,
         fromNodeId: nodeIdByLevelKey.get(`${lower}:elevator`)!,
@@ -252,6 +256,7 @@ async function main() {
     });
     await prisma.routeEdge.create({
       data: {
+        organizationId: org.id,
         type: 'STAIRS',
         weight: 20,
         fromNodeId: nodeIdByLevelKey.get(`${lower}:stairs`)!,
@@ -269,7 +274,7 @@ async function main() {
     await prisma.kioskLocation.upsert({
       where: { screenId: lobbyScreen.id },
       update: { x: 50, y: 95, floorId: groundFloorId },
-      create: { screenId: lobbyScreen.id, x: 50, y: 95, floorId: groundFloorId },
+      create: { organizationId: org.id, screenId: lobbyScreen.id, x: 50, y: 95, floorId: groundFloorId },
     });
     await prisma.screen.update({ where: { id: lobbyScreen.id }, data: { streamingType: 'WAYFINDING' } });
     console.log(`Set "${lobbyScreen.name}" as a wayfinding kiosk at the ground-floor entrance`);

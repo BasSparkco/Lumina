@@ -90,8 +90,7 @@
       "OWNER": "مالك",
       "ADMIN": "مسؤول",
       "EDITOR": "محرر",
-      "VIEWER": "مشاهد",
-      "LIBRARY_MANAGER": "مدير المكتبة"
+      "VIEWER": "مشاهد"
     },
     "approvalStatus": {
       "DRAFT": "مسودة",
@@ -1341,7 +1340,9 @@
     "copyLink": "نسخ الرابط",
     "removeConfirm": "هل تريد إزالة {name}؟",
     "ownerCannotBeRemoved": "لا يمكن إزالة المالك",
-    "removeMember": "إزالة العضو"
+    "removeMember": "إزالة العضو",
+    "revokeInvite": "إلغاء الدعوة",
+    "revokeConfirm": "هل تريد إلغاء الدعوة المرسلة إلى {email}؟"
   },
   "adminTenants": {
     "title": "المستأجرون",
@@ -1386,7 +1387,35 @@
       "WAYFINDING_AI": "الإرشاد الذكي",
       "ROOM_BOOKING": "حجز القاعات",
       "INDOOR_POSITIONING": "تحديد الموقع الداخلي"
-    }
+    },
+    "suspendReasonPrompt": "سبب تعليق {name} (يظهر في سجل تدقيق المنصة):",
+    "suspendReasonRequired": "السبب مطلوب لتعليق المستأجر.",
+    "suspensionReason": "سبب التعليق",
+    "owner": "المالك",
+    "noOwner": "لا يوجد مالك بعد",
+    "editName": "تعديل الاسم",
+    "tenantNamePrompt": "الاسم الجديد لهذا المستأجر:",
+    "membersSection": "الأعضاء",
+    "invitesSection": "الدعوات المعلّقة",
+    "role": "الدور",
+    "actions": "إجراءات",
+    "removeMember": "إزالة",
+    "removeMemberConfirm": "إزالة {name} من هذا المستأجر؟ لا يمكن التراجع عن هذا الإجراء.",
+    "revokeSessions": "إلغاء الجلسات",
+    "revokeSessionsConfirm": "إلغاء جميع جلسات {name}؟ سيتم تسجيل خروجهم فورًا.",
+    "revokeAllSessions": "إلغاء كل الجلسات",
+    "revokeAllSessionsConfirm": "إلغاء كل الجلسات النشطة لجميع أعضاء هذا المستأجر؟ سيتم تسجيل خروج الجميع فورًا.",
+    "revokeInvite": "إلغاء",
+    "revokeInviteConfirm": "إلغاء الدعوة المعلّقة إلى {email}؟",
+    "noMembers": "لا يوجد أعضاء بعد.",
+    "noInvites": "لا توجد دعوات معلّقة.",
+    "auditSection": "تدقيق المنصة",
+    "noAuditEntries": "لا توجد إجراءات منصة مسجّلة لهذا المستأجر بعد.",
+    "auditAction": "الإجراء",
+    "auditActor": "الفاعل",
+    "auditWhen": "الوقت",
+    "auditReason": "السبب",
+    "platformSuperAdmin": "مسؤول المنصة الأعلى"
   },
   "auditLog": {
     "title": "سجل التدقيق",

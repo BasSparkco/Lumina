@@ -2,6 +2,8 @@ import { ConflictException, ForbiddenException, Injectable, UnauthorizedExceptio
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { normalizeEmail } from '../../common/normalize-email';
+import { AuthErrorCode } from '../../common/auth-error-codes';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 
@@ -26,7 +28,8 @@ export class AuthService {
       throw new ForbiddenException('Self-registration is disabled');
     }
 
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const normalizedEmail = normalizeEmail(dto.email);
+    const existing = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) throw new ConflictException('Email already in use');
 
     const slug = dto.orgName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
@@ -37,7 +40,7 @@ export class AuthService {
       const org = await tx.organization.create({ data: { name: dto.orgName, slug } });
       return tx.user.create({
         data: {
-          email: dto.email,
+          email: normalizedEmail,
           passwordHash: await hash(dto.password, 12),
           name: dto.name,
           role: 'OWNER',
@@ -46,12 +49,12 @@ export class AuthService {
       });
     });
 
-    return this.buildTokenResponse(user.id, user.organizationId, user.role, user.name, user.email, false);
+    return this.buildTokenResponse(user.id, user.organizationId, user.role, user.name, user.email, false, user.authVersion);
   }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { email: normalizeEmail(dto.email) },
       include: { organization: { select: { status: true } } },
     });
     if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -62,7 +65,10 @@ export class AuthService {
     // Checked after the password so a suspended tenant's login attempt doesn't leak whether the
     // credentials themselves were correct.
     if (user.organization.status === 'SUSPENDED') {
-      throw new UnauthorizedException('This organization has been suspended');
+      throw new UnauthorizedException({
+        message: 'This organization has been suspended',
+        code: AuthErrorCode.ORG_SUSPENDED,
+      });
     }
 
     return this.buildTokenResponse(
@@ -72,6 +78,7 @@ export class AuthService {
       user.name,
       user.email,
       user.isSuperAdmin,
+      user.authVersion,
     );
   }
 
@@ -98,8 +105,9 @@ export class AuthService {
     name: string,
     email: string,
     isSuperAdmin: boolean,
+    authVersion: number,
   ) {
-    const token = this.jwt.sign({ sub: userId, orgId, role, isSuperAdmin });
+    const token = this.jwt.sign({ sub: userId, orgId, role, isSuperAdmin, authVersion });
     return { token, user: { id: userId, email, name, role, orgId, isSuperAdmin } };
   }
 }

@@ -117,7 +117,7 @@ const PRESET_ZONES: Record<PresetKey, ZoneInput[]> = {
 export const ZONE_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 const ZONE_TYPE_BADGE: Record<ZoneType, string> = {
-  MEDIA: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300',
+  MEDIA: 'bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]',
   PRAYER: 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300',
   WEATHER: 'bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300',
   CURRENCY: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300',
@@ -523,13 +523,13 @@ export function LayoutsSection(props: LayoutsSectionProps) {
       {mode === 'list' && (
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+            <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+            <p className="mt-1 text-sm text-[var(--deck-text-mid)]">{t('subtitle')}</p>
           </div>
           {canEditContent && (
             <button
               onClick={() => router.push(`/${locale}/designer?type=layout`)}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="flex items-center gap-2 rounded-lg bg-[var(--deck-accent)] px-4 py-2 text-sm font-medium text-white "
             >
               <Plus className="h-4 w-4" /> {t('newLayout')}
             </button>
@@ -542,16 +542,16 @@ export function LayoutsSection(props: LayoutsSectionProps) {
           onClick={() =>
             guardNavigation(tn('unsavedChangesConfirm'), () => router.push(`/${locale}/templates`))
           }
-          className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="mb-4 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
         >
           &larr; {tn('templates')}
         </button>
       )}
 
-      {mode === 'edit' && isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {mode === 'edit' && isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {mode === 'edit' && !isLoading && !editing && targetId !== 'new' && (
-        <div className="py-16 text-center text-gray-400">
+        <div className="py-16 text-center text-[var(--deck-text-low)]">
           <LayoutTemplate className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{t('notFound')}</p>
         </div>
@@ -559,14 +559,14 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
       {/* Editor panel */}
       {editing && canEditContent && (
-        <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm min-[1440px]:pe-72 dark:border-gray-800 dark:bg-gray-900">
+        <div className="mb-8 rounded-xl border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-6 shadow-sm min-[1440px]:pe-72">
           <div className="mb-5 flex items-center justify-between">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               onFocus={captureForHistory}
               onBlur={commitCaptured}
-              className="w-64 border-b border-transparent bg-transparent text-lg font-semibold text-gray-900 hover:border-gray-300 focus:border-indigo-500 focus:outline-none dark:text-gray-100 dark:hover:border-gray-600"
+              className="w-64 border-b border-transparent bg-transparent text-lg font-semibold text-[var(--deck-text-hi)] hover:border-[var(--deck-glass-border)] focus:border-[var(--deck-accent)] focus:outline-none"
               placeholder={t('layoutName')}
             />
             <div className="flex flex-wrap gap-2">
@@ -574,7 +574,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                 <button
                   key={preset}
                   onClick={() => commit(() => setZones(PRESET_ZONES[preset].map(withLocalId)))}
-                  className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+                  className="rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
                 >
                   {t(`presets.${preset}`)}
                 </button>
@@ -584,12 +584,12 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
           {/* Save/cancel sit above the canvas (not just below the zone cards) so they're
               reachable without scrolling past the whole editor on tall layouts. */}
-          <div className="mb-5 flex items-center justify-end gap-2 border-b border-gray-100 pb-4 dark:border-gray-800">
+          <div className="mb-5 flex items-center justify-end gap-2 border-b border-[var(--deck-glass-border-soft)] pb-4">
             <button
               onClick={undo}
               disabled={!canUndo}
               title={`${t('undo')} (Ctrl+Z)`}
-              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+              className="rounded-lg border border-[var(--deck-glass-border)] p-2 text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-30"
             >
               <Undo2 className="h-4 w-4" />
             </button>
@@ -597,7 +597,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
               onClick={redo}
               disabled={!canRedo}
               title={`${t('redo')} (Ctrl+Shift+Z)`}
-              className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+              className="me-auto rounded-lg border border-[var(--deck-glass-border)] p-2 text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-30"
             >
               <Redo2 className="h-4 w-4" />
             </button>
@@ -605,10 +605,10 @@ export function LayoutsSection(props: LayoutsSectionProps) {
               onClick={() => setLayersPanelOpen((v) => !v)}
               title={tc('layers')}
               aria-pressed={layersPanelOpen}
-              className={`rounded-lg border p-2 hover:bg-gray-50 dark:hover:bg-gray-800 ${
+              className={`rounded-lg border p-2 hover:bg-[var(--deck-glass-fill-strong)] ${
                 layersPanelOpen
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
-                  : 'border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400'
+                  ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                  : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'
               }`}
             >
               <Layers className="h-4 w-4" />
@@ -617,21 +617,21 @@ export function LayoutsSection(props: LayoutsSectionProps) {
               onClick={() => saveAsAssetMut.mutate()}
               disabled={zones.length === 0 || saveAsAssetMut.isPending}
               title={t('saveAsAssetHint')}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="flex items-center gap-2 rounded-lg border border-[var(--deck-glass-border)] px-4 py-2 text-sm text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50"
             >
               <ImageDown className="h-4 w-4" />{' '}
               {saveAsAssetMut.isPending ? t('savingAsset') : t('saveAsAsset')}
             </button>
             <button
               onClick={() => router.push(`/${locale}/templates`)}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="rounded-lg border border-[var(--deck-glass-border)] px-4 py-2 text-sm text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
             >
               {tc('cancel')}
             </button>
             <button
               onClick={() => (editing === 'new' ? createMut.mutate() : updateMut.mutate())}
               disabled={!name.trim() || zones.length === 0 || saving}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-[var(--deck-accent)] px-4 py-2 text-sm text-white  disabled:opacity-50"
             >
               <Check className="h-4 w-4" /> {saving ? t('saving') : t('saveLayout')}
             </button>
@@ -665,12 +665,12 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                 instead of the old flat grid-of-input-rows (confusing to line up at a glance). */}
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-xs text-gray-400 dark:text-gray-500">{t('zones')}</div>
+                <div className="text-xs text-[var(--deck-text-low)]">{t('zones')}</div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setZoneCardsCollapsed((v) => !v)}
                     title={zoneCardsCollapsed ? t('expandAll') : t('collapseAll')}
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="flex items-center gap-1 text-xs text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
                   >
                     {zoneCardsCollapsed ? (
                       <ChevronsUpDown className="h-3 w-3" />
@@ -681,7 +681,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                   </button>
                   <button
                     onClick={() => addZoneOfType('MEDIA')}
-                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                    className="flex items-center gap-1 text-xs text-[var(--deck-accent)] hover:text-[var(--deck-accent)]"
                   >
                     <Plus className="h-3 w-3" /> {t('addZone')}
                   </button>
@@ -698,10 +698,10 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                       key={key}
                       id={`layout-zone-card-${key}`}
                       onClick={() => setSelectedZoneId(key)}
-                      className={`flex cursor-pointer flex-col gap-2.5 rounded-xl border bg-white p-3 transition-colors dark:bg-gray-900 ${
+                      className={`flex cursor-pointer flex-col gap-2.5 rounded-xl border bg-[var(--deck-glass-fill-strong)] p-3 transition-colors ${
                         isSelected
-                          ? 'border-indigo-500 bg-indigo-50/50 ring-1 ring-indigo-500 dark:bg-indigo-950/20'
-                          : 'border-gray-200 hover:border-gray-300 dark:border-gray-800 dark:hover:border-gray-600'
+                          ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)]/50 ring-1 ring-[var(--deck-accent)]'
+                          : 'border-[var(--deck-glass-border)] hover:border-[var(--deck-glass-border)]'
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -714,11 +714,11 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                           onChange={(e) => updateZone(i, { name: e.target.value })}
                           onFocus={captureForHistory}
                           onBlur={commitCaptured}
-                          className="min-w-0 flex-1 rounded border border-transparent px-1.5 py-1 text-sm font-medium hover:border-gray-200 focus:border-indigo-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-700"
+                          className="min-w-0 flex-1 rounded border border-transparent px-1.5 py-1 text-sm font-medium hover:border-[var(--deck-glass-border)] focus:border-[var(--deck-accent)] focus:outline-none"
                           placeholder={tc('name')}
                         />
                         <label
-                          className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500"
+                          className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-[var(--deck-text-low)]"
                           title={t('editableHint')}
                         >
                           <input
@@ -739,7 +739,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                             e.stopPropagation();
                             commit(() => setZones((prev) => prev.filter((_, idx) => idx !== i)));
                           }}
-                          className="shrink-0 text-gray-400 hover:text-red-500 dark:text-gray-500"
+                          className="shrink-0 text-[var(--deck-text-low)] hover:text-red-500"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -747,7 +747,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
                       <div className="grid grid-cols-2 gap-1.5">
                         <div>
-                          <label className="mb-1 block text-xs text-gray-400 dark:text-gray-500">
+                          <label className="mb-1 block text-xs text-[var(--deck-text-low)]">
                             {tc('type')}
                           </label>
                           <select
@@ -760,7 +760,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                 }),
                               )
                             }
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                            className="w-full rounded-lg border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                           >
                             {/* Keep an existing PRAYER zone's own option visible even with the feature
                               off, so its <select> doesn't silently show a value with no matching
@@ -776,7 +776,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs text-gray-400 dark:text-gray-500">
+                          <label className="mb-1 block text-xs text-[var(--deck-text-low)]">
                             {t('shape')}
                           </label>
                           <select
@@ -786,7 +786,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                 updateZone(i, { shape: e.target.value as ThemeElementShape }),
                               )
                             }
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                            className="w-full rounded-lg border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                           >
                             {ZONE_SHAPES.map((s) => (
                               <option key={s} value={s}>
@@ -801,7 +801,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                         {(['x', 'y', 'width', 'height'] as const).map((field) => (
                           <div key={field}>
                             <label
-                              className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500"
+                              className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]"
                               title={
                                 field === 'x'
                                   ? t('zoneXTitle')
@@ -830,13 +830,13 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                               }
                               onFocus={captureForHistory}
                               onBlur={commitCaptured}
-                              className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                              className="w-full rounded border border-[var(--deck-glass-border)] px-1.5 py-1 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                             />
                           </div>
                         ))}
                         <div>
                           <label
-                            className="mb-0.5 flex items-center gap-0.5 text-[10px] text-gray-400 dark:text-gray-500"
+                            className="mb-0.5 flex items-center gap-0.5 text-[10px] text-[var(--deck-text-low)]"
                             title={t('zoneLayerTitle')}
                           >
                             <Layers className="h-2.5 w-2.5" /> {t('layer.label')}
@@ -849,12 +849,12 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                             }
                             onFocus={captureForHistory}
                             onBlur={commitCaptured}
-                            className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                            className="w-full rounded border border-[var(--deck-glass-border)] px-1.5 py-1 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                           />
                         </div>
                         <div>
                           <label
-                            className="mb-0.5 flex items-center gap-0.5 text-[10px] text-gray-400 dark:text-gray-500"
+                            className="mb-0.5 flex items-center gap-0.5 text-[10px] text-[var(--deck-text-low)]"
                             title={t('zoneRotationTitle')}
                           >
                             <RotateCw className="h-2.5 w-2.5" /> {t('zoneRotation')}
@@ -869,7 +869,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                             }
                             onFocus={captureForHistory}
                             onBlur={commitCaptured}
-                            className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                            className="w-full rounded border border-[var(--deck-glass-border)] px-1.5 py-1 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                           />
                         </div>
                       </div>
@@ -885,7 +885,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                           const assetMode = z.assetId != null || assetModeZones.has(key);
                           return (
                             <div>
-                              <label className="mb-1 block text-xs text-gray-400 dark:text-gray-500">
+                              <label className="mb-1 block text-xs text-[var(--deck-text-low)]">
                                 {t('mediaSource.label')}
                               </label>
                               <div className="mb-1.5 grid grid-cols-2 gap-1">
@@ -900,7 +900,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                       return next;
                                     });
                                   }}
-                                  className={`rounded border py-1 text-xs font-medium ${!assetMode ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+                                  className={`rounded border py-1 text-xs font-medium ${!assetMode ? 'border-[var(--deck-accent)] bg-[var(--deck-accent)] text-white' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}
                                 >
                                   {t('mediaSource.playlist')}
                                 </button>
@@ -912,7 +912,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                       prev.has(key) ? prev : new Set(prev).add(key),
                                     );
                                   }}
-                                  className={`rounded border py-1 text-xs font-medium ${assetMode ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'}`}
+                                  className={`rounded border py-1 text-xs font-medium ${assetMode ? 'border-[var(--deck-accent)] bg-[var(--deck-accent)] text-white' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}
                                 >
                                   {t('mediaSource.asset')}
                                 </button>
@@ -937,7 +937,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                       updateZone(i, { playlistId: e.target.value || undefined }),
                                     )
                                   }
-                                  className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded-lg border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                                 >
                                   <option value="">{t('noPlaylist')}</option>
                                   {playlists.map((p) => (
@@ -954,7 +954,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                   <button
                                     type="button"
                                     onClick={() => setCroppingZoneKey(key)}
-                                    className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded border border-gray-200 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                    className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded border border-[var(--deck-glass-border)] py-1 text-xs font-medium text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
                                   >
                                     <Crop className="h-3 w-3" /> {tCrop('editCrop')}
                                   </button>
@@ -967,8 +967,8 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                       {/* Audio balancing across zones — default (both unset) is every zone's own
                         audio plays at the screen's volume simultaneously. */}
                       {(z.zoneType ?? 'MEDIA') === 'MEDIA' && (
-                        <div className="space-y-1.5 rounded-lg border border-gray-100 p-2 dark:border-gray-800">
-                          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                        <div className="space-y-1.5 rounded-lg border border-[var(--deck-glass-border-soft)] p-2">
+                          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--deck-text-mid)]">
                             <input
                               type="checkbox"
                               checked={!!z.audioPriority}
@@ -985,14 +985,14 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                   ),
                                 )
                               }
-                              className="h-3.5 w-3.5 accent-indigo-500"
+                              className="h-3.5 w-3.5 accent-[var(--deck-accent)]"
                             />
                             {t('audio.priority')}
                           </label>
-                          <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                          <p className="text-[10px] text-[var(--deck-text-low)]">
                             {t('audio.priorityHint')}
                           </p>
-                          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--deck-text-mid)]">
                             <input
                               type="checkbox"
                               checked={z.audioVolume != null}
@@ -1001,13 +1001,13 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                   updateZone(i, { audioVolume: e.target.checked ? 100 : null }),
                                 )
                               }
-                              className="h-3.5 w-3.5 accent-indigo-500"
+                              className="h-3.5 w-3.5 accent-[var(--deck-accent)]"
                             />
                             {t('audio.customVolume')}
                           </label>
                           {z.audioVolume != null && (
                             <div className="flex items-center gap-2">
-                              <Volume2 className="h-3 w-3 shrink-0 text-gray-400" />
+                              <Volume2 className="h-3 w-3 shrink-0 text-[var(--deck-text-low)]" />
                               <input
                                 type="range"
                                 min={0}
@@ -1019,9 +1019,9 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                                 }
                                 onMouseUp={commitCaptured}
                                 onTouchEnd={commitCaptured}
-                                className="flex-1 accent-indigo-600"
+                                className="flex-1 accent-[var(--deck-accent)]"
                               />
-                              <span className="w-8 text-end text-xs text-gray-500 dark:text-gray-400">
+                              <span className="w-8 text-end text-xs text-[var(--deck-text-mid)]">
                                 {z.audioVolume}%
                               </span>
                             </div>
@@ -1171,20 +1171,20 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
       {mode === 'list' && !editing && layouts.length > 0 && (
         <div className="relative mb-5 max-w-sm">
-          <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--deck-text-low)]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={tc('search')}
-            className="w-full rounded-lg border border-gray-200 py-2 ps-8 pe-3 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="w-full rounded-lg border border-[var(--deck-glass-border)] py-2 ps-8 pe-3 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
           />
         </div>
       )}
 
-      {mode === 'list' && isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {mode === 'list' && isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {mode === 'list' && !isLoading && layouts.length === 0 && !editing && (
-        <div className="py-16 text-center text-gray-400">
+        <div className="py-16 text-center text-[var(--deck-text-low)]">
           <LayoutTemplate className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
@@ -1192,7 +1192,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
       {mode === 'list' && !isLoading && !editing && layouts.length > 0 &&
         layouts.filter((l) => l.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
-        <div className="py-16 text-center text-gray-400">
+        <div className="py-16 text-center text-[var(--deck-text-low)]">
           <Search className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{tc('noMatches')}</p>
         </div>
@@ -1205,11 +1205,11 @@ export function LayoutsSection(props: LayoutsSectionProps) {
           return (
             <div
               key={layout.id}
-              className={`rounded-xl border bg-white p-4 dark:bg-gray-900 ${isEditingThis ? 'border-indigo-400 ring-2 ring-indigo-100 dark:border-indigo-500 dark:ring-indigo-900/50' : 'border-gray-200 dark:border-gray-800'}`}
+              className={`rounded-xl border bg-[var(--deck-glass-fill-strong)] p-4 ${isEditingThis ? 'border-[var(--deck-accent)] ring-2 ring-[var(--deck-accent-soft)]' : 'border-[var(--deck-glass-border)]'}`}
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 {isEditingThis && (
-                  <span className="flex shrink-0 items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                  <span className="flex shrink-0 items-center gap-1 rounded bg-[var(--deck-accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--deck-accent)]">
                     <Pencil className="h-2.5 w-2.5" /> {t('currentlyEditing')}
                   </span>
                 )}
@@ -1224,13 +1224,13 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                       if (e.key === 'Escape') setRenamingId(null);
                     }}
                     disabled={renameMut.isPending}
-                    className="-mx-1 min-w-0 rounded border border-indigo-300 px-1 text-sm font-medium text-gray-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-indigo-700 dark:bg-gray-800 dark:text-gray-100"
+                    className="-mx-1 min-w-0 rounded border border-[var(--deck-accent)] px-1 text-sm font-medium text-[var(--deck-text-hi)] focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                   />
                 ) : (
                   <span
                     onClick={() => startRename(layout)}
                     title={canEditContent ? tc('clickToRename') : undefined}
-                    className={`truncate text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}
+                    className={`truncate text-sm font-medium text-[var(--deck-text-hi)] ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}
                   >
                     {layout.name}
                   </span>
@@ -1241,7 +1241,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                       onClick={() => duplicateMut.mutate(layout)}
                       disabled={duplicateMut.isPending}
                       title={t('duplicate')}
-                      className="p-1 text-gray-400 hover:text-indigo-600 disabled:opacity-50 dark:text-gray-500"
+                      className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] disabled:opacity-50"
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
@@ -1249,7 +1249,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                       onClick={() => {
                         if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(layout);
                       }}
-                      className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500"
+                      className="p-1 text-[var(--deck-text-low)] hover:text-red-500"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -1331,13 +1331,13 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                   return (
                     <div
                       key={z.id}
-                      className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+                      className="flex items-center gap-2 text-xs text-[var(--deck-text-mid)]"
                     >
                       <div
                         className="h-2 w-2 shrink-0 rounded-full"
                         style={{ background: ZONE_COLORS[i % ZONE_COLORS.length] }}
                       />
-                      <span className="font-medium text-gray-700 dark:text-gray-300">{z.name}</span>
+                      <span className="font-medium text-[var(--deck-text-hi)]">{z.name}</span>
                       <span
                         className={`rounded px-1 py-0.5 text-[10px] font-medium ${ZONE_TYPE_BADGE[zt]}`}
                       >
@@ -1345,10 +1345,10 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                       </span>
                       {zt === 'MEDIA' && (
                         <>
-                          <span className="text-gray-400 dark:text-gray-500">→</span>
+                          <span className="text-[var(--deck-text-low)]">→</span>
                           <span>
                             {z.playlist?.name ?? (
-                              <em className="text-gray-300 dark:text-gray-500">
+                              <em className="text-[var(--deck-text-low)]">
                                 {t('noPlaylistBadge')}
                               </em>
                             )}
@@ -1360,7 +1360,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
                 })}
               </div>
               {layout._count && (
-                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                <p className="mt-2 text-xs text-[var(--deck-text-low)]">
                   {t('playlistItemCount', { count: layout._count.playlistItems })}
                 </p>
               )}

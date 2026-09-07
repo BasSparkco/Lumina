@@ -12,13 +12,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? (exception.getResponse() as { message?: string })?.message ?? exception.message
-        : 'Internal server error';
+    const body = exception instanceof HttpException ? (exception.getResponse() as { message?: string; code?: string }) : undefined;
+    const message = body?.message ?? (exception instanceof HttpException ? exception.message : 'Internal server error');
+    // Only populated for the handful of "your session is no longer valid" exceptions that
+    // attach one (see AuthErrorCode) — undefined here for every other exception in the app,
+    // and JSON.stringify/res.json() drop undefined keys, so this changes no existing response.
+    const code = body?.code;
 
     if (status >= 500) this.logger.error(exception);
 
-    res.status(status).json({ statusCode: status, message, timestamp: new Date().toISOString() });
+    res.status(status).json({ statusCode: status, message, code, timestamp: new Date().toISOString() });
   }
 }

@@ -26,7 +26,11 @@ describe('PlaylistsService — cross-tenant item ownership', () => {
       $transaction: jest.fn(fn => (typeof fn === 'function' ? fn(prisma) : Promise.all(fn))),
       ...prismaOverrides,
     } as unknown as PrismaService;
-    const storage = { publicUrl: jest.fn((key: string) => `https://cdn.example/${key}`) } as unknown as StorageService;
+    const storage = {
+      assetUrl: jest.fn((id: string) => `https://cdn.example/assets/${id}`),
+      assetThumbnailUrl: jest.fn((id: string) => `https://cdn.example/assets/${id}/thumbnail`),
+      assetPageUrls: jest.fn(() => [] as string[]),
+    } as unknown as StorageService;
     const orgScoped = new OrgScopedService();
     const jwt = { sign: jest.fn(), verify: jest.fn() } as unknown as JwtService;
     return { service: new PlaylistsService(prisma, storage, orgScoped, jwt), prisma };

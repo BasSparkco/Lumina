@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { OrgService } from './org.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
@@ -53,6 +54,22 @@ export class OrgController {
   @Roles('OWNER', 'ADMIN')
   listInvites(@CurrentUser() user: JwtUser) {
     return this.org.listInvites(user.orgId);
+  }
+
+  @Delete('invites/:id')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('OWNER', 'ADMIN')
+  revokeInvite(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.org.revokeInvite(user.orgId, id);
+  }
+
+  // Public — the accept-invite page calls this before the visitor has authenticated. Rate-limited
+  // like other anonymous, cheap, abuse-prone routes (see player/init).
+  @Get('invite/:token')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  getInvitePreview(@Param('token') token: string) {
+    return this.org.getInvitePreview(token);
   }
 
   @Post('invite')

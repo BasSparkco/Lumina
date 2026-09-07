@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { DesignDocumentSchema, resolveElementBindings, type DesignElement, type ResolvedDesignPayload, type ResolvedElement, type ResolvedScene, type VariableMap } from '@lumina/design-schema';
 import type { PlayerAssetManifestItem, PlayerContentManifest, PlayerManifestAssetType, PlayerModuleLease, PlayerNetworkDependency, WayfindingAiPlayerConfig, RoomBookingPlayerPayload } from '@lumina/types';
@@ -80,6 +80,31 @@ export class PlayerService {
   private static readonly MAX_PLAYLIST_ITEM_DEPTH = 2;
   private readonly logger = new Logger(PlayerService.name);
 
+  // P4 task 11 (docs/tenant_isolation_and_platform_admin_plan.md) — POST /player/init's existing
+  // per-IP throttle (@Throttle on the controller route, 20/min) bounds one source's *rate* but not
+  // the *total* number of durable, unowned PairingSession rows the fleet accumulates over time
+  // from many sources, or from patient below-the-limit traffic.
+  //
+  // PAIRING_CODE_TTL_MS must match ScreensService's own copy (confirmPairing's expiry check) and
+  // apps/worker's pairing-cleanup service (the actual row deletion) — see the comment on the
+  // ScreensService constant for why this is three independent copies rather than a shared import.
+  private static readonly PAIRING_CODE_TTL_MS = 15 * 60 * 1000;
+  // Global ceiling on outstanding, not-yet-expired PairingSession rows at any moment —
+  // independent of and much higher than any single source's per-IP throttle, since this bounds
+  // *accumulated* rows regardless of how many distinct sources contributed them. PairingSession
+  // rows are never tenant resources (P5a schema task 4) — this only bounds junk-row volume, not
+  // any cross-tenant exposure.
+  private static readonly MAX_OUTSTANDING_PAIRING_CODES = 500;
+  // A second rate limit alongside the per-IP one, tracked in-process rather than per-source: caps
+  // the combined issuance rate across every source at once. In-memory (not Redis-backed) is
+  // deliberate — this deployment runs a single API container (see docker-compose.prod.yml), so a
+  // per-process counter already gives a genuine global bound; it would need to move to a shared
+  // store the day this API scales horizontally.
+  private static readonly GLOBAL_INIT_WINDOW_MS = 60 * 1000;
+  private static readonly GLOBAL_INIT_MAX = 300;
+  private globalInitWindowStart = Date.now();
+  private globalInitCountInWindow = 0;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -105,18 +130,57 @@ export class PlayerService {
   }
 
   async requestPairingCode(): Promise<{ pairingCode: string; screenId: string }> {
+    if (!this.tryAcquireGlobalInitSlot()) {
+      this.logger.warn(
+        `Global /player/init rate limit hit (${PlayerService.GLOBAL_INIT_MAX}/${PlayerService.GLOBAL_INIT_WINDOW_MS / 1000}s across all sources) — rejecting request`,
+      );
+      throw new ServiceUnavailableException('Too many pairing requests right now — try again shortly');
+    }
+
+    const outstanding = await this.prisma.pairingSession.count({
+      where: { createdAt: { gt: this.pairingCodeExpiryCutoff() } },
+    });
+    if (outstanding >= PlayerService.MAX_OUTSTANDING_PAIRING_CODES) {
+      this.logger.warn(`Outstanding pairing-session ceiling hit (${PlayerService.MAX_OUTSTANDING_PAIRING_CODES}) — rejecting /player/init request`);
+      throw new ServiceUnavailableException('Too many pending pairing requests right now — try again shortly');
+    }
+
     let code: string;
     let attempts = 0;
     do {
       code = Math.random().toString(36).substring(2, 8).toUpperCase();
       attempts++;
-    } while (attempts < 10 && (await this.prisma.screen.findUnique({ where: { pairingCode: code } })));
+      // Checked against both tables — see ScreensService.unpair's identical check for why a
+      // re-pair code on an already tenant-owned Screen shares this same keyspace.
+    } while (attempts < 10 && (
+      (await this.prisma.pairingSession.findUnique({ where: { pairingCode: code } })) ||
+      (await this.prisma.screen.findUnique({ where: { pairingCode: code } }))
+    ));
 
-    const screen = await this.prisma.screen.create({
-      data: { name: 'Unnamed Screen', pairingCode: code, paired: false },
+    const session = await this.prisma.pairingSession.create({
+      data: { pairingCode: code },
     });
 
-    return { pairingCode: code, screenId: screen.id };
+    // Field name kept as `screenId` for both the web and Flutter player clients (see
+    // docs/player_update_sop / Lumina_player) even though it now identifies a PairingSession, not
+    // a Screen, until claimed — ScreensService.confirmPairing's claim path reuses this same id
+    // value for the real Screen it creates, so neither client needs to know the difference.
+    return { pairingCode: code, screenId: session.id };
+  }
+
+  private tryAcquireGlobalInitSlot(): boolean {
+    const now = Date.now();
+    if (now - this.globalInitWindowStart >= PlayerService.GLOBAL_INIT_WINDOW_MS) {
+      this.globalInitWindowStart = now;
+      this.globalInitCountInWindow = 0;
+    }
+    if (this.globalInitCountInWindow >= PlayerService.GLOBAL_INIT_MAX) return false;
+    this.globalInitCountInWindow++;
+    return true;
+  }
+
+  private pairingCodeExpiryCutoff(): Date {
+    return new Date(Date.now() - PlayerService.PAIRING_CODE_TTL_MS);
   }
 
   async checkPairingById(screenId: string): Promise<{ paired: false } | { paired: true; token: string }> {
@@ -266,7 +330,7 @@ export class PlayerService {
         level: f.level,
         label: f.label,
         floorPlanAssetId: f.floorPlanAsset?.id ?? null,
-        floorPlanUrl: f.floorPlanAsset ? this.storage.publicUrl(f.floorPlanAsset.storageKey) : null,
+        floorPlanUrl: f.floorPlanAsset ? this.storage.assetUrl(f.floorPlanAsset.id) : null,
       })),
       pois: kioskLocation.floor.building.floors.flatMap(f => f.pois.map(p => ({
         id: p.id,
@@ -287,7 +351,7 @@ export class PlayerService {
           color: p.category.color,
         },
         iconAssetId: p.iconAsset?.id ?? null,
-        iconUrl: p.iconAsset ? this.storage.publicUrl(p.iconAsset.storageKey) : null,
+        iconUrl: p.iconAsset ? this.storage.assetUrl(p.iconAsset.id) : null,
       }))),
       // Route graph (Phase 7.3) — the whole building's nodes/edges, so the player can
       // compute a shortest path to any POI on any floor entirely on-device (offline-capable,
@@ -661,7 +725,7 @@ export class PlayerService {
           assetId: asset.id,
           binaryId: isPage ? `${asset.id}:page:${binary.ordinal}` : `${asset.id}:primary`,
           type: isPage ? 'document-page' : manifestAssetType(asset.type),
-          remoteUrl: this.storage.publicUrl(binary.storageKey),
+          remoteUrl: this.storage.assetBinaryUrl(binary.id),
           binaryVersion: `sha256-${binary.sha256.toLowerCase()}`,
           sha256: binary.sha256.toLowerCase(),
           mimeType: binary.mimeType,
@@ -833,8 +897,8 @@ export class PlayerService {
     const assetMap = new Map(assets.map(a => [a.id, {
       // TEXT assets have no real object behind storageKey (see AssetsService.createText) — skip
       // resolving a url for them, same as hydratePlaylist below.
-      url: a.type === 'TEXT' ? null : this.storage.publicUrl(a.storageKey),
-      pageUrls: a.type === 'DOCUMENT' ? this.documentPageUrls(a.storageKey, a.pageCount) : [],
+      url: a.type === 'TEXT' ? null : this.storage.assetUrl(a.id),
+      pageUrls: a.type === 'DOCUMENT' ? this.storage.assetPageUrls(a.id, a.pageCount) : [],
       textContent: a.textContent,
       textFontFamily: a.textFontFamily,
       textColor: a.textColor,
@@ -1014,14 +1078,14 @@ export class PlayerService {
           name: item.asset.name,
           type: item.asset.type,
           mimeType: item.asset.mimeType,
-          url: isText ? null : this.storage.publicUrl(item.asset.storageKey),
+          url: isText ? null : this.storage.assetUrl(item.asset.id),
           thumbnailUrl: !isText && item.asset.thumbnailKey
-            ? this.storage.publicUrl(item.asset.thumbnailKey)
+            ? this.storage.assetThumbnailUrl(item.asset.id)
             : null,
           // Per-page images for DOCUMENT assets — durationSecs above doubles as "seconds per
           // page" for this type, cycled through client-side (see ZonePlayer).
           pageUrls: item.asset.type === 'DOCUMENT'
-            ? this.documentPageUrls(item.asset.storageKey, item.asset.pageCount)
+            ? this.storage.assetPageUrls(item.asset.id, item.asset.pageCount)
             : [],
           textContent: item.asset.textContent,
           textFontFamily: item.asset.textFontFamily,
@@ -1077,7 +1141,7 @@ export class PlayerService {
       }
     }
     const assets = assetIds.size ? await this.prisma.asset.findMany({ where: { id: { in: [...assetIds] } } }) : [];
-    const urlMap = new Map(assets.map(a => [a.id, this.storage.publicUrl(a.storageKey)]));
+    const urlMap = new Map(assets.map(a => [a.id, this.storage.assetUrl(a.id)]));
 
     const scenes: ResolvedScene[] = await Promise.all(document.scenes.map(async scene => ({
       id: scene.id,
@@ -1162,13 +1226,6 @@ export class PlayerService {
     })));
   }
 
-  // Reconstructs the derived page-image keys media.processor.ts uploaded during DOCUMENT
-  // conversion (1-indexed `_p${n}.webp` siblings of storageKey) into signed/public URLs.
-  private documentPageUrls(storageKey: string, pageCount: number | null): string[] {
-    return Array.from({ length: pageCount ?? 0 }, (_, i) =>
-      this.storage.publicUrl(storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
-    );
-  }
 }
 
 function manifestAssetType(type: string): PlayerManifestAssetType {

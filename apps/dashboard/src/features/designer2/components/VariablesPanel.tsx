@@ -11,7 +11,7 @@ interface VariablesPanelProps {
 }
 
 const inputClass =
-  'w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:border-indigo-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+  'w-full rounded-md border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] px-2 py-1 text-xs text-[var(--deck-text-hi)] focus:border-[var(--deck-accent)] focus:outline-none';
 
 function commitEntries(entries: [string, string][], onCommit: VariablesPanelProps['onCommit']) {
   const nonEmpty = entries.filter(([k]) => k.trim().length > 0);
@@ -57,7 +57,7 @@ export function VariablesPanel({ variables, onCommit }: VariablesPanelProps) {
 
   return (
     <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
-      {entries.length === 0 && <div className="px-2 py-6 text-center text-xs text-gray-400 dark:text-gray-500">No variables yet</div>}
+      {entries.length === 0 && <div className="px-2 py-6 text-center text-xs text-[var(--deck-text-low)]">No variables yet</div>}
       {entries.map(([key, value]) => (
         <div key={key} className="flex items-center gap-1.5">
           <input type="text" className={inputClass} defaultValue={key} onBlur={(e) => renameKey(key, e.target.value, value)} placeholder="offer.price" />
@@ -65,13 +65,13 @@ export function VariablesPanel({ variables, onCommit }: VariablesPanelProps) {
           <button
             onClick={() => removeKey(key)}
             title="Remove"
-            className="shrink-0 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+            className="shrink-0 rounded p-1 text-[var(--deck-text-low)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}
-      <div className="flex items-center gap-1.5 border-t border-gray-100 pt-2 dark:border-gray-800">
+      <div className="flex items-center gap-1.5 border-t border-[var(--deck-glass-border-soft)] pt-2">
         <input
           type="text"
           className={inputClass}
@@ -84,12 +84,12 @@ export function VariablesPanel({ variables, onCommit }: VariablesPanelProps) {
           onClick={addVariable}
           disabled={!newKey.trim()}
           title="Add variable"
-          className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          className="shrink-0 rounded p-1 text-[var(--deck-text-low)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)] disabled:opacity-30"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
       </div>
-      <p className="pt-1 text-[11px] text-gray-400 dark:text-gray-600">
+      <p className="pt-1 text-[11px] text-[var(--deck-text-low)]">
         Reference these from an element&apos;s Dynamic value field as <code>{'{{key}}'}</code>.
       </p>
     </div>

@@ -67,12 +67,12 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
+        className="glass-popup rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <h2 className="font-semibold text-[var(--deck-text-hi)]">{title}</h2>
+          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -83,8 +83,8 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 const inputClass =
-  'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
-const labelClass = 'text-xs text-gray-500 dark:text-gray-400 block mb-1';
+  'w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]';
+const labelClass = 'text-xs text-[var(--deck-text-mid)] block mb-1';
 
 export default function WayfindingPage() {
   const qc = useQueryClient();
@@ -255,15 +255,15 @@ export default function WayfindingPage() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+          <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         {/* §8.1 — small AI settings link from the ordinary Wayfinding page when entitled;
             ordinary Wayfinding stays fully usable regardless of whether this shows. */}
         {hasModule('WAYFINDING_AI') && (
           <NextLink
             href={`/${locale}/wayfinding/ai`}
-            className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:underline"
+            className="flex items-center gap-1.5 text-sm font-medium text-[var(--deck-accent)] hover:underline"
           >
             <Sparkles className="w-4 h-4" /> {t('aiSettingsLink')}
           </NextLink>
@@ -278,10 +278,10 @@ export default function WayfindingPage() {
       )}
 
       {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm mb-4 text-gray-500 dark:text-gray-400">
+      <div className="flex items-center gap-1.5 text-sm mb-4 text-[var(--deck-text-mid)]">
         <button
           onClick={() => { setSelectedBuildingId(null); setSelectedFloorId(null); }}
-          className={`hover:text-indigo-600 dark:hover:text-indigo-400 ${!selectedBuilding ? 'font-semibold text-gray-900 dark:text-gray-100' : ''}`}
+          className={`hover:text-[var(--deck-accent)] ${!selectedBuilding ? 'font-semibold text-[var(--deck-text-hi)]' : ''}`}
         >
           {t('buildings')}
         </button>
@@ -290,7 +290,7 @@ export default function WayfindingPage() {
             <ChevronRight className="w-3.5 h-3.5" />
             <button
               onClick={() => setSelectedFloorId(null)}
-              className={`hover:text-indigo-600 dark:hover:text-indigo-400 ${!selectedFloor ? 'font-semibold text-gray-900 dark:text-gray-100' : ''}`}
+              className={`hover:text-[var(--deck-accent)] ${!selectedFloor ? 'font-semibold text-[var(--deck-text-hi)]' : ''}`}
             >
               {selectedBuilding.name}
             </button>
@@ -299,12 +299,12 @@ export default function WayfindingPage() {
         {selectedFloor && (
           <>
             <ChevronRight className="w-3.5 h-3.5" />
-            <span className="font-semibold text-gray-900 dark:text-gray-100">{selectedFloor.label}</span>
+            <span className="font-semibold text-[var(--deck-text-hi)]">{selectedFloor.label}</span>
           </>
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-gray-400">{tc('loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{tc('loading')}</p>}
 
       {!isLoading && !selectedBuilding && (
         <BuildingsList
@@ -453,14 +453,14 @@ function BuildingsList({
       {canEdit && (
         <button
           onClick={onNew}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 mb-4"
+          className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium  mb-4"
         >
           <Plus className="w-4 h-4" /> {t('newBuilding')}
         </button>
       )}
 
       {buildings.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('noBuildings')}</p>
         </div>
@@ -472,26 +472,26 @@ function BuildingsList({
             <div
               key={b.id}
               onClick={() => onSelect(b.id)}
-              className="cursor-pointer bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+              className="cursor-pointer glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-4 hover:border-[var(--deck-accent)] transition-colors"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{b.name}</span>
+                  <Building2 className="w-4 h-4 text-[var(--deck-accent)] shrink-0" />
+                  <span className="text-sm font-medium text-[var(--deck-text-hi)] truncate">{b.name}</span>
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={(e) => { e.stopPropagation(); onEdit(b); }} className="p-1 text-gray-400 hover:text-indigo-600">
+                    <button onClick={(e) => { e.stopPropagation(); onEdit(b); }} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)]">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(b); }} className="p-1 text-gray-400 hover:text-red-500">
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(b); }} className="p-1 text-[var(--deck-text-low)] hover:text-red-500">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 )}
               </div>
-              {b.address && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{b.address}</p>}
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{t('floorCount', { count: b.floors.length })}</p>
+              {b.address && <p className="text-xs text-[var(--deck-text-low)] mt-1 truncate">{b.address}</p>}
+              <p className="text-xs text-[var(--deck-text-mid)] mt-2">{t('floorCount', { count: b.floors.length })}</p>
             </div>
           ))}
         </div>
@@ -518,7 +518,7 @@ function BuildingOpsPanel({
   const activeCount = kiosks.filter((s) => s.emergencyActive).length;
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3">
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--deck-glass-border)] glass-panel px-4 py-3">
       {activeCount > 0 && (
         <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600 dark:text-red-400">
           <AlertTriangle className="w-3.5 h-3.5" />
@@ -531,7 +531,7 @@ function BuildingOpsPanel({
           disabled={evacuating || kiosks.length === 0}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 ${
             activeCount > 0
-              ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700'
+              ? 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]'
               : 'bg-red-600 text-white hover:bg-red-700'
           }`}
         >
@@ -542,7 +542,7 @@ function BuildingOpsPanel({
           onClick={onSyncScreenGroup}
           disabled={syncing}
           title={t('syncScreenGroupHint')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50"
         >
           <Users2 className="w-3.5 h-3.5" />
           {t('syncScreenGroup')}
@@ -570,42 +570,42 @@ function FloorsList({
       {canEdit && (
         <button
           onClick={onNew}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 mb-4"
+          className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium  mb-4"
         >
           <Plus className="w-4 h-4" /> {t('newFloor')}
         </button>
       )}
 
       {building.floors.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Layers className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('noFloors')}</p>
         </div>
       )}
 
       {building.floors.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] divide-y divide-[var(--deck-glass-border-soft)]">
           {building.floors.map((f) => (
             <div
               key={f.id}
               onClick={() => onSelect(f.id)}
-              className="cursor-pointer flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-800/60"
+              className="cursor-pointer flex items-center justify-between px-5 py-3.5 hover:bg-[var(--deck-glass-fill-strong)]/60"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                <Layers className="w-4 h-4 text-[var(--deck-accent)] shrink-0" />
                 <div className="min-w-0">
-                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{f.label}</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500 ms-2">
+                  <span className="text-sm font-medium text-[var(--deck-text-hi)]">{f.label}</span>
+                  <span className="text-xs text-[var(--deck-text-low)] ms-2">
                     {t('poiCount', { count: f._count?.pois ?? 0 })}
                   </span>
                 </div>
               </div>
               {canEdit && (
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={(e) => { e.stopPropagation(); onEdit(f); }} className="p-1 text-gray-400 hover:text-indigo-600">
+                  <button onClick={(e) => { e.stopPropagation(); onEdit(f); }} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)]">
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); onDelete(f); }} className="p-1 text-gray-400 hover:text-red-500">
+                  <button onClick={(e) => { e.stopPropagation(); onDelete(f); }} className="p-1 text-[var(--deck-text-low)] hover:text-red-500">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -632,9 +632,9 @@ function FloorDetail({
     <div className="space-y-6">
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('categories')}</h2>
+          <h2 className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('categories')}</h2>
           {canEdit && (
-            <button onClick={onNewCategory} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+            <button onClick={onNewCategory} className="flex items-center gap-1 text-xs text-[var(--deck-accent)] hover:text-[var(--deck-accent)] font-medium">
               <Plus className="w-3.5 h-3.5" /> {t('newCategory')}
             </button>
           )}
@@ -646,7 +646,7 @@ function FloorDetail({
               <button
                 key={c.id}
                 onClick={() => (isCustom && canEdit ? onEditCategory(c) : undefined)}
-                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border ${isCustom && canEdit ? 'cursor-pointer hover:border-indigo-300' : 'cursor-default'}`}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border ${isCustom && canEdit ? 'cursor-pointer hover:border-[var(--deck-accent)]' : 'cursor-default'}`}
                 style={{ borderColor: c.color + '55', background: c.color + '15', color: c.color }}
               >
                 <CategoryIcon name={c.icon} className="w-3.5 h-3.5" />
@@ -666,28 +666,28 @@ function FloorDetail({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('pois')}</h2>
+            <h2 className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('pois')}</h2>
             {canEdit && (
               <div className="flex items-center gap-2">
-                <button onClick={onImport} className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-indigo-600 font-medium">
+                <button onClick={onImport} className="flex items-center gap-1 text-xs text-[var(--deck-text-mid)] hover:text-[var(--deck-accent)] font-medium">
                   <Upload className="w-3.5 h-3.5" /> {t('import.button')}
                 </button>
-                <button onClick={onNewPoi} className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium">
+                <button onClick={onNewPoi} className="flex items-center gap-1 text-xs text-[var(--deck-accent)] hover:text-[var(--deck-accent)] font-medium">
                   <Plus className="w-3.5 h-3.5" /> {t('newPoi')}
                 </button>
               </div>
             )}
           </div>
 
-          {pois.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">{t('noPois')}</p>}
+          {pois.length === 0 && <p className="text-sm text-[var(--deck-text-low)] py-6 text-center">{t('noPois')}</p>}
 
           {pois.length > 0 && (
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] divide-y divide-[var(--deck-glass-border-soft)]">
               {pois.map((p) => (
                 <div key={p.id} className="flex items-center justify-between px-4 py-2.5">
                   <div className="flex items-center gap-2 min-w-0">
                     <CategoryIcon name={p.category.icon} className="w-3.5 h-3.5 shrink-0" style={{ color: p.category.color }} />
-                    <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{p.name}</span>
+                    <span className="text-sm text-[var(--deck-text-hi)] truncate">{p.name}</span>
                     {p.status !== 'OPEN' && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-medium shrink-0">
                         {t(`status.${p.status}`)}
@@ -696,10 +696,10 @@ function FloorDetail({
                   </div>
                   {canEdit && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => onEditPoi(p)} className="p-1 text-gray-400 hover:text-indigo-600">
+                      <button onClick={() => onEditPoi(p)} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)]">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => onDeletePoi(p)} className="p-1 text-gray-400 hover:text-red-500">
+                      <button onClick={() => onDeletePoi(p)} className="p-1 text-[var(--deck-text-low)] hover:text-red-500">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -711,7 +711,7 @@ function FloorDetail({
         </div>
 
         <div>
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('floorPlan')}</h2>
+          <h2 className="text-sm font-semibold text-[var(--deck-text-hi)] mb-2">{t('floorPlan')}</h2>
           <PoiMapEditor
             imageUrl={floorPlanUrl}
             pins={pois.map((p) => ({ id: p.id, x: p.x, y: p.y, color: p.category.color, label: p.name }))}
@@ -833,37 +833,37 @@ function RouteGraphSection({
     <div>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <Route className="w-4 h-4 text-indigo-600" />
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('routeGraph.title')}</h2>
-          <span className="text-xs text-gray-400 dark:text-gray-500">{t('routeGraph.nodeCount', { count: floorNodes.length })}</span>
+          <Route className="w-4 h-4 text-[var(--deck-accent)]" />
+          <h2 className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('routeGraph.title')}</h2>
+          <span className="text-xs text-[var(--deck-text-low)]">{t('routeGraph.nodeCount', { count: floorNodes.length })}</span>
         </div>
         {canEdit && (
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-[var(--deck-glass-fill-strong)] rounded-lg p-0.5">
             <button
               onClick={() => changeMode('select')}
               title={t('routeGraph.modeSelect')}
-              className={`p-1.5 rounded-md ${mode === 'select' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600' : 'text-gray-500 dark:text-gray-400'}`}
+              className={`p-1.5 rounded-md ${mode === 'select' ? 'bg-[var(--deck-glass-fill-strong)] shadow text-[var(--deck-accent)]' : 'text-[var(--deck-text-mid)]'}`}
             >
               <MousePointer2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => changeMode('addNode')}
               title={t('routeGraph.modeAddNode')}
-              className={`p-1.5 rounded-md ${mode === 'addNode' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600' : 'text-gray-500 dark:text-gray-400'}`}
+              className={`p-1.5 rounded-md ${mode === 'addNode' ? 'bg-[var(--deck-glass-fill-strong)] shadow text-[var(--deck-accent)]' : 'text-[var(--deck-text-mid)]'}`}
             >
               <CirclePlus className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => changeMode('connect')}
               title={t('routeGraph.modeConnect')}
-              className={`p-1.5 rounded-md ${mode === 'connect' ? 'bg-white dark:bg-gray-700 shadow text-indigo-600' : 'text-gray-500 dark:text-gray-400'}`}
+              className={`p-1.5 rounded-md ${mode === 'connect' ? 'bg-[var(--deck-glass-fill-strong)] shadow text-[var(--deck-accent)]' : 'text-[var(--deck-text-mid)]'}`}
             >
               <Link2 className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
       </div>
-      <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+      <p className="text-xs text-[var(--deck-text-low)] mb-3">
         {mode === 'addNode' ? t('routeGraph.addNodeHint')
           : mode === 'connect' ? (connectFromId ? t('routeGraph.connectArmedHint') : t('routeGraph.connectHint'))
           : t('routeGraph.hint')}
@@ -889,7 +889,7 @@ function RouteGraphSection({
 
         <div>
           {!selectedNode && !selectedEdge && (
-            <p className="text-sm text-gray-400 py-6 text-center">{t('routeGraph.selectNodeHint')}</p>
+            <p className="text-sm text-[var(--deck-text-low)] py-6 text-center">{t('routeGraph.selectNodeHint')}</p>
           )}
 
           {selectedNode && (
@@ -957,7 +957,7 @@ function NodeInspector({
   const [weight, setWeight] = useState(15);
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-4">
+    <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-4 space-y-4">
       <div>
         <label className={labelClass}>{t('routeGraph.nodeLabel')}</label>
         <div className="flex gap-2">
@@ -968,7 +968,7 @@ function NodeInspector({
           {canEdit && (
             <button
               onClick={() => onSaveLabel(label.trim())} disabled={saving}
-              className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 shrink-0"
+              className="px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-xs font-medium  disabled:opacity-50 shrink-0"
             >
               {tc('save')}
             </button>
@@ -977,19 +977,19 @@ function NodeInspector({
       </div>
 
       {canEdit && (
-        <div className="border-t border-gray-100 dark:border-gray-800 pt-3">
-          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">{t('routeGraph.crossFloorTitle')}</h3>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{t('routeGraph.crossFloorHint')}</p>
+        <div className="border-t border-[var(--deck-glass-border-soft)] pt-3">
+          <h3 className="text-xs font-semibold text-[var(--deck-text-hi)] mb-2">{t('routeGraph.crossFloorTitle')}</h3>
+          <p className="text-xs text-[var(--deck-text-low)] mb-2">{t('routeGraph.crossFloorHint')}</p>
 
           {crossFloorEdges.length === 0 && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{t('routeGraph.crossFloorNone')}</p>
+            <p className="text-xs text-[var(--deck-text-low)] mb-2">{t('routeGraph.crossFloorNone')}</p>
           )}
           {crossFloorEdges.length > 0 && (
             <ul className="space-y-1 mb-3">
               {crossFloorEdges.map((e) => (
-                <li key={e.id} className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+                <li key={e.id} className="flex items-center justify-between text-xs text-[var(--deck-text-mid)]">
                   <span>{t(`routeGraph.edgeTypes.${e.type}`)} · {e.weight}</span>
-                  <button onClick={() => onDeleteCrossFloorEdge(e.id)} className="p-1 text-gray-400 hover:text-red-500">
+                  <button onClick={() => onDeleteCrossFloorEdge(e.id)} className="p-1 text-[var(--deck-text-low)] hover:text-red-500">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </li>
@@ -998,7 +998,7 @@ function NodeInspector({
           )}
 
           {otherFloorIds.length === 0 ? (
-            <p className="text-xs text-gray-400 dark:text-gray-500">{t('routeGraph.noOtherFloorNodes')}</p>
+            <p className="text-xs text-[var(--deck-text-low)]">{t('routeGraph.noOtherFloorNodes')}</p>
           ) : (
             <div className="grid grid-cols-2 gap-2 mb-2">
               <select
@@ -1029,7 +1029,7 @@ function NodeInspector({
             <button
               onClick={() => { const to = targetNodeId || targetNodes[0]?.id; if (to) onAddCrossFloorEdge(to, edgeType, weight); }}
               disabled={!targetNodes.length}
-              className="w-full flex items-center justify-center gap-1.5 border border-indigo-200 dark:border-indigo-900 text-indigo-600 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950/40 disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-1.5 border border-[var(--deck-accent)] text-[var(--deck-accent)] py-1.5 rounded-lg text-xs font-medium hover:bg-[var(--deck-accent-soft)] disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" /> {t('routeGraph.crossFloorAdd')}
             </button>
@@ -1059,7 +1059,7 @@ function EdgeInspector({
   const [weight, setWeight] = useState(edge.weight);
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 space-y-3">
+    <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-4 space-y-3">
       <div>
         <label className={labelClass}>{t('routeGraph.edgeType')}</label>
         <select value={type} onChange={(e) => setType(e.target.value as RouteEdgeType)} disabled={!canEdit} className={inputClass}>
@@ -1077,7 +1077,7 @@ function EdgeInspector({
         <div className="flex gap-2">
           <button
             onClick={() => onSave(type, weight)} disabled={saving}
-            className="flex-1 bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="flex-1 bg-[var(--deck-accent)] text-white py-1.5 rounded-lg text-xs font-medium  disabled:opacity-50"
           >
             {tc('save')}
           </button>
@@ -1105,13 +1105,13 @@ function BuildingFormModal({
       <label className={labelClass}>{t('buildingAddress')}</label>
       <input value={address} onChange={(e) => setAddress(e.target.value)} className={`${inputClass} mb-4`} />
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+        <button onClick={onClose} className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
           {tc('cancel')}
         </button>
         <button
           onClick={() => onSave(name.trim(), address.trim())}
           disabled={!name.trim() || saving}
-          className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50"
         >
           {saving ? tc('loading') : tc('save')}
         </button>
@@ -1168,13 +1168,13 @@ function FloorFormModal({
         />
       </div>
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+        <button onClick={onClose} className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
           {tc('cancel')}
         </button>
         <button
           onClick={() => onSave(level, label.trim(), assetId)}
           disabled={!label.trim() || saving}
-          className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50"
         >
           {saving ? tc('loading') : tc('save')}
         </button>
@@ -1208,20 +1208,20 @@ function CategoryFormModal({
         </div>
         <div>
           <label className={labelClass}>{t('categoryColor')}</label>
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-[38px] rounded-lg border border-gray-300 dark:border-gray-600" />
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-[38px] rounded-lg border border-[var(--deck-glass-border)]" />
         </div>
       </div>
-      <div className="flex items-center gap-2 mb-4 text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex items-center gap-2 mb-4 text-xs text-[var(--deck-text-mid)]">
         {t('categoryIcon')}: <CategoryIcon name={icon} className="w-4 h-4" style={{ color }} />
       </div>
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+        <button onClick={onClose} className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
           {tc('cancel')}
         </button>
         <button
           onClick={() => onSave(label.trim(), labelAr.trim(), icon, color)}
           disabled={!label.trim() || saving}
-          className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50"
         >
           {saving ? tc('loading') : tc('save')}
         </button>
@@ -1293,7 +1293,7 @@ function PoiFormModal({
       </div>
 
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+        <button onClick={onClose} className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
           {tc('cancel')}
         </button>
         <button
@@ -1306,7 +1306,7 @@ function PoiFormModal({
             })
           }
           disabled={!name.trim() || !categoryId || !point || saving}
-          className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50"
         >
           {saving ? tc('loading') : tc('save')}
         </button>
@@ -1348,22 +1348,22 @@ function ImportModal({
 
   return (
     <Modal title={t('import.button')} onClose={onClose}>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{t('import.hint')}</p>
+      <p className="text-xs text-[var(--deck-text-mid)] mb-3">{t('import.hint')}</p>
       <input
         type="file" accept=".csv,text/csv"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
         className="text-sm mb-3"
       />
-      {rows && <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{t('import.rowsFound', { count: rows.length })}</p>}
+      {rows && <p className="text-xs text-[var(--deck-text-mid)] mb-3">{t('import.rowsFound', { count: rows.length })}</p>}
       {(parseError || error) && <p className="text-xs text-red-600 mb-3">{parseError || error}</p>}
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+        <button onClick={onClose} className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
           {tc('cancel')}
         </button>
         <button
           onClick={() => rows && onImport(rows)}
           disabled={!rows || rows.length === 0 || importing}
-          className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50 flex items-center justify-center gap-1.5"
         >
           {importing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
           {importing ? t('import.importing') : t('import.button')}

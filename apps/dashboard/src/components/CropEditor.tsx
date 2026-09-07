@@ -97,12 +97,12 @@ export function CropEditor({ mediaUrl, mediaType, name, shape, aspectRatio, init
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6" onClick={onClose}>
       <div
-        className="flex max-h-full flex-col items-center gap-4 rounded-xl bg-white p-5 dark:bg-gray-900"
+        className="flex max-h-full flex-col items-center gap-4 rounded-xl bg-[var(--deck-glass-fill-strong)] p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex w-full items-center justify-between gap-6">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('title')}</p>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+          <p className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('title')}</p>
+          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-hi)]">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -142,10 +142,10 @@ export function CropEditor({ mediaUrl, mediaType, name, shape, aspectRatio, init
           </div>
         </div>
 
-        <p className="text-xs text-gray-400 dark:text-gray-500">{t('dragHint')}</p>
+        <p className="text-xs text-[var(--deck-text-low)]">{t('dragHint')}</p>
 
         <div className="flex w-full items-center gap-3">
-          <button onClick={() => setZoomClamped(zoom - 0.25)} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+          <button onClick={() => setZoomClamped(zoom - 0.25)} className="text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]">
             <ZoomOut className="h-4 w-4" />
           </button>
           <input
@@ -155,31 +155,31 @@ export function CropEditor({ mediaUrl, mediaType, name, shape, aspectRatio, init
             step={0.05}
             value={zoom}
             onChange={(e) => setZoomClamped(parseFloat(e.target.value))}
-            className="flex-1 accent-indigo-500"
+            className="flex-1 accent-[var(--deck-accent)]"
           />
-          <button onClick={() => setZoomClamped(zoom + 0.25)} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+          <button onClick={() => setZoomClamped(zoom + 0.25)} className="text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]">
             <ZoomIn className="h-4 w-4" />
           </button>
-          <span className="w-10 text-center text-xs tabular-nums text-gray-500 dark:text-gray-400">{Math.round(zoom * 100)}%</span>
+          <span className="w-10 text-center text-xs tabular-nums text-[var(--deck-text-mid)]">{Math.round(zoom * 100)}%</span>
         </div>
 
         <div className="flex w-full items-center justify-between gap-2 pt-1">
           <button
             onClick={() => onSave({ cropZoom: null, cropOffsetX: null, cropOffsetY: null })}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            className="flex items-center gap-1.5 text-xs font-medium text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
           >
             <RotateCcw className="h-3.5 w-3.5" /> {t('resetToFull')}
           </button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="rounded-lg border border-[var(--deck-glass-border)] px-3 py-1.5 text-xs font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]"
             >
               {tc('cancel')}
             </button>
             <button
               onClick={() => onSave(dirty ? { cropZoom: zoom, cropOffsetX: pan.x, cropOffsetY: pan.y } : initialCrop)}
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+              className="rounded-lg bg-[var(--deck-accent)] px-3 py-1.5 text-xs font-medium text-white "
             >
               {tc('save')}
             </button>

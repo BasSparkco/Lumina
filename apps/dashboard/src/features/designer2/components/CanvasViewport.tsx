@@ -430,7 +430,14 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
   const backgroundColor = activeScene?.background.type === 'color' ? activeScene.background.color : undefined;
 
   return (
-    <div ref={containerRef} className="relative flex h-full w-full items-center justify-center overflow-hidden bg-gray-100 dark:bg-gray-950">
+    <div
+      ref={containerRef}
+      className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[20px] border border-[var(--deck-glass-border-soft)]"
+      style={{
+        background:
+          'radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--deck-accent) 7%, transparent), transparent 55%), var(--deck-glass-fill)',
+      }}
+    >
       <div ref={canvasBoxRef} className="relative" style={{ width: canvasPxWidth, height: canvasPxHeight, willChange: 'transform' }}>
         <div className="absolute inset-0" style={{ backgroundColor }} />
         {/* designer.md Phase 9 — video elements' actual playback (FabricCanvasAdapter

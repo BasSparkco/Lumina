@@ -18,7 +18,7 @@ const DesignerShell = dynamic(
 );
 
 function DesignerLoading() {
-  return <div className="flex h-full w-full items-center justify-center text-sm text-gray-400 dark:text-gray-600">Loading…</div>;
+  return <div className="flex h-full w-full items-center justify-center text-sm text-[var(--deck-text-low)]">Loading…</div>;
 }
 
 // designer.md Phase 5/10 — three modes behind one shared editor surface (this app's existing

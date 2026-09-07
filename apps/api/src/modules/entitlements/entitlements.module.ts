@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { AuditModule } from '../audit/audit.module';
+import { PlatformAuditModule } from '../platform-audit/platform-audit.module';
 import { EntitlementsService } from './entitlements.service';
 import { ModuleCatalogService } from './module-catalog.service';
 import { Clock } from './clock';
 import { EntitlementGuard } from './entitlement.guard';
 
 @Module({
-  imports: [AuditModule],
+  imports: [PlatformAuditModule],
   providers: [EntitlementsService, ModuleCatalogService, Clock, EntitlementGuard],
   exports: [EntitlementsService, ModuleCatalogService, EntitlementGuard],
 })

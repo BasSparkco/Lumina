@@ -30,10 +30,7 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    // LIBRARY_MANAGER shares VIEWER's read-only default: it only gets write access via routes
-    // that explicitly opt it in with @Roles('LIBRARY_MANAGER') (the shared-library routes above),
-    // never by falling through this default-allow branch onto some tenant's own private data.
-    if ((user.role === 'VIEWER' || user.role === 'LIBRARY_MANAGER') && !SAFE_METHODS.has(req.method)) {
+    if (user.role === 'VIEWER' && !SAFE_METHODS.has(req.method)) {
       throw new ForbiddenException('This role has read-only access here');
     }
     return true;

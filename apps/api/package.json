@@ -17,7 +17,10 @@
     "db:seed-library": "ts-node prisma/seed-library.ts",
     "db:seed-wayfinding": "ts-node prisma/seed-wayfinding.ts",
     "db:reset-password": "ts-node prisma/reset-password.ts",
-    "db:studio": "prisma studio"
+    "db:audit-email-normalization": "ts-node prisma/audit-email-normalization.ts",
+    "db:audit-p5a-tenant-relations": "ts-node prisma/audit-p5a-tenant-relations.ts",
+    "db:studio": "prisma studio",
+    "db:seed-module-demos": "ts-node prisma/seed-module-demos.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1094.0",

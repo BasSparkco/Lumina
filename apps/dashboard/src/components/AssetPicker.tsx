@@ -101,7 +101,7 @@ export function AssetPicker({
         placeholder={isError ? errorPlaceholder : isLoading ? loadingPlaceholder : placeholder}
       />
       {canPaste && !disabled && (
-        <p className="mt-1 flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
+        <p className="mt-1 flex items-center gap-1 text-[10px] text-[var(--deck-text-low)]">
           {busy ? (
             <>
               <RefreshCw className="h-2.5 w-2.5 animate-spin shrink-0" /> {uploadingLabel} {progress}%

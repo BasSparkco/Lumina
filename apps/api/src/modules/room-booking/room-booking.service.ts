@@ -212,7 +212,7 @@ export class RoomBookingService {
     const binding = await this.prisma.roomDisplayBinding.upsert({
       where: { screenId },
       create: {
-        screenId, roomId: dto.roomId,
+        organizationId: orgId, screenId, roomId: dto.roomId,
         quickBookingEnabled: dto.quickBookingEnabled,
         quickBookingDurationsMinutes: dto.quickBookingDurationsMinutes,
         startingSoonMinutes: dto.startingSoonMinutes,
@@ -288,6 +288,7 @@ export class RoomBookingService {
     try {
       const reservation = await this.prisma.roomReservation.create({
         data: {
+          organizationId: screen.organizationId,
           roomId: binding.roomId, startsAt, endsAt,
           providerKey: 'LUMINA', origin: 'KIOSK',
           providerExternalKey: idempotencyMarker,

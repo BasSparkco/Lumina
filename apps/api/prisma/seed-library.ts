@@ -86,7 +86,7 @@ async function main() {
 
       const filePath = path.join(dir, filename);
       const buffer = fs.readFileSync(filePath);
-      const key = `system/assets/${crypto.randomUUID()}.${ext.slice(1)}`;
+      const key = `platform/assets/${crypto.randomUUID()}.${ext.slice(1)}`;
 
       await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: mimeType }));
 

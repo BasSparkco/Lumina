@@ -19,6 +19,6 @@ export function SaveStatus({ status }: { status: AutosaveStatus }) {
       ? 'text-red-500 dark:text-red-400'
       : status === 'offline'
         ? 'text-amber-500 dark:text-amber-400'
-        : 'text-gray-400 dark:text-gray-600';
+        : 'text-[var(--deck-text-low)]';
   return <span className={`text-xs ${color}`}>{LABELS[status]}</span>;
 }

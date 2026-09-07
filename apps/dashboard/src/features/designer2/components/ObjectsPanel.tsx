@@ -53,7 +53,7 @@ export function ObjectsPanel({ onReorder, adapter, commit, isTemplateMode }: Obj
         renderExpanded={() => <PropertiesPanel adapter={adapter} commit={commit} isTemplateMode={isTemplateMode} />}
       />
       {selectedElementIds.length > 1 && (
-        <div className="shrink-0 border-t border-gray-100 dark:border-gray-800">
+        <div className="shrink-0 border-t border-[var(--deck-glass-border-soft)]">
           <PropertiesPanel adapter={adapter} commit={commit} isTemplateMode={isTemplateMode} />
         </div>
       )}

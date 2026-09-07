@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { PlayerService } from './player.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { StorageService } from '../storage/storage.service';
@@ -20,7 +21,14 @@ describe('PlayerService — pairing and heartbeat', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
         update: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         ...(prismaOverrides.screen as object ?? {}),
+      },
+      pairingSession: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        ...(prismaOverrides.pairingSession as object ?? {}),
       },
     } as unknown as PrismaService;
     const storage = {} as StorageService;
@@ -37,37 +45,78 @@ describe('PlayerService — pairing and heartbeat', () => {
   }
 
   describe('requestPairingCode', () => {
-    it('creates an unpaired screen with the generated code and returns both', async () => {
+    it('creates a PairingSession with the generated code and returns both', async () => {
       const { service, prisma } = makeService({
-        screen: {
+        pairingSession: {
           findUnique: jest.fn().mockResolvedValue(null), // no collision on the first try
-          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'screen_new', ...data })),
+          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'session_new', ...data })),
         },
       });
 
       const result = await service.requestPairingCode();
 
-      expect(result.screenId).toBe('screen_new');
+      // Field name stays `screenId` for client compat even though it's a PairingSession id now.
+      expect(result.screenId).toBe('session_new');
       expect(result.pairingCode).toHaveLength(6);
-      expect(prisma.screen.create).toHaveBeenCalledWith({
-        data: { name: 'Unnamed Screen', pairingCode: result.pairingCode, paired: false },
+      expect(prisma.pairingSession.create).toHaveBeenCalledWith({
+        data: { pairingCode: result.pairingCode },
       });
     });
 
-    it('retries the code on a collision instead of creating a duplicate', async () => {
+    it('retries the code on a collision with an outstanding PairingSession', async () => {
+      const { service, prisma } = makeService({
+        pairingSession: {
+          // First lookup: code taken. Second lookup: free.
+          findUnique: jest.fn()
+            .mockResolvedValueOnce({ id: 'existing_session' })
+            .mockResolvedValue(null),
+          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'session_new', ...data })),
+        },
+      });
+
+      await service.requestPairingCode();
+
+      expect(prisma.pairingSession.findUnique).toHaveBeenCalledTimes(2);
+    });
+
+    it('retries the code on a collision with an existing screen re-pair code', async () => {
       const { service, prisma } = makeService({
         screen: {
-          // First lookup: code taken. Second lookup: free.
           findUnique: jest.fn()
             .mockResolvedValueOnce({ id: 'existing_screen' })
             .mockResolvedValue(null),
-          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'screen_new', ...data })),
+        },
+        pairingSession: {
+          create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'session_new', ...data })),
         },
       });
 
       await service.requestPairingCode();
 
       expect(prisma.screen.findUnique).toHaveBeenCalledTimes(2);
+    });
+
+    // P4 task 11 (docs/tenant_isolation_and_platform_admin_plan.md) — pins the two abuse controls
+    // added alongside the existing per-IP @Throttle on the controller route: a ceiling on
+    // accumulated never-claimed PairingSession rows, and a combined (not per-source) issuance
+    // rate.
+    it('rejects once the outstanding pairing-session ceiling is hit, without creating another row', async () => {
+      const { service, prisma } = makeService({
+        pairingSession: { count: jest.fn().mockResolvedValue(500) },
+      });
+
+      await expect(service.requestPairingCode()).rejects.toThrow(ServiceUnavailableException);
+      expect(prisma.pairingSession.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects once the combined (cross-source) issuance rate is hit', async () => {
+      const { service, prisma } = makeService({
+        pairingSession: { create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'session_new', ...data })) },
+      });
+
+      for (let i = 0; i < 300; i++) await service.requestPairingCode();
+      await expect(service.requestPairingCode()).rejects.toThrow(ServiceUnavailableException);
+      expect(prisma.pairingSession.create).toHaveBeenCalledTimes(300);
     });
   });
 
@@ -296,7 +345,13 @@ describe('PlayerService.getState — WAYFINDING entitlement, evacuation bypass, 
       },
       routeEdge: { findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
-    const storage = { publicUrl: jest.fn((k: string) => `https://media.test/${k}`) } as unknown as StorageService;
+    const storage = {
+      assetUrl: jest.fn((id: string) => `https://media.test/assets/${id}`),
+      assetThumbnailUrl: jest.fn((id: string) => `https://media.test/assets/${id}/thumbnail`),
+      assetPageUrls: jest.fn(() => [] as string[]),
+      assetBinaryUrl: jest.fn((id: string) => `https://media.test/binaries/${id}`),
+      screenshotUrl: jest.fn((id: string) => `https://media.test/screens/${id}/screenshot`),
+    } as unknown as StorageService;
     const gateway = {} as ScreenGateway;
     const schedules = { getSchedulesForScreen: jest.fn().mockResolvedValue([]), resolveNow: jest.fn() } as unknown as SchedulesService;
     const powerSchedules = { resolveForScreen: jest.fn().mockResolvedValue({ poweredOn: true, rules: [] }) } as unknown as PowerSchedulesService;

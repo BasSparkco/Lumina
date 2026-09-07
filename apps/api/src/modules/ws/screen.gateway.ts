@@ -11,6 +11,8 @@ import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import type { Server, Socket } from 'socket.io';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AuthErrorCode } from '../../common/auth-error-codes';
 
 export type PlayerCommand =
   | { type: 'publish' }
@@ -42,6 +44,10 @@ interface ScreenSocketData {
   screenId?: string;
   orgId?: string;
   role?: 'player' | 'dashboard';
+  // Dashboard connections only — lets disconnectUser() find and kick this specific user's open
+  // socket(s) when their membership/role changes, without waiting for their next (re)connection
+  // attempt to hit the live check below.
+  userId?: string;
 }
 
 type AppSocket = Socket<Record<string, never>, Record<string, never>, Record<string, never>, ScreenSocketData>;
@@ -60,9 +66,19 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  handleConnection(client: AppSocket) {
+  // Rejects with an `auth-invalidated` event (carrying a code from AuthErrorCode) before
+  // disconnecting, rather than a bare disconnect — the dashboard's useScreenSocket has no HTTP
+  // response to inspect the way a REST 401 gives it, so this is the only signal it gets to
+  // distinguish "your session is dead, sign in again" from an ordinary network drop.
+  private reject(client: AppSocket, code: AuthErrorCode) {
+    this.server.to(client.id).emit('auth-invalidated', { code });
+    client.disconnect(true);
+  }
+
+  async handleConnection(client: AppSocket) {
     const token =
       (client.handshake.auth.token as string | undefined) ??
       client.handshake.headers.authorization?.replace('Bearer ', '');
@@ -72,30 +88,86 @@ export class ScreenGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    let payload: { sub: string; type?: string; orgId?: string; authVersion?: number };
     try {
-      const payload = this.jwt.verify<{ sub: string; type: string; orgId?: string }>(token);
-
-      if (payload.type === 'screen') {
-        // Player connected — join its own room. orgId is stored too (not just screenId) so
-        // handlePlaybackProgress below can forward to the right dashboard org room without an
-        // extra DB lookup on every ~1s tick.
-        void client.join(`screen:${payload.sub}`);
-        client.data = { screenId: payload.sub, orgId: payload.orgId, role: 'player' };
-        this.logger.log(`Player connected: ${payload.sub}`);
-      } else if (payload.type !== 'screen' && payload.orgId) {
-        // Dashboard connected — join org room for status updates. The real dashboard access
-        // token (AuthService.sign) never actually carries a `type` field — only screen tokens
-        // do (see JwtStrategy, which rejects `type === 'screen'` on REST routes the same way) —
-        // so "not a screen token" is the correct user check, not an equality match on 'user'
-        // (which no token ever sets; that check silently dropped every dashboard connection).
-        void client.join(`org:${payload.orgId}`);
-        client.data = { orgId: payload.orgId, role: 'dashboard' };
-        this.logger.log(`Dashboard connected: org ${payload.orgId}`);
-      } else {
-        client.disconnect();
-      }
+      payload = this.jwt.verify(token);
     } catch {
       client.disconnect();
+      return;
+    }
+
+    if (payload.type === 'screen') {
+      // Live check mirroring PlayerJwtStrategy's REST equivalent (screen exists, still paired,
+      // and the presented token is the screen's *current* one — not a still-signature-valid
+      // token from before an unpair/repair cycle) — see docs/tenant_isolation_and_platform_admin_plan.md
+      // P2 task 6. Room join uses the screen's live organizationId, never the JWT payload's.
+      const screen = await this.prisma.screen.findUnique({
+        where: { id: payload.sub },
+        select: { paired: true, playerToken: true, organizationId: true },
+      });
+      if (!screen || !screen.paired || token !== screen.playerToken) {
+        this.reject(client, AuthErrorCode.SCREEN_NOT_PAIRED);
+        return;
+      }
+      // orgId is stored too (not just screenId) so handlePlaybackProgress below can forward to
+      // the right dashboard org room without an extra DB lookup on every ~1s tick.
+      void client.join(`screen:${payload.sub}`);
+      client.data = { screenId: payload.sub, orgId: screen.organizationId ?? undefined, role: 'player' };
+      this.logger.log(`Player connected: ${payload.sub}`);
+      return;
+    }
+
+    // Dashboard connected. The real dashboard access token (AuthService.sign) never actually
+    // carries a `type` field — only screen tokens do (see JwtStrategy, which rejects
+    // `type === 'screen'` on REST routes the same way) — so "not a screen token" is the correct
+    // user check, not an equality match on 'user' (which no token ever sets; that check silently
+    // dropped every dashboard connection).
+    if (!payload.orgId) {
+      client.disconnect();
+      return;
+    }
+
+    // Live check mirroring JwtStrategy's REST equivalent — a removed member, a stale role/
+    // authVersion, or a suspended org must not get to join the org room at all, not just fail on
+    // their next REST call.
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { organizationId: true, authVersion: true, organization: { select: { status: true } } },
+    });
+    if (!user) return this.reject(client, AuthErrorCode.USER_NOT_FOUND);
+    if (user.authVersion !== payload.authVersion) return this.reject(client, AuthErrorCode.AUTH_VERSION_MISMATCH);
+    if (user.organization.status === 'SUSPENDED') return this.reject(client, AuthErrorCode.ORG_SUSPENDED);
+
+    void client.join(`org:${user.organizationId}`);
+    client.data = { orgId: user.organizationId, role: 'dashboard', userId: payload.sub };
+    this.logger.log(`Dashboard connected: org ${user.organizationId}`);
+  }
+
+  // Kicks a specific user's already-open dashboard socket(s) — called right after their role
+  // changes or they're removed (see OrgService), so the effect is immediate instead of waiting
+  // for them to naturally reconnect (which is the only other time the live check above runs).
+  // Can never reach a player socket: only dashboard connections join `org:${orgId}` (confirmed
+  // in handleConnection above) — this is what keeps a tenant suspension/removal from ever
+  // touching a paired screen's emergency/offline playback.
+  async disconnectUser(orgId: string, userId: string) {
+    const sockets = await this.server.in(`org:${orgId}`).fetchSockets();
+    for (const socket of sockets) {
+      const data = socket.data as ScreenSocketData;
+      if (data.userId === userId) {
+        socket.emit('auth-invalidated', { code: AuthErrorCode.AUTH_VERSION_MISMATCH });
+        socket.disconnect(true);
+      }
+    }
+  }
+
+  // Same, for every dashboard user in the org — called when a tenant is suspended
+  // (PlatformTenantsService). Never touches a player socket, for the same room-membership reason
+  // as disconnectUser above.
+  async disconnectOrg(orgId: string) {
+    const sockets = await this.server.in(`org:${orgId}`).fetchSockets();
+    for (const socket of sockets) {
+      socket.emit('auth-invalidated', { code: AuthErrorCode.ORG_SUSPENDED });
+      socket.disconnect(true);
     }
   }
 

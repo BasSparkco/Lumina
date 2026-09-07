@@ -1,5 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { DesignTemplate, Prisma } from '@lumina/db';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import type { Prisma } from '@lumina/db';
 import { buildBlankDesignDocument, DesignDocumentSchema, type DesignDocument } from '@lumina/design-schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
@@ -28,8 +28,10 @@ export class DesignsService {
   // payload could still get through). Walks every assetId/posterAssetId a DesignDocument can
   // reference (Image/Video elements, Video posters, image/video scene backgrounds) and rejects if
   // any doesn't resolve to a tenant-owned or shared-library (organizationId: null) asset — same
-  // shared-library convention assets.service.ts already uses.
-  private collectAssetIds(document: DesignDocument): string[] {
+  // shared-library convention assets.service.ts already uses. Public: TemplatesService.adminPublish
+  // (P7) reuses this same walk to enforce the opposite rule — every referenced id must be shared,
+  // never tenant-owned — rather than re-deriving the DesignDocument element shape a second time.
+  collectAssetIds(document: DesignDocument): string[] {
     const ids = new Set<string>();
     for (const scene of document.scenes) {
       if (scene.background.type !== 'color') ids.add(scene.background.assetId);
@@ -73,19 +75,26 @@ export class DesignsService {
   }
 
   // designer.md §11's Critical Backend Rule — called by TemplatesService.createDesign only, after
-  // it has already re-validated that `template` is published and authorized for `orgId`. Not
-  // exposed as its own customer-facing "clone any template id" endpoint. Template designJson is
-  // already-trusted Super-Admin content, not re-validated for asset ownership here — a Template's
-  // own media may be platform-shared rather than tenant-owned by design.
-  async createFromTemplate(orgId: string, template: DesignTemplate) {
+  // it has already re-validated that the template is published and authorized for `orgId`.
+  // `source` carries the *immutable* DesignTemplateVersion's designJson/schemaVersion/versionNumber
+  // (P7, docs/tenant_isolation_and_platform_admin_plan.md) — never the live, still-editable
+  // DesignTemplate row — so a later admin edit/unpublish/archive of the template can never
+  // retroactively change a design a tenant already cloned from it. Not exposed as its own
+  // customer-facing "clone any template id" endpoint. That designJson is already-trusted
+  // Super-Admin content, not re-validated for asset ownership here — a Template's own media is
+  // platform-shared rather than tenant-owned by design.
+  async createFromTemplate(
+    orgId: string,
+    source: { id: string; name: string; designJson: Prisma.JsonValue; schemaVersion: number; versionNumber: number },
+  ) {
     return this.prisma.designAsset.create({
       data: {
         organizationId: orgId,
-        name: template.name,
-        designJson: template.designJson as Prisma.InputJsonValue,
-        schemaVersion: template.schemaVersion,
-        sourceTemplateId: template.id,
-        sourceTemplateVersion: template.versionNumber,
+        name: source.name,
+        designJson: source.designJson as Prisma.InputJsonValue,
+        schemaVersion: source.schemaVersion,
+        sourceTemplateId: source.id,
+        sourceTemplateVersion: source.versionNumber,
       },
     });
   }
@@ -218,22 +227,14 @@ export class DesignsService {
     return this.prisma.designDraft.findFirst({ where: { documentId, organizationId: orgId } });
   }
 
-  // Phase 12 security hardening: `documentId` is a client-generated id with a *global* unique
-  // constraint (not compound with organizationId — see schema comment), so a bare
-  // `upsert({ where: { documentId } })` would happily overwrite another org's draft row if the
-  // caller ever supplied (or guessed/leaked) a documentId that already belongs to someone else.
-  // The explicit ownership check below is what actually enforces the tenant boundary here.
+  // P5a: documentId's uniqueness is now scoped to (organizationId, documentId) (see schema
+  // comment) rather than global, so this upsert's own where-clause can never resolve to another
+  // org's row in the first place — no separate ownership check needed the way a bare
+  // `upsert({ where: { documentId } })` against a globally-unique column would have required.
   async putDraft(orgId: string, userId: string, documentId: string, draftJson: unknown) {
     const validated = this.validateDesignJson(draftJson);
-    const existing = await this.prisma.designDraft.findUnique({
-      where: { documentId },
-      select: { organizationId: true },
-    });
-    if (existing && existing.organizationId !== orgId) {
-      throw new NotFoundException('Draft not found');
-    }
     return this.prisma.designDraft.upsert({
-      where: { documentId },
+      where: { organizationId_documentId: { organizationId: orgId, documentId } },
       create: { documentId, organizationId: orgId, userId, draftJson: validated },
       update: { draftJson: validated, userId },
     });

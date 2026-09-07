@@ -11,6 +11,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { ConnectorsModule } from './connectors/connectors.module';
 import { FleetMonitorModule } from './fleet-monitor/fleet-monitor.module';
 import { RoomBookingSyncModule } from './room-booking-sync/room-booking-sync.module';
+import { PairingCleanupModule } from './pairing-cleanup/pairing-cleanup.module';
 
 export const QUEUE_MEDIA = 'media';
 
@@ -58,6 +59,7 @@ loadDotenv({
     ConnectorsModule,
     FleetMonitorModule,
     RoomBookingSyncModule,
+    PairingCleanupModule,
   ],
   providers: [MediaProcessor, StorageService, PrismaService],
 })

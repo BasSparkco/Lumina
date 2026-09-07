@@ -20,6 +20,17 @@ export type UnpairOrigin =
 
 const CRASH_ROLLUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+// P4 task 11 / P5a schema task 4 (docs/tenant_isolation_and_platform_admin_plan.md) — how long a
+// pairing code stays valid, for both of confirmPairing's two paths: a brand-new device's
+// PairingSession (createdAt) and a re-pair code minted on an already tenant-owned Screen
+// (pairingCodeIssuedAt). Must match PlayerService.PAIRING_CODE_TTL_MS (issuance/outstanding-count)
+// and apps/worker/src/pairing-cleanup/pairing-cleanup.service.ts's own cutoff (PairingSession
+// deletion) — kept as an independently-defined constant in each of the three places rather than a
+// shared package import (api and worker don't otherwise share a runtime package for a single
+// constant); a drift between them only ever narrows or widens the claim window slightly, it can't
+// create a security gap in either direction.
+const PAIRING_CODE_TTL_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class ScreensService {
   constructor(
@@ -50,7 +61,7 @@ export class ScreensService {
     return {
       ...screen,
       screenshotUrl: screen.screenshotUpdatedAt && screen.organizationId
-        ? this.storage.publicUrl(this.storage.screenshotKey(screen.organizationId, screen.id))
+        ? this.storage.screenshotUrl(screen.id)
         : null,
     };
   }
@@ -119,11 +130,17 @@ export class ScreensService {
     do {
       code = Math.random().toString(36).substring(2, 8).toUpperCase();
       attempts++;
-    } while (attempts < 10 && (await this.prisma.screen.findUnique({ where: { pairingCode: code } })));
+      // Checked against both tables: a brand-new device's still-outstanding PairingSession code
+      // and another screen's own re-pair code both occupy the same pairingCode keyspace, and
+      // confirmPairing must be able to look a code up unambiguously in whichever table holds it.
+    } while (attempts < 10 && (
+      (await this.prisma.screen.findUnique({ where: { pairingCode: code } })) ||
+      (await this.prisma.pairingSession.findUnique({ where: { pairingCode: code } }))
+    ));
 
     const updated = await this.prisma.screen.update({
       where: { id },
-      data: { paired: false, playerToken: null, pairingCode: code, status: 'OFFLINE' },
+      data: { paired: false, playerToken: null, pairingCode: code, pairingCodeIssuedAt: new Date(), status: 'OFFLINE' },
     });
 
     if (origin.type === 'DASHBOARD') {
@@ -237,7 +254,7 @@ export class ScreensService {
     );
     const updated = await this.prisma.kioskLocation.upsert({
       where: { screenId },
-      create: { screenId, floorId, x, y },
+      create: { organizationId: orgId, screenId, floorId, x, y },
       update: { floorId, x, y },
     });
     await this.pushIfAutoPublish(orgId, screenId);
@@ -487,16 +504,58 @@ export class ScreensService {
     };
   }
 
-  // Dashboard: confirm a pairing code → associates screen with org, returns screen
+  // Dashboard: confirm a pairing code → associates screen with org, returns screen. Two distinct
+  // codepaths share one pairingCode keyspace (see unpair()'s collision check against both
+  // tables): a brand-new device's PairingSession (claim creates the real, now tenant-owned Screen
+  // for the first time — P5a schema task 4), and a re-pair code minted on an already tenant-owned
+  // Screen (unpair() reusing the same row). Same "Invalid or expired pairing code" message for
+  // "no such code" and "code once existed but expired" in both — a stale code that still 400s
+  // with a specific "expired" reason would tell a guesser their guess once landed on a real (if
+  // now-stale) row, the same enumeration concern P0's data-classification rules apply to object
+  // ids generally.
   async confirmPairing(orgId: string, code: string) {
+    const session = await this.prisma.pairingSession.findUnique({ where: { pairingCode: code } });
+    if (session) return this.claimNewScreen(orgId, session);
+    return this.claimExistingScreen(orgId, code);
+  }
+
+  private async claimNewScreen(orgId: string, session: { id: string; pairingCode: string; createdAt: Date }) {
+    if (Date.now() - session.createdAt.getTime() > PAIRING_CODE_TTL_MS) {
+      throw new BadRequestException('Invalid or expired pairing code');
+    }
+
+    const token = this.jwt.sign({ sub: session.id, orgId, type: 'screen' }, { expiresIn: '10y' });
+    const name = `Unnamed Screen ${(await this.prisma.screen.count({ where: { organizationId: orgId } })) + 1}`;
+
+    try {
+      // session.id becomes the new Screen's id (see PairingSession's schema comment) — created
+      // and deleted in the same transaction so a second confirm racing on the same code (already
+      // deleted, or a create colliding on that same id) always loses, the same "second writer
+      // gets nothing" guarantee claimExistingScreen's updateMany compare-and-swap gives the
+      // re-pair path below.
+      return await this.prisma.$transaction(async tx => {
+        const screen = await tx.screen.create({
+          data: { id: session.id, name, paired: true, playerToken: token, organizationId: orgId },
+        });
+        await tx.pairingSession.delete({ where: { id: session.id } });
+        return screen;
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002' || (err as { code?: string }).code === 'P2025') {
+        throw new BadRequestException('Invalid or expired pairing code');
+      }
+      throw err;
+    }
+  }
+
+  private async claimExistingScreen(orgId: string, code: string) {
     const screen = await this.prisma.screen.findUnique({ where: { pairingCode: code } });
-    if (!screen) throw new BadRequestException('Invalid or expired pairing code');
+    if (!screen || !screen.pairingCodeIssuedAt || Date.now() - screen.pairingCodeIssuedAt.getTime() > PAIRING_CODE_TTL_MS) {
+      throw new BadRequestException('Invalid or expired pairing code');
+    }
     if (screen.paired) throw new BadRequestException('Screen already paired');
 
-    const token = this.jwt.sign(
-      { sub: screen.id, orgId, type: 'screen' },
-      { expiresIn: '10y' },
-    );
+    const token = this.jwt.sign({ sub: screen.id, orgId, type: 'screen' }, { expiresIn: '10y' });
 
     // Give still-default-named screens a running serial ("Unnamed Screen 3") instead of a
     // bare, indistinguishable "Unnamed Screen" — based on how many screens this org already
@@ -514,7 +573,7 @@ export class ScreensService {
     // clause still matches by the time it runs; the second gets `count: 0` back instead.
     const result = await this.prisma.screen.updateMany({
       where: { id: screen.id, paired: false },
-      data: { paired: true, pairingCode: null, playerToken: token, organizationId: orgId, name },
+      data: { paired: true, pairingCode: null, pairingCodeIssuedAt: null, playerToken: token, organizationId: orgId, name },
     });
     if (result.count === 0) throw new BadRequestException('Screen already paired');
 

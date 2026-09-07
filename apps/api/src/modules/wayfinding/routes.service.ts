@@ -25,7 +25,7 @@ export class RoutesService {
 
   async createNode(orgId: string, floorId: string, dto: CreateRouteNodeDto) {
     await this.assertOwnsFloor(orgId, floorId);
-    return this.prisma.routeNode.create({ data: { floorId, x: dto.x, y: dto.y, label: dto.label } });
+    return this.prisma.routeNode.create({ data: { organizationId: orgId, floorId, x: dto.x, y: dto.y, label: dto.label } });
   }
 
   async updateNode(orgId: string, id: string, dto: CreateRouteNodeDto) {
@@ -49,7 +49,7 @@ export class RoutesService {
     ]);
     if (fromNode.id === toNode.id) throw new BadRequestException('An edge must connect two different nodes');
     return this.prisma.routeEdge.create({
-      data: { fromNodeId: dto.fromNodeId, toNodeId: dto.toNodeId, type: dto.type ?? 'WALK', weight: dto.weight },
+      data: { organizationId: orgId, fromNodeId: dto.fromNodeId, toNodeId: dto.toNodeId, type: dto.type ?? 'WALK', weight: dto.weight },
     });
   }
 

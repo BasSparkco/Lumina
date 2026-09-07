@@ -43,33 +43,33 @@ export function FontPicker({ value, onChange, disabled }: FontPickerProps) {
     <div className="relative" ref={ref}>
       <button type="button" disabled={disabled} onClick={() => setOpen(v => !v)}
         style={{ fontFamily: current ? current.stack : undefined }}
-        className="w-full flex items-center justify-between gap-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+        className="w-full flex items-center justify-between gap-1 border border-[var(--deck-glass-border)] rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
         <span className="truncate">{current?.label ?? value ?? '—'}</span>
-        <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" />
+        <ChevronDown className="w-3 h-3 text-[var(--deck-text-low)] shrink-0" />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
-          <div className="p-1.5 border-b border-gray-100 dark:border-gray-700">
+        <div className="glass-popup absolute z-20 mt-1 w-full rounded-lg">
+          <div className="p-1.5 border-b border-[var(--deck-glass-border-soft)]">
             <div className="relative">
-              <Search className="w-3 h-3 text-gray-400 absolute top-1/2 -translate-y-1/2 start-2" />
+              <Search className="w-3 h-3 text-[var(--deck-text-low)] absolute top-1/2 -translate-y-1/2 start-2" />
               <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
                 placeholder={tc('searchFont')}
-                className="w-full ps-6 pe-2 py-1 text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                className="w-full ps-6 pe-2 py-1 text-xs border border-[var(--deck-glass-border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
             </div>
           </div>
           <div className="max-h-56 overflow-y-auto py-1">
-            {grouped.length === 0 && <p className="text-xs text-gray-400 dark:text-gray-500 px-3 py-2">{tc('noMatches')}</p>}
+            {grouped.length === 0 && <p className="text-xs text-[var(--deck-text-low)] px-3 py-2">{tc('noMatches')}</p>}
             {grouped.map(g => (
               <div key={g.cat}>
-                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--deck-text-low)]">
                   {tc(`fontCategory.${g.cat}`)}
                 </p>
                 {g.fonts.map(f => (
                   <button key={f.id} type="button" onClick={() => { onChange(f.id); setOpen(false); setQuery(''); }}
                     style={{ fontFamily: f.stack }}
-                    className="w-full flex items-center justify-between px-3 py-1.5 text-sm text-start text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    className="w-full flex items-center justify-between px-3 py-1.5 text-sm text-start text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]">
                     {f.label}
-                    {f.id === value && <Check className="w-3 h-3 text-indigo-600 shrink-0" />}
+                    {f.id === value && <Check className="w-3 h-3 text-[var(--deck-accent)] shrink-0" />}
                   </button>
                 ))}
               </div>

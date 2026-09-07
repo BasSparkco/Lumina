@@ -18,8 +18,8 @@ import { Toggle } from '@/components/Toggle';
 function SettingsSection({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
     <div className="mt-8 first:mt-0">
-      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{description}</p>
+      <h2 className="text-sm font-semibold text-[var(--deck-text-hi)]">{title}</h2>
+      <p className="text-xs text-[var(--deck-text-mid)] mt-0.5">{description}</p>
       <div>{children}</div>
     </div>
   );
@@ -27,13 +27,13 @@ function SettingsSection({ title, description, children }: { title: string; desc
 
 function SettingRow({ icon, title, description, control }: { icon: React.ReactNode; title: string; description: string; control: React.ReactNode }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 mt-4 first:mt-0">
+    <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-5 mt-4 first:mt-0">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {icon}
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{title}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+            <p className="text-sm font-medium text-[var(--deck-text-hi)]">{title}</p>
+            <p className="text-xs text-[var(--deck-text-mid)]">{description}</p>
           </div>
         </div>
         <div className="shrink-0">{control}</div>
@@ -73,32 +73,32 @@ export default function SettingsPage() {
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <SettingsIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" /> {t('title')}
+        <h1 className="text-2xl font-bold text-[var(--deck-text-hi)] flex items-center gap-2">
+          <SettingsIcon className="w-5 h-5 text-[var(--deck-text-low)]" /> {t('title')}
         </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+        <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
       </div>
 
       <SettingsSection title={t('sectionGeneral')} description={t('sectionGeneralDesc')}>
         <SettingRow
-          icon={isDark ? <Moon className="w-5 h-5 text-indigo-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
+          icon={isDark ? <Moon className="w-5 h-5 text-[var(--deck-accent)]" /> : <Sun className="w-5 h-5 text-amber-500" />}
           title={t('darkMode')}
           description={t('darkModeDesc')}
           control={<Toggle checked={isDark} onChange={toggleTheme} />}
         />
 
         <SettingRow
-          icon={<Clock className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<Clock className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('timeFormat')}
           description={t('timeFormatDesc')}
           control={
-            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex rounded-lg border border-[var(--deck-glass-border)] overflow-hidden">
               <button onClick={() => setFormat('24h')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${format === '24h' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${format === '24h' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 {t('24h')}
               </button>
               <button onClick={() => setFormat('12h')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-gray-200 dark:border-gray-700 ${format === '12h' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-[var(--deck-glass-border)] ${format === '12h' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 {t('ampm')}
               </button>
             </div>
@@ -106,17 +106,17 @@ export default function SettingsPage() {
         />
 
         <SettingRow
-          icon={<Globe className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<Globe className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('language')}
           description={t('languageDesc')}
           control={
-            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex rounded-lg border border-[var(--deck-glass-border)] overflow-hidden">
               <button onClick={() => switchLocale('en')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${locale === 'en' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${locale === 'en' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 {t('english')}
               </button>
               <button onClick={() => switchLocale('ar')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-gray-200 dark:border-gray-700 ${locale === 'ar' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-[var(--deck-glass-border)] ${locale === 'ar' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 {t('arabic')}
               </button>
             </div>
@@ -124,17 +124,17 @@ export default function SettingsPage() {
         />
 
         <SettingRow
-          icon={<CalendarDays className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<CalendarDays className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('dateFormat')}
           description={t('dateFormatDesc')}
           control={
-            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex rounded-lg border border-[var(--deck-glass-border)] overflow-hidden">
               <button onClick={() => setDateFormat('DD/MM/YYYY')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${dateFormat === 'DD/MM/YYYY' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${dateFormat === 'DD/MM/YYYY' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 DD/MM/YYYY
               </button>
               <button onClick={() => setDateFormat('MM/DD/YYYY')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-gray-200 dark:border-gray-700 ${dateFormat === 'MM/DD/YYYY' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-[var(--deck-glass-border)] ${dateFormat === 'MM/DD/YYYY' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 MM/DD/YYYY
               </button>
             </div>
@@ -142,7 +142,7 @@ export default function SettingsPage() {
         />
 
         <SettingRow
-          icon={<ShieldQuestion className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<ShieldQuestion className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('confirmBeforeDelete')}
           description={t('confirmBeforeDeleteDesc')}
           control={<Toggle checked={confirmBeforeDelete} onChange={setConfirmBeforeDelete} />}
@@ -151,24 +151,24 @@ export default function SettingsPage() {
 
       <SettingsSection title={t('sectionEditor')} description={t('sectionEditorDesc')}>
         <SettingRow
-          icon={<MousePointerClick className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<MousePointerClick className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('requireSelectToEdit')}
           description={t('requireSelectToEditDesc')}
           control={<Toggle checked={requireSelectToEdit} onChange={setRequireSelectToEdit} />}
         />
 
         <SettingRow
-          icon={<RotateCw className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<RotateCw className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('rotateHandleStyle')}
           description={t('rotateHandleStyleDesc')}
           control={
-            <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex rounded-lg border border-[var(--deck-glass-border)] overflow-hidden">
               <button onClick={() => setRotateHandleStyle('corners')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${rotateHandleStyle === 'corners' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${rotateHandleStyle === 'corners' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 {t('rotateHandleCorners')}
               </button>
               <button onClick={() => setRotateHandleStyle('single')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-gray-200 dark:border-gray-700 ${rotateHandleStyle === 'single' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-s border-[var(--deck-glass-border)] ${rotateHandleStyle === 'single' ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'}`}>
                 {t('rotateHandleSingle')}
               </button>
             </div>
@@ -178,28 +178,28 @@ export default function SettingsPage() {
 
       <SettingsSection title={t('sectionContent')} description={t('sectionContentDesc')}>
         <SettingRow
-          icon={<Timer className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<Timer className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('defaultDuration')}
           description={t('defaultDurationDesc')}
           control={
             <div className="flex items-center gap-1.5">
               <input type="number" min={1} max={3600} value={duration}
                 onChange={e => setDuration(Math.max(1, Number(e.target.value) || 1))}
-                className="w-16 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              <span className="text-xs text-gray-400 dark:text-gray-500">{t('sec')}</span>
+                className="w-16 border border-[var(--deck-glass-border)] rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
+              <span className="text-xs text-[var(--deck-text-low)]">{t('sec')}</span>
             </div>
           }
         />
 
         <SettingRow
-          icon={<Moon className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<Moon className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('faithFeatures')}
           description={t('faithFeaturesDesc')}
           control={<Toggle checked={faithFeatures} onChange={setFaithFeatures} />}
         />
 
         <SettingRow
-          icon={<Send className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
+          icon={<Send className="w-5 h-5 text-[var(--deck-text-low)]" />}
           title={t('autoPublish')}
           description={t('autoPublishDesc')}
           control={

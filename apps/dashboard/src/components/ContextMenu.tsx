@@ -58,11 +58,11 @@ export function ContextMenu({ state, onClose }: { state: ContextMenuState | null
     <div
       ref={ref}
       style={{ position: 'fixed', top, left, width, zIndex: 1000 }}
-      className="overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900"
+      className="glass-popup overflow-hidden rounded-lg py-1"
     >
       {state.actions.map((action) => (
         <div key={action.key}>
-          {action.separator && <div className="my-1 border-t border-gray-100 dark:border-gray-800" />}
+          {action.separator && <div className="my-1 border-t border-[var(--deck-glass-border-soft)]" />}
           <button
             type="button"
             disabled={action.disabled}
@@ -73,7 +73,7 @@ export function ContextMenu({ state, onClose }: { state: ContextMenuState | null
             className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors disabled:opacity-40 ${
               action.danger
                 ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30'
-                : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'
+                : 'text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]'
             }`}
           >
             {action.icon && <action.icon className="h-3.5 w-3.5 shrink-0" />}

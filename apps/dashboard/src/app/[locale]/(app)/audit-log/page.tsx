@@ -83,53 +83,53 @@ export default function AuditLogPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+        <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+        <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
       </div>
 
       <PreviewFeatureNotice />
 
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('resourceType')}</label>
+          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('resourceType')}</label>
           <select value={resourceType} onChange={e => { setResourceType(e.target.value as AuditResourceType | 'ALL'); setPage(1); }}
-            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
             <option value="ALL">{t('allResources')}</option>
             {RESOURCE_TYPES.map(rt => <option key={rt} value={rt}>{t(`resourceTypes.${rt}`)}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('fromDate')}</label>
+          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
           <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1); }}
-            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('untilDate')}</label>
+          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
           <input type="date" value={untilDate} onChange={e => { setUntilDate(e.target.value); setPage(1); }}
-            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('user')}</label>
+          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('user')}</label>
           <input value={userSearch} onChange={e => { setUserSearch(e.target.value); setPage(1); }}
             placeholder={t('searchUser')}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
       </div>
 
-      {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!isLoading && filtered.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
       {!isLoading && filtered.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+        <div className="glass-panel rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800 text-start text-xs text-gray-400 dark:text-gray-500">
+              <tr className="border-b border-[var(--deck-glass-border-soft)] text-start text-xs text-[var(--deck-text-low)]">
                 <th className="text-start font-medium px-4 py-2.5">{t('time')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('user')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('action')}</th>
@@ -137,17 +137,17 @@ export default function AuditLogPage() {
                 <th className="text-start font-medium px-4 py-2.5">{t('detail')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+            <tbody className="divide-y divide-[var(--deck-glass-border-soft)]">
               {pageItems.map(entry => {
                 const Icon = RESOURCE_ICONS[entry.resourceType];
                 return (
                   <tr key={entry.id}>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-2.5 text-[var(--deck-text-mid)] whitespace-nowrap">
                       {formatDateTime(entry.timestamp, dateFormat)}
                     </td>
                     <td className="px-4 py-2.5">
-                      <div className="text-gray-900 dark:text-gray-100">{entry.userName}</div>
-                      <div className="text-xs text-gray-400 dark:text-gray-500">{entry.userEmail}</div>
+                      <div className="text-[var(--deck-text-hi)]">{entry.userName}</div>
+                      <div className="text-xs text-[var(--deck-text-low)]">{entry.userEmail}</div>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${AUDIT_ACTION_STYLES[entry.action]}`}>
@@ -155,27 +155,27 @@ export default function AuditLogPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
-                        <Icon className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-[var(--deck-text-hi)]">
+                        <Icon className="w-3.5 h-3.5 text-[var(--deck-text-low)] shrink-0" />
                         <span className="truncate">{entry.resourceName || t(`resourceTypes.${entry.resourceType}`)}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 max-w-xs truncate">{detailText(entry)}</td>
+                    <td className="px-4 py-2.5 text-[var(--deck-text-mid)] max-w-xs truncate">{detailText(entry)}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
 
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-            <span className="text-xs text-gray-400 dark:text-gray-500">{t('pageInfo', { page: currentPage, total: totalPages })}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--deck-glass-border-soft)]">
+            <span className="text-xs text-[var(--deck-text-low)]">{t('pageInfo', { page: currentPage, total: totalPages })}</span>
             <div className="flex items-center gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40">
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40">
                 <ChevronLeft className="w-3.5 h-3.5" /> {t('prev')}
               </button>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-40">
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40">
                 {t('next')} <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>

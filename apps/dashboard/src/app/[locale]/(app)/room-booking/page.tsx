@@ -12,17 +12,17 @@ import { useModuleRouteGuard } from '@/hooks/useModuleRouteGuard';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 
 const inputClass =
-  'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
-const labelClass = 'text-xs text-gray-500 dark:text-gray-400 block mb-1';
-const cardClass = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5';
+  'w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]';
+const labelClass = 'text-xs text-[var(--deck-text-mid)] block mb-1';
+const cardClass = 'glass-panel rounded-2xl p-5';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X className="w-4 h-4" /></button>
+          <h2 className="font-semibold text-[var(--deck-text-hi)]">{title}</h2>
+          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"><X className="w-4 h-4" /></button>
         </div>
         {children}
       </div>
@@ -108,40 +108,40 @@ export default function RoomBookingPage() {
   return (
     <div className="p-6 space-y-6 max-w-5xl">
       <div className="flex items-center gap-3">
-        <DoorOpen className="w-6 h-6 text-indigo-600" />
+        <DoorOpen className="w-6 h-6 text-[var(--deck-accent)]" />
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+          <h1 className="text-xl font-semibold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)]">{t('subtitle')}</p>
         </div>
       </div>
 
       {/* Rooms */}
       <section className={cardClass}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-gray-900 dark:text-gray-100">{t('rooms.title')}</h2>
-          <button onClick={() => setEditingRoom('new')} className="flex items-center gap-1 text-sm text-indigo-600 hover:underline">
+          <h2 className="font-semibold text-[var(--deck-text-hi)]">{t('rooms.title')}</h2>
+          <button onClick={() => setEditingRoom('new')} className="flex items-center gap-1 text-sm text-[var(--deck-accent)] hover:underline">
             <Plus className="w-4 h-4" /> {t('rooms.add')}
           </button>
         </div>
         {roomsQuery.isLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+          <Loader2 className="w-4 h-4 animate-spin text-[var(--deck-text-low)]" />
         ) : rooms.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('rooms.none')}</p>
+          <p className="text-sm text-[var(--deck-text-mid)]">{t('rooms.none')}</p>
         ) : (
           <div className="space-y-2">
             {rooms.map((room) => (
-              <div key={room.id} className="flex items-center justify-between border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
+              <div key={room.id} className="flex items-center justify-between border border-[var(--deck-glass-border-soft)] rounded-lg px-3 py-2">
                 <div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{room.name}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-sm font-medium text-[var(--deck-text-hi)]">{room.name}</div>
+                  <div className="text-xs text-[var(--deck-text-mid)]">
                     {room.locationLabel ?? room.timezone} · {t(`rooms.provider.${room.providerKey}`)}
                     {room.status === 'OUT_OF_SERVICE' && <span className="ms-2 text-amber-600 dark:text-amber-500">{t('rooms.outOfService')}</span>}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button className="text-sm text-indigo-600 hover:underline" onClick={() => setEditingRoom(room)}>{t('rooms.edit')}</button>
+                  <button className="text-sm text-[var(--deck-accent)] hover:underline" onClick={() => setEditingRoom(room)}>{t('rooms.edit')}</button>
                   <button
-                    className="text-gray-400 hover:text-red-500"
+                    className="text-[var(--deck-text-low)] hover:text-red-500"
                     onClick={() => { if (confirmDelete(t('rooms.confirmDelete'))) deleteRoomMutation.mutate(room.id); }}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -155,7 +155,7 @@ export default function RoomBookingPage() {
 
       {/* Calendar */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4" /> {t('calendar.title')}</h2>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3 flex items-center gap-2"><CalendarDays className="w-4 h-4" /> {t('calendar.title')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 mb-3">
           <select className={inputClass} value={calendarRoomId ?? ''} onChange={(e) => setCalendarRoomId(e.target.value || null)}>
             <option value="">{t('calendar.selectRoom')}</option>
@@ -166,24 +166,24 @@ export default function RoomBookingPage() {
         {calendarRoomId && (
           <>
             {reservationsQuery.isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--deck-text-low)]" />
             ) : reservations.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{t('calendar.none')}</p>
+              <p className="text-sm text-[var(--deck-text-mid)] mb-2">{t('calendar.none')}</p>
             ) : (
               <div className="space-y-1.5 mb-2">
                 {reservations.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-1.5">
-                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                  <div key={r.id} className="flex items-center justify-between border border-[var(--deck-glass-border-soft)] rounded-lg px-3 py-1.5">
+                    <div className="text-sm text-[var(--deck-text-hi)]">
                       <span className="font-medium tabular-nums">
                         {new Date(r.startsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                         {' – '}
                         {new Date(r.endsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                       </span>
                       {' · '}{r.title ?? t('calendar.untitled')}
-                      {r.organizerDisplayName && <span className="text-gray-400 dark:text-gray-500"> ({r.organizerDisplayName})</span>}
+                      {r.organizerDisplayName && <span className="text-[var(--deck-text-low)]"> ({r.organizerDisplayName})</span>}
                     </div>
                     {r.providerKey === 'LUMINA' && (
-                      <button className="text-gray-400 hover:text-red-500" onClick={() => cancelReservationMutation.mutate(r.id)}>
+                      <button className="text-[var(--deck-text-low)] hover:text-red-500" onClick={() => cancelReservationMutation.mutate(r.id)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -192,9 +192,9 @@ export default function RoomBookingPage() {
               </div>
             )}
             {calendarRoom?.providerKey === 'LUMINA' ? (
-              <button className="text-sm text-indigo-600 hover:underline" onClick={() => setAddingReservation(true)}>{t('calendar.addReservation')}</button>
+              <button className="text-sm text-[var(--deck-accent)] hover:underline" onClick={() => setAddingReservation(true)}>{t('calendar.addReservation')}</button>
             ) : (
-              <p className="text-xs text-gray-400 dark:text-gray-600">{t('calendar.externalReadOnly')}</p>
+              <p className="text-xs text-[var(--deck-text-low)]">{t('calendar.externalReadOnly')}</p>
             )}
           </>
         )}
@@ -202,17 +202,17 @@ export default function RoomBookingPage() {
 
       {/* Displays */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2"><Monitor className="w-4 h-4" /> {t('displays.title')}</h2>
-        <p className="text-xs text-gray-400 dark:text-gray-600 mb-3">{t('displays.hint')}</p>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3 flex items-center gap-2"><Monitor className="w-4 h-4" /> {t('displays.title')}</h2>
+        <p className="text-xs text-[var(--deck-text-low)] mb-3">{t('displays.hint')}</p>
         {displays.filter((d) => d.roomDisplayBinding).length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('displays.none')}</p>
+          <p className="text-sm text-[var(--deck-text-mid)]">{t('displays.none')}</p>
         ) : (
           <div className="space-y-2">
             {displays.filter((d) => d.roomDisplayBinding).map((d) => (
-              <div key={d.id} className="flex items-center justify-between border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2 text-sm">
-                <span className="text-gray-900 dark:text-gray-100">{d.name}</span>
-                <span className="text-gray-500 dark:text-gray-400">{d.roomDisplayBinding!.room?.name ?? d.roomDisplayBinding!.roomId}</span>
-                <span className="text-xs text-gray-400 dark:text-gray-600">
+              <div key={d.id} className="flex items-center justify-between border border-[var(--deck-glass-border-soft)] rounded-lg px-3 py-2 text-sm">
+                <span className="text-[var(--deck-text-hi)]">{d.name}</span>
+                <span className="text-[var(--deck-text-mid)]">{d.roomDisplayBinding!.room?.name ?? d.roomDisplayBinding!.roomId}</span>
+                <span className="text-xs text-[var(--deck-text-low)]">
                   {d.roomDisplayBinding!.quickBookingEnabled ? t('displays.quickBookingOn') : t('displays.quickBookingOff')}
                 </span>
               </div>
@@ -223,18 +223,18 @@ export default function RoomBookingPage() {
 
       {/* Integrations */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2"><Link2 className="w-4 h-4" /> {t('integrations.title')}</h2>
-        <p className="text-xs text-gray-400 dark:text-gray-600 mb-3">{t('integrations.hint')}</p>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3 flex items-center gap-2"><Link2 className="w-4 h-4" /> {t('integrations.title')}</h2>
+        <p className="text-xs text-[var(--deck-text-low)] mb-3">{t('integrations.hint')}</p>
         <ConnectMicrosoft365Form onSubmit={(dto) => connectMutation.mutate(dto)} pending={connectMutation.isPending} />
         <div className="space-y-2 mt-4">
           {connections.map((c) => (
-            <div key={c.id} className="border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
+            <div key={c.id} className="border border-[var(--deck-glass-border-soft)] rounded-lg px-3 py-2">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.displayName}</div>
-                <button className="text-sm text-gray-400 hover:text-red-500" onClick={() => disconnectMutation.mutate(c.id)}>{t('integrations.disconnect')}</button>
+                <div className="text-sm font-medium text-[var(--deck-text-hi)]">{c.displayName}</div>
+                <button className="text-sm text-[var(--deck-text-low)] hover:text-red-500" onClick={() => disconnectMutation.mutate(c.id)}>{t('integrations.disconnect')}</button>
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">{t('integrations.roomsMapped', { count: c.roomCount })}</div>
-              <button className="text-sm text-indigo-600 hover:underline mt-1" onClick={() => setMappingConnectionId(mappingConnectionId === c.id ? null : c.id)}>
+              <div className="text-xs text-[var(--deck-text-mid)]">{t('integrations.roomsMapped', { count: c.roomCount })}</div>
+              <button className="text-sm text-[var(--deck-accent)] hover:underline mt-1" onClick={() => setMappingConnectionId(mappingConnectionId === c.id ? null : c.id)}>
                 {t('integrations.mapRooms')}
               </button>
               {mappingConnectionId === c.id && (
@@ -253,15 +253,15 @@ export default function RoomBookingPage() {
 
       {/* Health */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4" /> {t('health.title')}</h2>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4" /> {t('health.title')}</h2>
         {connections.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('health.none')}</p>
+          <p className="text-sm text-[var(--deck-text-mid)]">{t('health.none')}</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {connections.map((c) => (
-              <div key={c.id} className="border border-gray-100 dark:border-gray-800 rounded-lg p-3 text-sm">
-                <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">{c.displayName}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+              <div key={c.id} className="border border-[var(--deck-glass-border-soft)] rounded-lg p-3 text-sm">
+                <div className="font-medium text-[var(--deck-text-hi)] mb-1">{c.displayName}</div>
+                <div className="text-xs text-[var(--deck-text-mid)] space-y-0.5">
                   <div>{t('health.status')}: <span className={c.status === 'CONNECTED' ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-500'}>{c.status}</span></div>
                   <div>{t('health.lastSync')}: {c.lastSuccessfulSyncAt ? new Date(c.lastSuccessfulSyncAt).toLocaleString() : t('health.never')}</div>
                   {c.lastErrorCode && <div className="text-red-500">{t('health.lastError')}: {c.lastErrorCode}</div>}
@@ -348,7 +348,7 @@ function RoomModal({ room, onClose, onSave, saving }: {
           </select>
         </div>
         <button
-          className="w-full mt-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          className="w-full mt-2 px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
           disabled={saving || !name.trim() || !timezone}
           onClick={() => onSave({
             name: name.trim(),
@@ -401,7 +401,7 @@ function ReservationModal({ date, onClose, onSave, saving }: {
           </div>
         </div>
         <button
-          className="w-full mt-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          className="w-full mt-2 px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
           disabled={saving || startTime >= endTime}
           onClick={() => onSave({
             title: title.trim() || undefined,
@@ -435,7 +435,7 @@ function ConnectMicrosoft365Form({ onSubmit, pending }: {
       <input className={inputClass} placeholder={t('integrations.clientId')} value={clientId} onChange={(e) => setClientId(e.target.value)} />
       <input className={inputClass} type="password" placeholder={t('integrations.clientSecret')} value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
       <button
-        className="sm:col-span-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+        className="sm:col-span-2 px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
         disabled={!canSubmit || pending}
         onClick={() => onSubmit({ displayName: displayName.trim(), tenantId: tenantId.trim(), clientId: clientId.trim(), clientSecret: clientSecret.trim() })}
       >
@@ -463,11 +463,11 @@ function MapRoomsPanel({ connectionId, rooms, onMap, onSubscribe, mapping }: {
   const selectedExternal = mappable.find((m) => m.externalResourceId === selectedExternalId);
 
   return (
-    <div className="mt-2 border-t border-gray-100 dark:border-gray-800 pt-2 space-y-2">
+    <div className="mt-2 border-t border-[var(--deck-glass-border-soft)] pt-2 space-y-2">
       {mappableQuery.isLoading ? (
-        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+        <Loader2 className="w-4 h-4 animate-spin text-[var(--deck-text-low)]" />
       ) : mappable.length === 0 ? (
-        <p className="text-xs text-gray-400 dark:text-gray-600">{t('integrations.noMappableRooms')}</p>
+        <p className="text-xs text-[var(--deck-text-low)]">{t('integrations.noMappableRooms')}</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <select className={inputClass} value={selectedExternalId} onChange={(e) => setSelectedExternalId(e.target.value)}>
@@ -479,7 +479,7 @@ function MapRoomsPanel({ connectionId, rooms, onMap, onSubscribe, mapping }: {
             {rooms.filter((r) => r.providerKey === 'LUMINA').map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
           <button
-            className="sm:col-span-2 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            className="sm:col-span-2 px-3 py-1.5 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
             disabled={!selectedRoomId || !selectedExternal || mapping}
             onClick={() => {
               if (!selectedExternal) return;
@@ -492,9 +492,9 @@ function MapRoomsPanel({ connectionId, rooms, onMap, onSubscribe, mapping }: {
         </div>
       )}
       {rooms.filter((r) => r.calendarConnectionId === connectionId).map((r) => (
-        <div key={r.id} className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+        <div key={r.id} className="flex items-center justify-between text-xs text-[var(--deck-text-mid)]">
           <span>{r.name}</span>
-          <button className="text-indigo-600 hover:underline" onClick={() => onSubscribe(r.id)}>{t('integrations.subscribeWebhook')}</button>
+          <button className="text-[var(--deck-accent)] hover:underline" onClick={() => onSubscribe(r.id)}>{t('integrations.subscribeWebhook')}</button>
         </div>
       ))}
     </div>

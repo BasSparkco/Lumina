@@ -32,25 +32,25 @@ export default function BillingPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+        <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+        <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
       </div>
 
       <PreviewFeatureNotice />
 
       {!isLoading && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 mb-6">
+        <div className="glass-panel rounded-2xl p-5 mb-6">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-indigo-600" /> {t('currentPlan', { plan: t(`plans.${currentPlan}`) })}
+            <p className="text-sm font-medium text-[var(--deck-text-hi)] flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-[var(--deck-accent)]" /> {t('currentPlan', { plan: t(`plans.${currentPlan}`) })}
             </p>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="text-sm text-[var(--deck-text-mid)]">
               {limit === null ? t('screenUsageUnlimited', { count: screens.length }) : t('screenUsage', { count: screens.length, limit })}
             </span>
           </div>
           {limit !== null && (
-            <div className="bg-gray-100 dark:bg-gray-800 rounded h-2 overflow-hidden">
-              <div className={`h-full ${atLimit ? 'bg-red-500' : 'bg-indigo-500'}`} style={{ width: `${usagePct}%` }} />
+            <div className="bg-[var(--deck-glass-fill-strong)] rounded h-2 overflow-hidden">
+              <div className={`h-full ${atLimit ? 'bg-red-500' : 'bg-[var(--deck-accent)]'}`} style={{ width: `${usagePct}%` }} />
             </div>
           )}
           {atLimit && (
@@ -66,25 +66,25 @@ export default function BillingPage() {
           const isCurrent = plan.id === currentPlan;
           return (
             <div key={plan.id}
-              className={`border rounded-xl p-5 flex flex-col ${isCurrent ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900'}`}>
-              <p className="font-semibold text-gray-900 dark:text-gray-100">{t(`plans.${plan.id}`)}</p>
+              className={`border rounded-xl p-5 flex flex-col ${isCurrent ? 'border-[var(--deck-accent)] ring-1 ring-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] glass-panel'}`}>
+              <p className="font-semibold text-[var(--deck-text-hi)]">{t(`plans.${plan.id}`)}</p>
               <p className="mt-2">
-                <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                <span className="text-2xl font-bold text-[var(--deck-text-hi)]">
                   {plan.priceMonthly === 0 ? t('freePrice') : `$${plan.priceMonthly}`}
                 </span>
-                {plan.priceMonthly > 0 && <span className="text-sm text-gray-400 dark:text-gray-500">{t('perMonth')}</span>}
+                {plan.priceMonthly > 0 && <span className="text-sm text-[var(--deck-text-low)]">{t('perMonth')}</span>}
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 mb-4">
+              <p className="text-sm text-[var(--deck-text-mid)] mt-2 mb-4">
                 {plan.screenLimit === null ? t('unlimitedScreens') : t('screenLimitLabel', { limit: plan.screenLimit })}
               </p>
               <div className="mt-auto">
                 {isCurrent ? (
-                  <span className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-sm font-medium bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400">
+                  <span className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-sm font-medium bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]">
                     <Check className="w-4 h-4" /> {t('currentPlanBadge')}
                   </span>
                 ) : (
                   <button onClick={() => upgradeMut.mutate(plan.id)} disabled={upgradeMut.isPending}
-                    className="w-full py-2 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+                    className="w-full py-2 rounded-lg text-sm font-medium deck-btn-primary disabled:opacity-50">
                     {upgradeMut.isPending && upgradeMut.variables === plan.id ? t('updating') : t('choosePlan')}
                   </button>
                 )}

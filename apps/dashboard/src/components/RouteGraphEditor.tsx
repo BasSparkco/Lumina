@@ -109,7 +109,7 @@ export function RouteGraphEditor({
       ref={canvasRef}
       onClick={handleCanvasClick}
       style={{ width: '100%', aspectRatio: String(aspect), position: 'relative', borderRadius: 6, overflow: 'hidden' }}
-      className={`${imageUrl ? 'bg-gray-900' : 'flex items-center justify-center border border-dashed border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900'} ${mode === 'addNode' ? 'cursor-crosshair' : ''}`}
+      className={`${imageUrl ? 'bg-gray-900' : 'flex items-center justify-center border border-dashed border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)]'} ${mode === 'addNode' ? 'cursor-crosshair' : ''}`}
     >
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- arbitrary remote asset URL, not a static/local image
@@ -124,7 +124,7 @@ export function RouteGraphEditor({
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
         />
       ) : (
-        emptyLabel && <span className="px-4 text-center text-xs text-gray-400 dark:text-gray-500">{emptyLabel}</span>
+        emptyLabel && <span className="px-4 text-center text-xs text-[var(--deck-text-low)]">{emptyLabel}</span>
       )}
 
       {canvasSize.width > 0 && (

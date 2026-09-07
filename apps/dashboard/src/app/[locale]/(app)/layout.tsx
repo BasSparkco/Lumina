@@ -145,20 +145,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
   }, [user, loading, router, locale]);
 
   if (loading || !user) return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
-      <div className="text-gray-400 text-sm">{t('loading')}</div>
+    <div className="command-deck flex items-center justify-center min-h-screen">
+      <div className="text-[var(--deck-text-mid)] text-sm">{t('loading')}</div>
     </div>
   );
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
+    <div className="command-deck flex h-screen overflow-hidden">
       {/* Mobile hamburger trigger — hidden once the drawer is open, since the drawer's own
           close button takes over at that point. Suppressed entirely on designer2: that page
           renders its own trigger inside DesignerTopBar instead (top-left, part of its own
           toolbar, driven by AppSidebarContext below) rather than this floating button. */}
       {!mobileOpen && !isDesigner2 && (
         <button onClick={() => setMobileOpen(true)} title={t('openMenu')}
-          className="fixed top-4 end-4 z-20 md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 shadow-sm">
+          className="glass-panel fixed top-4 end-4 z-20 md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg text-[var(--deck-text-mid)]">
           <Menu className="w-5 h-5" />
         </button>
       )}
@@ -170,21 +170,23 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar. On designer2 it never joins the static desktop layout (no md:static) — it's
           always an off-canvas drawer toggled by the hamburger, on any viewport width, so the
-          canvas gets the full page. */}
-      <aside className={`fixed inset-y-0 start-0 z-40 transition-all duration-200 ease-in-out ${
+          canvas gets the full page. Margin (not inset) provides the floating gap on desktop
+          (position: static ignores inset-*); inset-y/start provide the same gap while it's the
+          fixed mobile drawer. */}
+      <aside className={`glass-panel fixed inset-y-3 start-3 z-40 rounded-2xl transition-all duration-200 ease-in-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'
-      } ${isDesigner2 ? '' : 'md:static md:translate-x-0 md:rtl:translate-x-0'} ${effectiveCollapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-900 border-e border-gray-200 dark:border-gray-800 flex flex-col shrink-0`}>
-        <div className="flex items-center gap-2 px-5 py-5 border-b border-gray-100 dark:border-gray-800">
-          <Tv className="w-5 h-5 text-indigo-600 shrink-0" />
-          {!effectiveCollapsed && <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm truncate">Novacore Signage</span>}
+      } ${isDesigner2 ? '' : 'md:static md:my-3 md:ms-3 md:inset-auto md:translate-x-0 md:rtl:translate-x-0'} ${effectiveCollapsed ? 'w-16' : 'w-56'} flex flex-col shrink-0`}>
+        <div className="flex items-center gap-2 px-5 py-5 border-b border-[var(--deck-glass-border-soft)]">
+          <Tv className="w-5 h-5 text-[var(--deck-accent)] shrink-0" />
+          {!effectiveCollapsed && <span className="font-semibold text-[var(--deck-text-hi)] text-sm truncate">Novacore Signage</span>}
           {!isDesigner2 && (
             <button onClick={() => { setRestoreOnExit(false); setCollapsed(!collapsed); }} title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
-              className="ms-auto hidden md:block text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0">
+              className="ms-auto hidden md:block text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)] shrink-0">
               {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
           )}
           <button onClick={() => setMobileOpen(false)} title={t('closeMenu')}
-            className={`ms-auto ${isDesigner2 ? '' : 'md:hidden'} text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 shrink-0`}>
+            className={`ms-auto ${isDesigner2 ? '' : 'md:hidden'} text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)] shrink-0`}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -201,9 +203,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
             return (
               <div key={section.titleKey}>
                 {effectiveCollapsed ? (
-                  sectionIndex > 0 && <div className="mx-3 my-2 border-t border-gray-100 dark:border-gray-800" />
+                  sectionIndex > 0 && <div className="mx-3 my-2 border-t border-[var(--deck-glass-border-soft)]" />
                 ) : (
-                  <div className={`px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-600 ${sectionIndex > 0 ? 'pt-4' : 'pt-1'}`}>
+                  <div className={`px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--deck-text-low)] ${sectionIndex > 0 ? 'pt-4' : 'pt-1'}`}>
                     {t(`sections.${section.titleKey}`)}
                   </div>
                 )}
@@ -228,7 +230,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                     return (
                       <div key={href}>
                         <div className={`flex items-center rounded-lg ${
-                          active ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          active ? 'bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] shadow-[0_0_0_1px_var(--deck-accent-soft)]' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                         }`}>
                           <Link href={target} title={effectiveCollapsed ? label : undefined} onClick={handleClick}
                             className={`flex flex-1 items-center gap-3 px-3 py-2 text-sm font-medium transition-colors min-w-0 ${effectiveCollapsed ? 'justify-center' : ''}`}>
@@ -248,7 +250,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                           {!effectiveCollapsed && children && children.length > 0 && (
                             <button type="button" title={submenuOpen ? t('collapseSubmenu') : t('expandSubmenu')}
                               onClick={() => setToggledSubmenus(prev => ({ ...prev, [key]: !submenuOpen }))}
-                              className="pe-3 ps-1 py-2 shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                              className="pe-3 ps-1 py-2 shrink-0 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]">
                               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${submenuOpen ? 'rotate-180' : ''}`} />
                             </button>
                           )}
@@ -269,7 +271,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                                         guardNavigation(t('unsavedChangesConfirm'), () => router.push(childTarget));
                                       }}
                                       className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                        isChildActive ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                                        isChildActive ? 'bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] shadow-[0_0_0_1px_var(--deck-accent-soft)]' : 'text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                                       }`}>
                                       <ChildIcon className="w-3.5 h-3.5 shrink-0" />
                                       <span className="truncate">{t(child.key)}</span>
@@ -288,10 +290,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="px-3 py-4 border-t border-gray-100 dark:border-gray-800">
-          {!effectiveCollapsed && <div className="px-3 py-2 text-xs text-gray-400 truncate">{user.email}</div>}
+        <div className="px-3 py-4 border-t border-[var(--deck-glass-border-soft)]">
+          {!effectiveCollapsed && <div className="px-3 py-2 text-xs text-[var(--deck-text-low)] truncate">{user.email}</div>}
           <button onClick={() => guardNavigation(t('unsavedChangesConfirm'), logout)} title={effectiveCollapsed ? t('signOut') : undefined}
-            className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors ${effectiveCollapsed ? 'justify-center' : ''}`}>
+            className={`flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)] transition-colors ${effectiveCollapsed ? 'justify-center' : ''}`}>
             <LogOut className="w-4 h-4 shrink-0" /> {!effectiveCollapsed && t('signOut')}
           </button>
         </div>

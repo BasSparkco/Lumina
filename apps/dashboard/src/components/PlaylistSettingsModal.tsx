@@ -52,17 +52,17 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6" onClick={onClose}>
       <div
-        className="w-full max-w-md max-h-full overflow-y-auto rounded-xl bg-white p-5 dark:bg-gray-900"
+        className="w-full max-w-md max-h-full overflow-y-auto rounded-xl bg-[var(--deck-glass-fill-strong)] p-5"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-6 mb-4">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{t('title', { name })}</p>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 shrink-0">
+          <p className="text-sm font-semibold text-[var(--deck-text-hi)] truncate">{t('title', { name })}</p>
+          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-hi)] shrink-0">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {isLoading && <p className="text-sm text-gray-400 py-6 text-center">{td('loading')}</p>}
+        {isLoading && <p className="text-sm text-[var(--deck-text-low)] py-6 text-center">{td('loading')}</p>}
         {loadFailed && <p className="text-sm text-red-500 py-6 text-center">{td('notFound')}</p>}
 
         {playlist && (
@@ -71,22 +71,22 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
               <p className="text-xs text-red-500">{(configMut.error as Error).message}</p>
             )}
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--deck-text-low)] mb-2">
                 {t('scaleSettings.heading')}
               </h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">{t('scaleSettings.description')}</p>
+              <p className="text-xs text-[var(--deck-text-low)] mb-3">{t('scaleSettings.description')}</p>
               <div className="space-y-2">
                 {SCALABLE_TYPES.map(({ type, icon }) => (
                   <div key={type} className="flex items-center gap-2">
                     {icon}
-                    <label className="flex-1 text-xs text-gray-600 dark:text-gray-300">
+                    <label className="flex-1 text-xs text-[var(--deck-text-mid)]">
                       {t(`scaleSettings.types.${type}`)}
                     </label>
                     <select
                       value={playlist.scaleSettings?.[type] ?? ''}
                       disabled={!canEdit || configMut.isPending}
                       onChange={e => setScale(type, e.target.value as ScaleFitMode | '')}
-                      className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                      className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50"
                     >
                       <option value="">{t('scaleSettings.default')}</option>
                       {FIT_MODES.map(mode => (
@@ -99,16 +99,16 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
             </section>
 
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--deck-text-low)] mb-2">
                 {t('transition.heading')}
               </h3>
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
-                  <label className="text-xs text-gray-500 dark:text-gray-400">{td('transition.label')}</label>
+                  <Sparkles className="w-3.5 h-3.5 text-[var(--deck-text-low)] shrink-0" />
+                  <label className="text-xs text-[var(--deck-text-mid)]">{td('transition.label')}</label>
                   <select value={playlist.transitionStyle} disabled={!canEdit || configMut.isPending}
                     onChange={e => configMut.mutate({ transitionStyle: e.target.value as TransitionStyle })}
-                    className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                     {TRANSITION_STYLE_OPTIONS.map(id => (
                       <option key={id} value={id}>{td(`transition.${TRANSITION_LABEL_KEYS[id]}`)}</option>
                     ))}
@@ -118,17 +118,17 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
                       <input type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
                         disabled={!canEdit || configMut.isPending}
                         onChange={e => configMut.mutate({ transitionDurationMs: Math.min(3000, Math.max(100, Number(e.target.value) || 100)) })}
-                        className="w-20 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50" />
-                      <span className="text-xs text-gray-400 dark:text-gray-500">{td('transition.ms')}</span>
+                        className="w-20 border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
+                      <span className="text-xs text-[var(--deck-text-low)]">{td('transition.ms')}</span>
                     </>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Shuffle className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
-                  <label className="text-xs text-gray-500 dark:text-gray-400">{td('playbackOrder.label')}</label>
+                  <Shuffle className="w-3.5 h-3.5 text-[var(--deck-text-low)] shrink-0" />
+                  <label className="text-xs text-[var(--deck-text-mid)]">{td('playbackOrder.label')}</label>
                   <select value={playlist.playbackOrder} disabled={!canEdit || configMut.isPending}
                     onChange={e => configMut.mutate({ playbackOrder: e.target.value as PlaybackOrder })}
-                    className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                     <option value="SEQUENTIAL">{td('playbackOrder.sequential')}</option>
                     <option value="SHUFFLE">{td('playbackOrder.shuffle')}</option>
                   </select>

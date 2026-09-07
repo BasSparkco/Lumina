@@ -51,8 +51,8 @@ function GroupVolumeControl({ group }: { group: { id: string; name: string; volu
   });
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-2">
-      <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1">
+    <div className="border border-[var(--deck-glass-border)] rounded-lg p-2">
+      <label className="text-xs text-[var(--deck-text-mid)] mb-1 flex items-center gap-1">
         <Volume2 className="w-3 h-3" /> {t('groupVolume')} <span className="ms-auto">{draft}%</span>
       </label>
       <input
@@ -60,7 +60,7 @@ function GroupVolumeControl({ group }: { group: { id: string; name: string; volu
         onChange={e => setDraft(Number(e.target.value))}
         onMouseUp={() => volumeMut.mutate(draft)}
         onTouchEnd={() => volumeMut.mutate(draft)}
-        className="w-full accent-indigo-600"
+        className="w-full accent-[var(--deck-accent)]"
       />
     </div>
   );
@@ -178,30 +178,30 @@ export default function PowerSchedulePage() {
     <div className="p-8 max-w-4xl mx-auto">
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+          <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         {canEditContent && (
           <button onClick={openNew}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shrink-0">
+            className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium  shrink-0">
             <Plus className="w-4 h-4" /> {t('newRule')}
           </button>
         )}
       </div>
 
       {editing && canEditContent && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 mb-8 shadow-sm space-y-4">
-          <h2 className="font-semibold text-gray-900 dark:text-gray-100">{editing === 'new' ? t('newRule') : t('editRule')}</h2>
+        <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-6 mb-8 shadow-sm space-y-4">
+          <h2 className="font-semibold text-[var(--deck-text-hi)]">{editing === 'new' ? t('newRule') : t('editRule')}</h2>
 
           <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('target')}</label>
+            <label className="text-xs text-[var(--deck-text-mid)] mb-2 block">{t('target')}</label>
             <div className="flex gap-1 mb-3">
               {(['screen', 'group'] as const).map(tt => (
                 <button key={tt} onClick={() => setForm(f => ({ ...f, targetType: tt }))}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
                     form.targetType === tt
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
+                      : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                   }`}>
                   {t(tt === 'screen' ? 'targetScreen' : 'targetGroup')}
                 </button>
@@ -210,14 +210,14 @@ export default function PowerSchedulePage() {
 
             {form.targetType === 'screen' ? (
               <select value={form.screenId} onChange={e => setForm(f => ({ ...f, screenId: e.target.value }))}
-                className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
                 <option value="">{t('selectScreen')}</option>
                 {screens.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             ) : (
               <div className="space-y-2">
                 <select value={form.groupId} onChange={e => setForm(f => ({ ...f, groupId: e.target.value }))}
-                  className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
                   <option value="">{t('selectGroup')}</option>
                   {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
@@ -226,17 +226,17 @@ export default function PowerSchedulePage() {
                     <input autoFocus value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
                       placeholder={t('newGroupNamePlaceholder')}
                       onKeyDown={e => { if (e.key === 'Enter' && newGroupName.trim()) createGroupMut.mutate(); if (e.key === 'Escape') setCreatingGroup(false); }}
-                      className="flex-1 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      className="flex-1 border border-[var(--deck-glass-border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
                     <button onClick={() => createGroupMut.mutate()} disabled={!newGroupName.trim() || createGroupMut.isPending}
-                      className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                      className="px-3 py-1.5 text-sm bg-[var(--deck-accent)] text-white rounded-lg  disabled:opacity-50">
                       <Check className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setCreatingGroup(false)} className="px-2 text-gray-400 hover:text-gray-600">
+                    <button onClick={() => setCreatingGroup(false)} className="px-2 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => setCreatingGroup(true)} className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                  <button onClick={() => setCreatingGroup(true)} className="text-xs text-[var(--deck-accent)] hover:text-[var(--deck-accent)] flex items-center gap-1">
                     <Plus className="w-3 h-3" /> {t('newGroup')}
                   </button>
                 )}
@@ -248,14 +248,14 @@ export default function PowerSchedulePage() {
           </div>
 
           <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 mb-2 block">{t('daysOfWeek')}</label>
+            <label className="text-xs text-[var(--deck-text-mid)] mb-2 block">{t('daysOfWeek')}</label>
             <div className="flex gap-1">
               {DAY_KEYS.map((d, i) => (
                 <button key={d} onClick={() => toggleDay(i)}
                   className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
                     form.daysOfWeek.includes(i)
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
+                      : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                   }`}>
                   {t(`days.${d}`)}
                 </button>
@@ -265,11 +265,11 @@ export default function PowerSchedulePage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('startTime')}</label>
+              <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('startTime')}</label>
               <TimeInput value={form.startTime} onChange={v => setForm(f => ({ ...f, startTime: v }))} />
             </div>
             <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{t('endTime')}</label>
+              <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('endTime')}</label>
               <TimeInput value={form.endTime} onChange={v => setForm(f => ({ ...f, endTime: v }))} />
             </div>
           </div>
@@ -286,17 +286,17 @@ export default function PowerSchedulePage() {
             </p>
           )}
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-[var(--deck-glass-border-soft)]">
             {!canSave && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 me-auto">{tc('stillNeed', { items: missing.join(', ') })}</p>
+              <p className="text-xs text-[var(--deck-text-low)] me-auto">{tc('stillNeed', { items: missing.join(', ') })}</p>
             )}
             <button onClick={() => setEditing(null)}
-              className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+              className="px-4 py-2 text-sm text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)]">
               <X className="w-4 h-4 inline mr-1" />{tc('cancel')}
             </button>
             <button onClick={() => editing === 'new' ? createMut.mutate() : updateMut.mutate()}
               disabled={!canSave || saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-[var(--deck-accent)] text-white rounded-lg  disabled:opacity-50">
               <Check className="w-4 h-4" />{saving ? t('saving') : t('saveRule')}
             </button>
           </div>
@@ -305,24 +305,24 @@ export default function PowerSchedulePage() {
 
       {!editing && rules.length > 0 && (
         <div className="relative mb-5 max-w-sm">
-          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tc('search')}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+            className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!isLoading && rules.length === 0 && !editing && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <PowerCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
       {!isLoading && !editing && rules.length > 0 && filteredRules.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{tc('noMatches')}</p>
         </div>
@@ -330,26 +330,26 @@ export default function PowerSchedulePage() {
 
       <div className="space-y-3">
         {filteredRules.map((r: PowerScheduleEntry) => (
-          <div key={r.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between">
+          <div key={r.id} className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-4 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+                <span className="font-medium text-[var(--deck-text-hi)] text-sm">
                   {r.screen?.name ?? r.group?.name ?? r.screenId ?? r.groupId}
                 </span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${r.groupId ? 'bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400' : 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400'}`}>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${r.groupId ? 'bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400' : 'bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'}`}>
                   {r.groupId ? t('groupBadge') : t('screenBadge')}
                 </span>
                 {r.screenId && <PowerPreviewChip screenId={r.screenId} onLabel={t('onNow')} offLabel={t('offNow')} />}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{formatRule(r)}</p>
+              <p className="text-xs text-[var(--deck-text-mid)]">{formatRule(r)}</p>
             </div>
             {canEditContent && (
               <div className="flex gap-1 shrink-0">
-                <button onClick={() => openEdit(r)} title={t('edit')} className="p-1 text-gray-400 dark:text-gray-500 hover:text-indigo-600">
+                <button onClick={() => openEdit(r)} title={t('edit')} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)]">
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(r); }}
-                  title={t('delete')} className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500">
+                  title={t('delete')} className="p-1 text-[var(--deck-text-low)] hover:text-red-500">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>

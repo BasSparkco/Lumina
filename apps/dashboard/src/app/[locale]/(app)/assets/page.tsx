@@ -93,31 +93,31 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
       {/* max-h + overflow-y-auto — with ticker options expanded this panel can be taller than
           the viewport (especially on shorter screens), and without a scroll boundary here the
           Save/Cancel row at the bottom becomes unreachable. */}
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4 flex items-center gap-2">
           <Type className="w-4 h-4 text-amber-500" /> {asset ? t('editTextModalTitle') : t('newTextModalTitle')}
         </h2>
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{tc('name')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{tc('name')}</label>
         <input autoFocus value={name} onChange={e => setName(e.target.value)}
           placeholder={t('newTextNamePlaceholder')}
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('newTextContentLabel')}</label>
+          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('newTextContentLabel')}</label>
         <textarea value={content} onChange={e => setContent(e.target.value)} rows={4} maxLength={5000}
           placeholder={t('newTextContentPlaceholder')}
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3 resize-none" />
+          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3 resize-none" />
 
         <label className="flex items-center gap-2 mb-3 cursor-pointer select-none">
           <input type="checkbox" checked={tickerEnabled} onChange={e => setTickerEnabled(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500" />
-          <span className="text-sm text-gray-700 dark:text-gray-300">{t('style.tickerEnabled')}</span>
+            className="w-4 h-4 rounded border-[var(--deck-glass-border)] text-[var(--deck-accent)] focus:ring-[var(--deck-accent)]" />
+          <span className="text-sm text-[var(--deck-text-hi)]">{t('style.tickerEnabled')}</span>
         </label>
 
         {tickerEnabled && (
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.tickerDirection')}</label>
+              <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('style.tickerDirection')}</label>
               <select value={tickerDirection} onChange={e => setTickerDirection(e.target.value as TickerDirection)}
-                className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="w-full border border-[var(--deck-glass-border)] rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
                 <option value="RIGHT_TO_LEFT">{t('style.tickerDirectionRightToLeft')}</option>
                 <option value="LEFT_TO_RIGHT">{t('style.tickerDirectionLeftToRight')}</option>
                 <option value="TOP_TO_BOTTOM">{t('style.tickerDirectionTopToBottom')}</option>
@@ -125,31 +125,31 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+              <label className="text-xs text-[var(--deck-text-mid)] block mb-1">
                 {t('style.tickerSpeed')} — {tickerSpeed}px/s
               </label>
               <input type="range" min={10} max={600} step={1} value={tickerSpeed}
                 onChange={e => setTickerSpeed(Number(e.target.value))}
-                className="w-full accent-indigo-600" />
+                className="w-full accent-[var(--deck-accent)]" />
             </div>
           </div>
         )}
 
         {tickerEnabled && (
           <div className="mb-3">
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">
+            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">
               {tickerIsVertical ? t('style.tickerHorizontalPosition') : t('style.tickerVerticalPosition')}
             </label>
             {tickerIsVertical ? (
               <input type="range" min={0} max={100} step={1} value={tickerCrossPosition}
                 onChange={e => setTickerCrossPosition(Number(e.target.value))}
-                className="w-full accent-indigo-600" />
+                className="w-full accent-[var(--deck-accent)]" />
             ) : (
               <div className="h-24 flex items-center justify-center">
                 <input type="range" min={0} max={100} step={1} value={tickerCrossPosition}
                   onChange={e => setTickerCrossPosition(Number(e.target.value))}
                   style={{ width: '6rem', transform: 'rotate(-90deg)' }}
-                  className="accent-indigo-600" />
+                  className="accent-[var(--deck-accent)]" />
               </div>
             )}
           </div>
@@ -157,13 +157,13 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
 
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.font')}</label>
+            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('style.font')}</label>
             <FontPicker value={fontFamily} onChange={setFontFamily} />
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.size')}</label>
+            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('style.size')}</label>
             <select value={size} onChange={e => setSize(e.target.value as TextSize)}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-[var(--deck-glass-border)] rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
               <option value="SMALL">{t('style.sizeSmall')}</option>
               <option value="MEDIUM">{t('style.sizeMedium')}</option>
               <option value="LARGE">{t('style.sizeLarge')}</option>
@@ -171,26 +171,26 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.color')}</label>
-            <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg px-1.5 py-1">
+            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('style.color')}</label>
+            <div className="flex items-center gap-1 border border-[var(--deck-glass-border)] rounded-lg px-1.5 py-1">
               <input type="color" value={color} onChange={e => setColor(e.target.value)}
                 className="w-6 h-6 shrink-0 rounded cursor-pointer bg-transparent" />
               <input value={color} onChange={e => setColor(e.target.value)} maxLength={7}
-                className="w-full min-w-0 text-sm bg-transparent dark:text-gray-100 focus:outline-none" />
+                className="w-full min-w-0 text-sm bg-transparent focus:outline-none" />
             </div>
           </div>
           <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.backgroundColor')}</label>
-            <div className="flex items-center gap-1 border border-gray-300 dark:border-gray-600 rounded-lg px-1.5 py-1">
+            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('style.backgroundColor')}</label>
+            <div className="flex items-center gap-1 border border-[var(--deck-glass-border)] rounded-lg px-1.5 py-1">
               <input type="color" value={backgroundColor} onChange={e => setBackgroundColor(e.target.value)}
                 className="w-6 h-6 shrink-0 rounded cursor-pointer bg-transparent" />
               <input value={backgroundColor} onChange={e => setBackgroundColor(e.target.value)} maxLength={7}
-                className="w-full min-w-0 text-sm bg-transparent dark:text-gray-100 focus:outline-none" />
+                className="w-full min-w-0 text-sm bg-transparent focus:outline-none" />
             </div>
           </div>
         </div>
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('style.preview')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('style.preview')}</label>
         <div className="w-full aspect-video rounded-lg p-4 mb-4 overflow-hidden relative" style={{ background: backgroundColor }}>
           {tickerEnabled ? (
             <TickerTextPreview
@@ -216,9 +216,9 @@ function TextAssetModal({ asset, onClose, onSaved }: TextAssetModalProps) {
 
         <div className="flex gap-2">
           <button onClick={onClose}
-            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+            className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
           <button onClick={() => saveMut.mutate()} disabled={!name.trim() || !content.trim() || saveMut.isPending}
-            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50">
             {saveMut.isPending ? t('newTextSaving') : t('newTextSave')}
           </button>
         </div>
@@ -242,22 +242,22 @@ function VideoUploadChoiceModal({ count, onCancel, onChoose }: VideoUploadChoice
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('videoUploadChoice.title')}</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-2">{t('videoUploadChoice.title')}</h2>
+        <p className="text-sm text-[var(--deck-text-mid)] mb-4">
           {count > 1 ? t('videoUploadChoice.bodyPlural', { count }) : t('videoUploadChoice.body')}
         </p>
         <div className="flex flex-col gap-2">
           <button onClick={() => onChoose(false)}
-            className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            className="w-full bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium ">
             {t('videoUploadChoice.uploadVideo')}
           </button>
           <button onClick={() => onChoose(true)}
-            className="w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+            className="w-full flex items-center justify-center gap-2 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm font-medium hover:bg-[var(--deck-glass-fill-strong)]">
             {t('videoUploadChoice.extractAudioOnly')}
           </button>
           <button onClick={onCancel}
-            className="w-full text-gray-500 dark:text-gray-400 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+            className="w-full text-[var(--deck-text-mid)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
             {tc('cancel')}
           </button>
         </div>
@@ -284,20 +284,20 @@ function PasteConfirmModal({ file, onCancel, onConfirm }: PasteConfirmModalProps
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">{t('pasteConfirm.title')}</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('pasteConfirm.body')}</p>
-        <div className="mb-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-2">{t('pasteConfirm.title')}</h2>
+        <p className="text-sm text-[var(--deck-text-mid)] mb-4">{t('pasteConfirm.body')}</p>
+        <div className="mb-4 rounded-lg overflow-hidden border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)]">
           {/* eslint-disable-next-line @next/next/no-img-element -- transient blob: URL, not a next/image-eligible remote asset */}
           <img src={previewUrl} alt={file.name} className="w-full max-h-64 object-contain" />
         </div>
         <div className="flex flex-col gap-2">
           <button onClick={onConfirm}
-            className="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            className="w-full bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium ">
             {t('pasteConfirm.confirm')}
           </button>
           <button onClick={onCancel}
-            className="w-full text-gray-500 dark:text-gray-400 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+            className="w-full text-[var(--deck-text-mid)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
             {tc('cancel')}
           </button>
         </div>
@@ -338,35 +338,35 @@ function AppAssetModal({ provider, onClose, onCreated }: AppAssetModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl">
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4 flex items-center gap-2">
           {PROVIDER_ICON[provider.id] ?? <LayoutGrid className="w-4 h-4" />} {t('apps.addModalTitle', { provider: provider.name })}
         </h2>
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('apps.urlLabel')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('apps.urlLabel')}</label>
         <input autoFocus value={url}
           onChange={e => { setUrl(e.target.value); setPreview(null); resolveMut.reset(); }}
           onBlur={handleBlur}
           placeholder={t('apps.urlPlaceholder')}
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
+          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
 
-        {resolveMut.isPending && <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">{t('apps.checking')}</p>}
+        {resolveMut.isPending && <p className="text-xs text-[var(--deck-text-low)] mb-3">{t('apps.checking')}</p>}
         {resolveMut.isError && <p className="text-xs text-red-500 mb-3">{(resolveMut.error as Error).message}</p>}
         {preview && (
-          <div className="flex items-center gap-3 mb-4 border border-gray-200 dark:border-gray-800 rounded-lg p-2">
+          <div className="flex items-center gap-3 mb-4 border border-[var(--deck-glass-border)] rounded-lg p-2">
             {preview.thumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element -- external oEmbed thumbnail, not in next/image's remotePatterns allowlist
               <img src={preview.thumbnailUrl} alt="" className="w-24 aspect-video object-cover rounded shrink-0" />
             )}
-            <p className="text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{preview.title}</p>
+            <p className="text-sm text-[var(--deck-text-hi)] line-clamp-2">{preview.title}</p>
           </div>
         )}
         {createMut.isError && <p className="text-xs text-red-500 mb-3">{(createMut.error as Error).message}</p>}
 
         <div className="flex gap-2">
           <button onClick={onClose}
-            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+            className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
           <button onClick={() => createMut.mutate()} disabled={!preview || createMut.isPending}
-            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50">
             {createMut.isPending ? t('apps.adding') : t('apps.add')}
           </button>
         </div>
@@ -416,57 +416,57 @@ function AppPlaylistModal({ provider, onClose, onCreated }: AppPlaylistModalProp
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[85vh] overflow-y-auto">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[85vh] overflow-y-auto">
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4 flex items-center gap-2">
           <ListVideo className="w-4 h-4 text-red-600" /> {t('apps.createPlaylistTitle', { provider: provider.name })}
         </h2>
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{tc('name')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{tc('name')}</label>
         <input autoFocus value={name} onChange={e => setName(e.target.value)}
           placeholder={t('apps.playlistNamePlaceholder')}
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
+          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('apps.playbackOrderLabel')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('apps.playbackOrderLabel')}</label>
         <div className="flex gap-2 mb-3">
           <button type="button" onClick={() => setPlaybackOrder('SEQUENTIAL')}
             className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border font-medium ${
-              playbackOrder === 'SEQUENTIAL' ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              playbackOrder === 'SEQUENTIAL' ? 'bg-[var(--deck-accent)] border-[var(--deck-accent)] text-white' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
             }`}>
             <ListOrdered className="w-3.5 h-3.5" /> {t('apps.sequential')}
           </button>
           <button type="button" onClick={() => setPlaybackOrder('SHUFFLE')}
             className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border font-medium ${
-              playbackOrder === 'SHUFFLE' ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              playbackOrder === 'SHUFFLE' ? 'bg-[var(--deck-accent)] border-[var(--deck-accent)] text-white' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
             }`}>
             <Shuffle className="w-3.5 h-3.5" /> {t('apps.shuffle')}
           </button>
         </div>
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('apps.urlLabel')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('apps.urlLabel')}</label>
         <div className="flex gap-2 mb-1">
           <input value={url}
             onChange={e => { setUrl(e.target.value); resolveMut.reset(); }}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddItem(); } }}
             placeholder={t('apps.urlPlaceholder')}
-            className="flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="flex-1 min-w-0 border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
           <button type="button" onClick={handleAddItem} disabled={!url.trim() || resolveMut.isPending}
-            className="shrink-0 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
+            className="shrink-0 bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-hi)] px-3 py-2 rounded-lg text-sm font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
             {resolveMut.isPending ? t('apps.checking') : t('apps.addItem')}
           </button>
         </div>
         {resolveMut.isError && <p className="text-xs text-red-500 mb-3">{(resolveMut.error as Error).message}</p>}
 
         {items.length > 0 && (
-          <ul className="mt-3 mb-4 border border-gray-200 dark:border-gray-800 rounded-lg divide-y divide-gray-100 dark:divide-gray-800 max-h-56 overflow-y-auto">
+          <ul className="mt-3 mb-4 border border-[var(--deck-glass-border)] rounded-lg divide-y divide-[var(--deck-glass-border-soft)] max-h-56 overflow-y-auto">
             {items.map((item, i) => (
               <li key={`${item.sourceUrl}-${i}`} className="flex items-center gap-2 p-2">
                 {item.thumbnailUrl && (
                   // eslint-disable-next-line @next/next/no-img-element -- external oEmbed thumbnail
                   <img src={item.thumbnailUrl} alt="" className="w-14 aspect-video object-cover rounded shrink-0" />
                 )}
-                <span className="flex-1 min-w-0 text-sm text-gray-900 dark:text-gray-100 truncate">{item.title}</span>
+                <span className="flex-1 min-w-0 text-sm text-[var(--deck-text-hi)] truncate">{item.title}</span>
                 <button type="button" onClick={() => removeItem(i)}
-                  className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+                  className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </li>
@@ -478,9 +478,9 @@ function AppPlaylistModal({ provider, onClose, onCreated }: AppPlaylistModalProp
 
         <div className="flex gap-2">
           <button onClick={onClose}
-            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+            className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
           <button onClick={() => createMut.mutate()} disabled={!name.trim() || items.length === 0 || createMut.isPending}
-            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50">
             {createMut.isPending ? t('apps.adding') : t('apps.createPlaylistSave')}
           </button>
         </div>
@@ -494,9 +494,9 @@ interface LibraryUploadModalProps {
   onUploaded: (asset: Asset) => void;
 }
 
-// LIBRARY_MANAGER-only: adds a new stock asset to the shared library (organizationId: null).
-// Collects category/tags up front — unlike the "mine" tab's plain upload, there's no per-org
-// context to default them from, so the producer chooses them here instead.
+// Super-Admin-only (usePermissions().canManageLibrary): adds a new stock asset to the shared
+// library (organizationId: null). Collects category/tags up front — unlike the "mine" tab's plain
+// upload, there's no per-org context to default them from, so the producer chooses them here instead.
 function LibraryUploadModal({ onClose, onUploaded }: LibraryUploadModalProps) {
   const t = useTranslations('assets');
   const tc = useTranslations('common');
@@ -517,33 +517,33 @@ function LibraryUploadModal({ onClose, onUploaded }: LibraryUploadModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('libraryUpload')}</h2>
+      <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4">{t('libraryUpload')}</h2>
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('libraryUploadFile')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('libraryUploadFile')}</label>
         <input type="file" accept="image/*,video/*,audio/*,application/pdf,.ppt,.pptx,.doc,.docx"
           onChange={e => setFile(e.target.files?.[0] ?? null)}
-          className="w-full text-sm text-gray-700 dark:text-gray-300 mb-3" />
+          className="w-full text-sm text-[var(--deck-text-hi)] mb-3" />
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('categoryLabel')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('categoryLabel')}</label>
         <select value={category} onChange={e => setCategory(e.target.value as AssetCategory)}
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3">
+          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3">
           {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
         </select>
 
-        <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">{t('libraryTags')}</label>
+        <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('libraryTags')}</label>
         <input value={tagsText} onChange={e => setTagsText(e.target.value)}
           placeholder={t('libraryTagsPlaceholder')}
-          className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2" />
+          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-2" />
 
-        {uploadMut.isPending && <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{t('uploading', { progress })}</p>}
+        {uploadMut.isPending && <p className="text-xs text-[var(--deck-text-mid)] mb-2">{t('uploading', { progress })}</p>}
         {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
 
         <div className="flex gap-2 mt-3">
           <button onClick={onClose}
-            className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+            className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
           <button onClick={() => uploadMut.mutate()} disabled={!file || uploadMut.isPending}
-            className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-sm font-medium  disabled:opacity-50">
             {uploadMut.isPending ? t('uploading', { progress }) : t('libraryUpload')}
           </button>
         </div>
@@ -895,22 +895,22 @@ function AssetsPageInner() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+          <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         {tab === 'mine' && canEditContent && (
           <div className="flex items-center gap-3">
             {uploading && (
-              <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <span className="flex items-center gap-1.5 text-xs text-[var(--deck-text-mid)]">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {t('uploading', { progress })}
               </span>
             )}
-            <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500">{t('pasteHint')}</span>
+            <span className="hidden sm:inline text-xs text-[var(--deck-text-low)]">{t('pasteHint')}</span>
             <button onClick={e => {
               const rect = e.currentTarget.getBoundingClientRect();
               setNewMenu({ x: rect.left, y: rect.bottom + 4, actions: newMenuActions });
             }}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+              className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium ">
               <Plus className="w-4 h-4" /> {t('newMenu.button')}
             </button>
             <input ref={inputRef} type="file" multiple accept="image/*,video/*,audio/*,application/pdf,.ppt,.pptx,.doc,.docx" className="hidden"
@@ -919,19 +919,19 @@ function AssetsPageInner() {
         )}
         {tab === 'apps' && appsView === 'gallery' && canEditContent && (
           <button onClick={() => setAppsView('create')}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium ">
             <Plus className="w-4 h-4" /> {t('apps.createButton')}
           </button>
         )}
         {tab === 'library' && canManageLibrary && (
           <button onClick={() => setShowLibraryUpload(true)}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium ">
             <Upload className="w-4 h-4" /> {t('libraryUpload')}
           </button>
         )}
         {tab === 'designs' && (
           <button onClick={() => router.push(`/${locale}/designer2`)}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium ">
             <Plus className="w-4 h-4" /> {t('newDesign')}
           </button>
         )}
@@ -960,21 +960,21 @@ function AssetsPageInner() {
         />
       )}
 
-      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-800">
+      <div className="flex gap-1 mb-6 border-b border-[var(--deck-glass-border)]">
         <button onClick={() => setTab('mine')}
-          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'mine' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'mine' ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-transparent text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'}`}>
           <ImageIcon className="w-4 h-4" /> {t('myAssetsTab')}
         </button>
         <button onClick={() => setTab('apps')}
-          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'apps' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'apps' ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-transparent text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'}`}>
           <LayoutGrid className="w-4 h-4" /> {t('appsTab')}
         </button>
         <button onClick={() => setTab('library')}
-          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'library' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'library' ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-transparent text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'}`}>
           <Library className="w-4 h-4" /> {t('libraryTab')}
         </button>
         <button onClick={() => setTab('designs')}
-          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'designs' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'designs' ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-transparent text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'}`}>
           <LayoutTemplate className="w-4 h-4" /> {t('designsTab')}
         </button>
       </div>
@@ -995,13 +995,13 @@ function AssetsPageInner() {
       {nonAppAssets.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-5">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder={tc('search')}
-              className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+              className="w-full border border-[var(--deck-glass-border)] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
           </div>
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as Asset['type'] | '')}
-            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none">
+            className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none">
             <option value="">{t('allTypes')}</option>
             <option value="IMAGE">{t('typeFilter.IMAGE')}</option>
             <option value="VIDEO">{t('typeFilter.VIDEO')}</option>
@@ -1010,7 +1010,7 @@ function AssetsPageInner() {
             <option value="TEXT">{t('typeFilter.TEXT')}</option>
           </select>
           <select value={usageFilter} onChange={e => setUsageFilter(e.target.value as '' | 'IN_USE' | 'UNUSED')}
-            className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none">
+            className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none">
             <option value="">{t('allUsage')}</option>
             <option value="IN_USE">{t('inUse')}</option>
             <option value="UNUSED">{t('unused')}</option>
@@ -1018,17 +1018,17 @@ function AssetsPageInner() {
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!isLoading && nonAppAssets.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <ImageIcon className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
       {!isLoading && nonAppAssets.length > 0 && filteredAssets.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{tc('noMatches')}</p>
         </div>
@@ -1036,9 +1036,9 @@ function AssetsPageInner() {
 
       <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {filteredAssets.map((asset: Asset) => (
-          <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden group">
+          <div key={asset.id} className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] overflow-hidden group">
             {/* Thumbnail — click to view full size (images) or edit (text) */}
-            <div className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+            <div className="group/thumb relative w-full aspect-video bg-[var(--deck-glass-fill-strong)] flex items-center justify-center">
               <button
                 onClick={() => { if (asset.thumbnailUrl) setViewingId(asset.id); else if (asset.type === 'TEXT' && canEditContent) setTextModal(asset); }}
                 disabled={!asset.thumbnailUrl && !(asset.type === 'TEXT' && canEditContent)}
@@ -1062,7 +1062,7 @@ function AssetsPageInner() {
                     {asset.textContent}
                   </p>
                 ) : (
-                  <div className="text-gray-300 dark:text-gray-500">{assetIcon(asset)}</div>
+                  <div className="text-[var(--deck-text-low)]">{assetIcon(asset)}</div>
                 )}
                 {(asset.thumbnailUrl || (asset.type === 'TEXT' && canEditContent)) && (
                   <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
@@ -1106,17 +1106,17 @@ function AssetsPageInner() {
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
                       disabled={renameMut.isPending}
-                      className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full text-sm font-medium text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                     />
                   ) : (
                     <p
                       onClick={() => startRename(asset)}
                       title={canEditContent ? tc('clickToRename') : undefined}
-                      className={`text-sm font-medium text-gray-900 dark:text-gray-100 truncate ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                      className={`text-sm font-medium text-[var(--deck-text-hi)] truncate ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
                       {asset.name}
                     </p>
                   )}
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
+                  <p className="text-xs text-[var(--deck-text-low)] mt-0.5 flex items-center gap-1">
                     {assetIcon(asset)} {formatBytes(asset.sizeBytes)}
                     {asset.inUse && (
                       <span className="ms-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-medium">
@@ -1125,10 +1125,10 @@ function AssetsPageInner() {
                     )}
                   </p>
                   {asset.type === 'VIDEO' && asset.status === 'READY' && asset.hasAudioTrack && (
-                    <label className={`flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-1 ${canEditContent ? 'cursor-pointer' : ''}`}>
+                    <label className={`flex items-center gap-1.5 text-xs text-[var(--deck-text-mid)] mt-1 ${canEditContent ? 'cursor-pointer' : ''}`}>
                       <input type="checkbox" checked={asset.audioEnabled} disabled={!canEditContent}
                         onChange={e => audioMut.mutate({ id: asset.id, audioEnabled: e.target.checked })}
-                        className="w-3.5 h-3.5 accent-indigo-500 disabled:opacity-50" />
+                        className="w-3.5 h-3.5 accent-[var(--deck-accent)] disabled:opacity-50" />
                       <Volume2 className="w-3 h-3" /> {t('includeAudio')}
                     </label>
                   )}
@@ -1138,19 +1138,19 @@ function AssetsPageInner() {
                     <button onClick={() => extractAudioMut.mutate(asset)}
                       disabled={extractAudioMut.isPending && extractAudioMut.variables?.id === asset.id}
                       title={t('convertToAudio')}
-                      className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors disabled:opacity-50">
+                      className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors disabled:opacity-50">
                       <AudioLines className="w-3.5 h-3.5" />
                     </button>
                   )}
                   {asset.downloadUrl && (
                     <a href={asset.downloadUrl} title={t('download')}
-                      className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+                      className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors">
                       <Download className="w-3.5 h-3.5" />
                     </a>
                   )}
                   {canEditContent && (
                     <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(asset); }}
-                      className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+                      className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -1196,7 +1196,7 @@ function AssetsPageInner() {
       {tab === 'apps' && appsView === 'gallery' && (
         <div>
           {appAssets.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-[var(--deck-text-low)]">
               <LayoutGrid className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">{t('apps.galleryEmpty')}</p>
             </div>
@@ -1206,8 +1206,8 @@ function AssetsPageInner() {
               const playlistConfig = asset.appConfig?.kind === 'playlist' ? asset.appConfig : null;
               const thumbnailUrl = playlistConfig ? (playlistConfig.items[0]?.thumbnailUrl ?? null) : asset.thumbnailUrl;
               return (
-                <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden group">
-                  <div className="group/thumb relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <div key={asset.id} className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] overflow-hidden group">
+                  <div className="group/thumb relative w-full aspect-video bg-[var(--deck-glass-fill-strong)] flex items-center justify-center">
                     <button
                       onClick={() => { if (!playlistConfig && asset.sourceUrl) window.open(asset.sourceUrl, '_blank', 'noopener,noreferrer'); }}
                       disabled={!!playlistConfig || !asset.sourceUrl}
@@ -1219,7 +1219,7 @@ function AssetsPageInner() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={thumbnailUrl} alt={asset.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="text-gray-300 dark:text-gray-500">{assetIcon(asset)}</div>
+                        <div className="text-[var(--deck-text-low)]">{assetIcon(asset)}</div>
                       )}
                       {!playlistConfig && asset.sourceUrl && (
                         <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
@@ -1250,23 +1250,23 @@ function AssetsPageInner() {
                               if (e.key === 'Escape') setRenamingId(null);
                             }}
                             disabled={renameMut.isPending}
-                            className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            className="w-full text-sm font-medium text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                           />
                         ) : (
                           <p
                             onClick={() => startRename(asset)}
                             title={canEditContent ? tc('clickToRename') : undefined}
-                            className={`text-sm font-medium text-gray-900 dark:text-gray-100 truncate ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                            className={`text-sm font-medium text-[var(--deck-text-hi)] truncate ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
                             {asset.name}
                           </p>
                         )}
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-1">
+                        <p className="text-xs text-[var(--deck-text-low)] mt-0.5 flex items-center gap-1">
                           {assetIcon(asset)} {appProviders.find(p => p.id === asset.appProviderId)?.name ?? asset.appProviderId}
                         </p>
                       </div>
                       {canEditContent && (
                         <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(asset); }}
-                          className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors shrink-0">
+                          className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors shrink-0">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -1282,11 +1282,11 @@ function AssetsPageInner() {
       {tab === 'apps' && appsView === 'create' && (
         <div>
           <button onClick={() => setAppsView('gallery')}
-            className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4">
+            className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] mb-4">
             <ArrowLeft className="w-3.5 h-3.5" /> {t('apps.backToGallery')}
           </button>
           {appProviders.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-[var(--deck-text-low)]">
               <LayoutGrid className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">{t('apps.empty')}</p>
             </div>
@@ -1306,9 +1306,9 @@ function AssetsPageInner() {
                   });
                 }}
                 disabled={!canEditContent}
-                className="flex flex-col items-center gap-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:border-indigo-400 dark:hover:border-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-default">
+                className="flex flex-col items-center gap-2 glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-6 hover:border-[var(--deck-accent)] transition-colors disabled:opacity-50 disabled:cursor-default">
                 <div className="scale-[2]">{PROVIDER_ICON[provider.id] ?? <LayoutGrid className="w-4 h-4" />}</div>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-2">{provider.name}</span>
+                <span className="text-sm font-medium text-[var(--deck-text-hi)] mt-2">{provider.name}</span>
               </button>
             ))}
           </div>
@@ -1335,22 +1335,22 @@ function AssetsPageInner() {
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-5">
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)}
                 placeholder={t('librarySearchPlaceholder')}
-                className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                className="w-full border border-[var(--deck-glass-border)] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
             </div>
             <select value={libraryCategory} onChange={e => setLibraryCategory(e.target.value as AssetCategory | '')}
-              className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none">
+              className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none">
               <option value="">{t('allCategories')}</option>
               {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
             </select>
           </div>
 
-          {libraryLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+          {libraryLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
           {!libraryLoading && libraryAssets.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-[var(--deck-text-low)]">
               <Library className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">{t('libraryEmpty')}</p>
             </div>
@@ -1358,8 +1358,8 @@ function AssetsPageInner() {
 
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {libraryAssets.map((asset: Asset) => (
-              <div key={asset.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+              <div key={asset.id} className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] overflow-hidden">
+                <div className="relative w-full aspect-video bg-[var(--deck-glass-fill-strong)] flex items-center justify-center">
                   {asset.thumbnailUrl ? (
                     <Image
                     src={asset.thumbnailUrl}
@@ -1369,7 +1369,7 @@ function AssetsPageInner() {
                     className="object-cover"
                   />
                   ) : (
-                    <div className="text-gray-300 dark:text-gray-500">{typeIcon[asset.type]}</div>
+                    <div className="text-[var(--deck-text-low)]">{typeIcon[asset.type]}</div>
                   )}
                 </div>
                 <div className="p-3">
@@ -1384,13 +1384,13 @@ function AssetsPageInner() {
                         if (e.key === 'Escape') setLibraryRenamingId(null);
                       }}
                       disabled={updateLibraryMut.isPending}
-                      className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full text-sm font-medium text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-1 -mx-1 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                     />
                   ) : (
                     <p
                       onClick={() => startLibraryRename(asset)}
                       title={canManageLibrary ? tc('clickToRename') : undefined}
-                      className={`text-sm font-medium text-gray-900 dark:text-gray-100 truncate ${canManageLibrary ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                      className={`text-sm font-medium text-[var(--deck-text-hi)] truncate ${canManageLibrary ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
                       {asset.name}
                     </p>
                   )}
@@ -1398,11 +1398,11 @@ function AssetsPageInner() {
                   {canManageLibrary ? (
                     <select value={asset.category}
                       onChange={e => updateLibraryMut.mutate({ id: asset.id, category: e.target.value as AssetCategory })}
-                      className="w-full text-xs text-gray-500 dark:text-gray-400 mt-1 mb-1.5 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      className="w-full text-xs text-[var(--deck-text-mid)] mt-1 mb-1.5 border border-[var(--deck-glass-border)] rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]">
                       {CATEGORY_VALUES.map(c => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
                     </select>
                   ) : (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 mb-2 flex items-center gap-1">
+                    <p className="text-xs text-[var(--deck-text-low)] mt-0.5 mb-2 flex items-center gap-1">
                       {typeIcon[asset.type]} {t(`categories.${asset.category}`)}
                     </p>
                   )}
@@ -1413,14 +1413,14 @@ function AssetsPageInner() {
                       placeholder={t('libraryTagsPlaceholder')}
                       onBlur={e => commitLibraryTags(asset, e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                      className="w-full text-xs text-gray-500 dark:text-gray-400 mb-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full text-xs text-[var(--deck-text-mid)] mb-2 border border-[var(--deck-glass-border)] rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                     />
                   )}
 
                   {canEditContent && (
                     <button onClick={() => useFromLibraryMut.mutate(asset)}
                       disabled={useFromLibraryMut.isPending}
-                      className="w-full flex items-center justify-center gap-1.5 text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 rounded-lg py-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50">
+                      className="w-full flex items-center justify-center gap-1.5 text-xs bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] rounded-lg py-1.5 hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
                       {justAddedId === asset.id
                         ? <><Check className="w-3.5 h-3.5" /> {t('addedToMyAssets')}</>
                         : <><CopyPlus className="w-3.5 h-3.5" /> {t('addToMyAssets')}</>}
@@ -1443,10 +1443,10 @@ function AssetsPageInner() {
 
       {tab === 'designs' && (
         <div>
-          {designsLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+          {designsLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
           {!designsLoading && designs.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-[var(--deck-text-low)]">
               <LayoutTemplate className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">{t('designsEmpty')}</p>
             </div>
@@ -1460,9 +1460,9 @@ function AssetsPageInner() {
                 tabIndex={0}
                 onClick={() => router.push(`/${locale}/designer2?designId=${design.id}`)}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/${locale}/designer2?designId=${design.id}`); } }}
-                className="cursor-pointer text-start bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden hover:border-indigo-300 dark:hover:border-indigo-700"
+                className="cursor-pointer text-start glass-panel rounded-2xl border border-[var(--deck-glass-border)] overflow-hidden hover:border-[var(--deck-accent)]"
               >
-                <div className="relative w-full aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-300 dark:text-gray-500 overflow-hidden">
+                <div className="relative w-full aspect-video bg-[var(--deck-glass-fill-strong)] flex items-center justify-center text-[var(--deck-text-low)] overflow-hidden">
                   {design.designJson.scenes.length > 0
                     ? <DesignPreview document={design.designJson} />
                     : <LayoutTemplate className="w-8 h-8" />}
@@ -1480,17 +1480,17 @@ function AssetsPageInner() {
                         if (e.key === 'Escape') setRenamingDesignId(null);
                       }}
                       disabled={renameDesignMut.isPending}
-                      className="w-full text-sm font-medium text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 rounded px-1 -mx-1 border border-indigo-300 dark:border-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full text-sm font-medium text-[var(--deck-text-hi)] glass-panel rounded px-1 -mx-1 border border-[var(--deck-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                     />
                   ) : (
                     <p
                       onClick={e => { e.stopPropagation(); startRenameDesign(design); }}
                       title={canEditContent ? tc('clickToRename') : undefined}
-                      className={`truncate text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                      className={`truncate text-sm font-medium text-[var(--deck-text-hi)] ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
                       {design.name}
                     </p>
                   )}
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  <p className="text-xs text-[var(--deck-text-low)] mt-0.5">
                     {new Date(design.updatedAt).toLocaleDateString()}
                   </p>
                 </div>

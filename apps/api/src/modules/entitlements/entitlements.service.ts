@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { ModuleKey, TenantCapabilities, TenantModuleStatus } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AuditService } from '../audit/audit.service';
+import { PlatformAuditService } from '../platform-audit/platform-audit.service';
 import { ModuleCatalogService } from './module-catalog.service';
 import { Clock } from './clock';
 
@@ -44,7 +44,7 @@ export class EntitlementsService {
     private readonly prisma: PrismaService,
     private readonly catalog: ModuleCatalogService,
     private readonly clock: Clock,
-    private readonly audit: AuditService,
+    private readonly audit: PlatformAuditService,
   ) {}
 
   async getCapabilities(organizationId: string): Promise<TenantCapabilities> {
@@ -113,6 +113,7 @@ export class EntitlementsService {
     targetOrganizationId: string,
     assignments: ModuleAssignmentInput[],
     actorUserId: string,
+    ctx: { ipAddress?: string; userAgent?: string } = {},
   ): Promise<TenantCapabilities> {
     const org = await this.prisma.organization.findUnique({
       where: { id: targetOrganizationId },
@@ -151,8 +152,8 @@ export class EntitlementsService {
       if (unchanged) continue;
 
       await this.audit.log({
-        organizationId: targetOrganizationId,
-        userId: actorUserId,
+        targetOrganizationId,
+        actorUserId,
         action: auditActionForStatus(assignment.status),
         resourceType: 'TenantModule',
         resourceId: prior?.id,
@@ -162,6 +163,7 @@ export class EntitlementsService {
           newStatus: assignment.status,
           expiresAt: newExpiresAt ? newExpiresAt.toISOString() : null,
         },
+        ...ctx,
       });
     }
 

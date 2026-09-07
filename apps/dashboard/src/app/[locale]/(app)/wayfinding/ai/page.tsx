@@ -10,20 +10,20 @@ import {
 import { useModuleRouteGuard } from '@/hooks/useModuleRouteGuard';
 
 const inputClass =
-  'w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
-const labelClass = 'text-xs text-gray-500 dark:text-gray-400 block mb-1';
-const cardClass = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5';
+  'w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]';
+const labelClass = 'text-xs text-[var(--deck-text-mid)] block mb-1';
+const cardClass = 'glass-panel rounded-2xl p-5';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto"
+        className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          <h2 className="font-semibold text-[var(--deck-text-hi)]">{title}</h2>
+          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -107,34 +107,34 @@ export default function WayfindingAiPage() {
   return (
     <div className="p-6 space-y-6 max-w-5xl">
       <div className="flex items-center gap-3">
-        <Sparkles className="w-6 h-6 text-indigo-600" />
+        <Sparkles className="w-6 h-6 text-[var(--deck-accent)]" />
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+          <h1 className="text-xl font-semibold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)]">{t('subtitle')}</p>
         </div>
       </div>
 
       {/* Eligible kiosks + per-screen activation */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('eligibleKiosks')}</h2>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3">{t('eligibleKiosks')}</h2>
         {screensQuery.isLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+          <Loader2 className="w-4 h-4 animate-spin text-[var(--deck-text-low)]" />
         ) : screens.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">{t('noEligibleKiosks')}</p>
+          <p className="text-sm text-[var(--deck-text-mid)]">{t('noEligibleKiosks')}</p>
         ) : (
           <div className="space-y-2">
             {screens.map((screen) => (
-              <div key={screen.id} className="flex items-center justify-between border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
+              <div key={screen.id} className="flex items-center justify-between border border-[var(--deck-glass-border-soft)] rounded-lg px-3 py-2">
                 <div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{screen.name}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">{screen.kioskLocation?.floor.building.name}</div>
+                  <div className="text-sm font-medium text-[var(--deck-text-hi)]">{screen.name}</div>
+                  <div className="text-xs text-[var(--deck-text-mid)]">{screen.kioskLocation?.floor.building.name}</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${screen.wayfindingAiConfig?.enabled ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${screen.wayfindingAiConfig?.enabled ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'}`}>
                     {screen.wayfindingAiConfig?.enabled ? t('enabled') : t('disabled')}
                   </span>
                   <button
-                    className="text-sm text-indigo-600 hover:underline"
+                    className="text-sm text-[var(--deck-accent)] hover:underline"
                     onClick={() => setConfigScreen(screen)}
                   >
                     {t('configure')}
@@ -148,7 +148,7 @@ export default function WayfindingAiPage() {
 
       {/* Destination aliases */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('aliases')}</h2>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3">{t('aliases')}</h2>
         <div className="mb-3">
           <label className={labelClass}>{t('building')}</label>
           <select className={inputClass} value={aliasBuildingId ?? ''} onChange={(e) => setAliasBuildingId(e.target.value || null)}>
@@ -172,7 +172,7 @@ export default function WayfindingAiPage() {
 
       {/* Test assistant */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('testAssistant')}</h2>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3">{t('testAssistant')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 mb-3">
           <select className={inputClass} value={testBuildingId ?? ''} onChange={(e) => setTestBuildingId(e.target.value || null)}>
             <option value="">{t('selectBuilding')}</option>
@@ -183,7 +183,7 @@ export default function WayfindingAiPage() {
             <option value="ar">العربية</option>
           </select>
           <button
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
             disabled={!testBuildingId || !testMessage.trim() || testMutation.isPending}
             onClick={() => testMutation.mutate()}
           >
@@ -198,7 +198,7 @@ export default function WayfindingAiPage() {
           onChange={(e) => setTestMessage(e.target.value)}
         />
         {testResult && (
-          <pre className="mt-3 text-xs bg-gray-50 dark:bg-gray-800 rounded-lg p-3 overflow-x-auto">
+          <pre className="mt-3 text-xs bg-[var(--deck-glass-fill-strong)] rounded-lg p-3 overflow-x-auto">
             {JSON.stringify(testResult, null, 2)}
           </pre>
         )}
@@ -206,23 +206,23 @@ export default function WayfindingAiPage() {
 
       {/* Usage summary */}
       <section className={cardClass}>
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('usageSummary')}</h2>
+        <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3">{t('usageSummary')}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
           <div>
-            <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{requestCount}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('requests')}</div>
+            <div className="text-2xl font-semibold text-[var(--deck-text-hi)]">{requestCount}</div>
+            <div className="text-xs text-[var(--deck-text-mid)]">{t('requests')}</div>
           </div>
           <div>
-            <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{modelCallPct}%</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('modelCallRate')}</div>
+            <div className="text-2xl font-semibold text-[var(--deck-text-hi)]">{modelCallPct}%</div>
+            <div className="text-xs text-[var(--deck-text-mid)]">{t('modelCallRate')}</div>
           </div>
           <div>
-            <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{noMatchPct}%</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('noMatchRate')}</div>
+            <div className="text-2xl font-semibold text-[var(--deck-text-hi)]">{noMatchPct}%</div>
+            <div className="text-xs text-[var(--deck-text-mid)]">{t('noMatchRate')}</div>
           </div>
           <div>
-            <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{avgLatency}ms</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{t('avgLatency')}</div>
+            <div className="text-2xl font-semibold text-[var(--deck-text-hi)]">{avgLatency}ms</div>
+            <div className="text-xs text-[var(--deck-text-mid)]">{t('avgLatency')}</div>
           </div>
         </div>
       </section>
@@ -255,7 +255,7 @@ function ConfigModal({ screen, onClose, onSave, saving }: {
   return (
     <Modal title={`${t('configure')} — ${screen.name}`} onClose={onClose}>
       <div className="space-y-3">
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-center gap-2 text-sm text-[var(--deck-text-hi)]">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           {t('enableForThisScreen')}
         </label>
@@ -272,7 +272,7 @@ function ConfigModal({ screen, onClose, onSave, saving }: {
           <input type="number" min={1} max={8} className={inputClass} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
         </div>
         <button
-          className="w-full mt-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          className="w-full mt-2 px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"
           disabled={saving}
           onClick={() => onSave({ enabled, welcomeMessage, welcomeMessageAr, maxTurns })}
         >
@@ -293,13 +293,13 @@ function AliasRow({ poi, onAdd, onRemove }: {
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
 
   return (
-    <div className="border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
-      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{poi.name}</div>
+    <div className="border border-[var(--deck-glass-border-soft)] rounded-lg px-3 py-2">
+      <div className="text-sm font-medium text-[var(--deck-text-hi)]">{poi.name}</div>
       <div className="flex flex-wrap gap-1.5 mt-1.5">
         {poi.aliases.map((alias) => (
-          <span key={alias.id} className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-800 rounded-full px-2 py-1">
+          <span key={alias.id} className="flex items-center gap-1 text-xs bg-[var(--deck-glass-fill-strong)] rounded-full px-2 py-1">
             {alias.value}
-            <button onClick={() => onRemove(alias.id)} className="text-gray-400 hover:text-red-500">
+            <button onClick={() => onRemove(alias.id)} className="text-[var(--deck-text-low)] hover:text-red-500">
               <Trash2 className="w-3 h-3" />
             </button>
           </span>
@@ -317,7 +317,7 @@ function AliasRow({ poi, onAdd, onRemove }: {
           <option value="ar">AR</option>
         </select>
         <button
-          className="px-2 text-indigo-600 disabled:opacity-40"
+          className="px-2 text-[var(--deck-accent)] disabled:opacity-40"
           disabled={!value.trim()}
           onClick={() => { onAdd(value.trim(), language); setValue(''); }}
         >

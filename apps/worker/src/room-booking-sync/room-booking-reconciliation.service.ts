@@ -101,7 +101,7 @@ export class RoomBookingReconciliationService {
         if (existing) {
           await this.prisma.roomReservation.update({ where: { id: existing.id }, data });
         } else {
-          await this.prisma.roomReservation.create({ data: { ...data, roomId: room.id } });
+          await this.prisma.roomReservation.create({ data: { ...data, organizationId: room.organizationId, roomId: room.id } });
         }
       }
 

@@ -62,27 +62,27 @@ function LocationPanel({ screen }: { screen: Screen }) {
   });
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-      <div className="flex items-center gap-1.5 mb-2 text-gray-600 dark:text-gray-300 font-medium text-sm">
+    <div className="border border-[var(--deck-glass-border)] rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-2 text-[var(--deck-text-mid)] font-medium text-sm">
         <MapPin className="w-3.5 h-3.5" /> {t('location.title')}
       </div>
       <div className="grid grid-cols-2 gap-2 mb-2">
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.latitude')}</label>
+          <label className="text-sm text-[var(--deck-text-mid)] block mb-0.5">{t('prayer.latitude')}</label>
           <input type="number" step="0.0001" value={lat} onChange={e => setLat(e.target.value)} disabled={!canEditContent}
             placeholder="e.g. 21.4225"
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50" />
+            className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
         </div>
         <div>
-          <label className="text-sm text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.longitude')}</label>
+          <label className="text-sm text-[var(--deck-text-mid)] block mb-0.5">{t('prayer.longitude')}</label>
           <input type="number" step="0.0001" value={lon} onChange={e => setLon(e.target.value)} disabled={!canEditContent}
             placeholder="e.g. 39.8262"
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50" />
+            className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
         </div>
       </div>
       {canEditContent && (
         <button onClick={() => locationMut.mutate()} disabled={locationMut.isPending}
-          className="w-full text-sm py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium disabled:opacity-50">
+          className="w-full text-sm py-1.5 deck-btn-primary rounded font-medium disabled:opacity-50">
           {locationMut.isPending ? t('location.saving') : t('location.save')}
         </button>
       )}
@@ -127,13 +127,13 @@ function PrayerPanel({ screen }: { screen: Screen }) {
         <p className="text-sm text-amber-700 dark:text-amber-400 mb-2">{t('prayer.needsLocation')}</p>
       )}
       <div className="mb-2">
-        <label className="text-sm text-gray-500 dark:text-gray-400 block mb-0.5">{t('prayer.method')}</label>
+        <label className="text-sm text-[var(--deck-text-mid)] block mb-0.5">{t('prayer.method')}</label>
         <select value={method} onChange={e => setMethod(e.target.value)} disabled={!canEditContent}
-          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-50">
+          className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-50">
           {PRAYER_METHOD_VALUES.map(v => <option key={v} value={v}>{t(`prayer.methods.${v}`)}</option>)}
         </select>
       </div>
-      <label className="flex items-center gap-2 text-sm text-gray-600 mb-2 cursor-pointer">
+      <label className="flex items-center gap-2 text-sm text-[var(--deck-text-mid)] mb-2 cursor-pointer">
         <input type="checkbox" checked={athan} onChange={e => setAthan(e.target.checked)} disabled={!canEditContent}
           className="w-3.5 h-3.5 accent-amber-500" />
         {t('prayer.athan')}
@@ -181,21 +181,21 @@ function KioskLocationPanel({ screen }: { screen: Screen }) {
   const activePin = floorId === screen.kioskLocation?.floorId && screen.kioskLocation ? { x: screen.kioskLocation.x, y: screen.kioskLocation.y } : null;
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <div className="border border-[var(--deck-glass-border)] rounded-lg p-3">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300 font-medium text-sm">
+        <div className="flex items-center gap-1.5 text-[var(--deck-text-mid)] font-medium text-sm">
           <Navigation className="w-3.5 h-3.5" /> {t('kiosk.floor')}
         </div>
         {screen.kioskLocation && canEditContent && (
           <button onClick={() => clearMut.mutate()} disabled={clearMut.isPending}
-            className="text-sm text-gray-400 dark:text-gray-500 hover:text-red-500">
+            className="text-sm text-[var(--deck-text-low)] hover:text-red-500">
             {t('kiosk.clear')}
           </button>
         )}
       </div>
 
       {buildings.length === 0 ? (
-        <p className="text-sm text-gray-400 dark:text-gray-500 py-2">{t('kiosk.noBuildings')}</p>
+        <p className="text-sm text-[var(--deck-text-low)] py-2">{t('kiosk.noBuildings')}</p>
       ) : (
         <>
           {!screen.kioskLocation && (
@@ -204,7 +204,7 @@ function KioskLocationPanel({ screen }: { screen: Screen }) {
           <select
             value={floorId} disabled={!canEditContent}
             onChange={e => setFloorId(e.target.value)}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50 mb-2">
+            className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50 mb-2">
             <option value="">{t('kiosk.noFloor')}</option>
             {buildings.map(b => (
               <optgroup key={b.id} label={b.name}>
@@ -216,7 +216,7 @@ function KioskLocationPanel({ screen }: { screen: Screen }) {
           {floorId && (
             <>
               {!floorPlanUrl && <p className="text-sm text-amber-700 dark:text-amber-400 mb-2">{t('kiosk.noFloorPlan')}</p>}
-              <label className="text-sm text-gray-500 dark:text-gray-400 block mb-1">{t('kiosk.location')}</label>
+              <label className="text-sm text-[var(--deck-text-mid)] block mb-1">{t('kiosk.location')}</label>
               <PoiMapEditor
                 imageUrl={floorPlanUrl}
                 pins={pois.map(p => ({ id: p.id, x: p.x, y: p.y, color: p.category.color, label: p.name }))}
@@ -263,52 +263,52 @@ function RoomBindingPanel({ screen }: { screen: Screen }) {
   }
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+    <div className="border border-[var(--deck-glass-border)] rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300 font-medium text-sm">
+        <div className="flex items-center gap-1.5 text-[var(--deck-text-mid)] font-medium text-sm">
           <DoorOpen className="w-3.5 h-3.5" /> {t('room.title')}
         </div>
         {binding && canEditContent && (
           <button onClick={() => clearMut.mutate()} disabled={clearMut.isPending}
-            className="text-sm text-gray-400 dark:text-gray-500 hover:text-red-500">
+            className="text-sm text-[var(--deck-text-low)] hover:text-red-500">
             {t('room.clear')}
           </button>
         )}
       </div>
 
       {rooms.length === 0 ? (
-        <p className="text-sm text-gray-400 dark:text-gray-500 py-2">{t('room.noRooms')}</p>
+        <p className="text-sm text-[var(--deck-text-low)] py-2">{t('room.noRooms')}</p>
       ) : (
         <>
           {!binding && <p className="text-sm text-amber-700 dark:text-amber-400">{t('room.notConfiguredWarning')}</p>}
           <select
             value={roomId} disabled={!canEditContent}
             onChange={e => setRoomId(e.target.value)}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50">
+            className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50">
             <option value="">{t('room.noRoom')}</option>
             {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
 
           {roomId && (
             <>
-              <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+              <label className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)]">
                 <input type="checkbox" checked={quickBookingEnabled} disabled={!canEditContent}
                   onChange={e => setQuickBookingEnabled(e.target.checked)}
-                  className="w-3.5 h-3.5 accent-indigo-500 disabled:opacity-50" />
+                  className="w-3.5 h-3.5 accent-[var(--deck-accent)] disabled:opacity-50" />
                 {t('room.quickBookingEnabled')}
               </label>
 
               {quickBookingEnabled && (
                 <div>
-                  <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('room.durations')}</label>
+                  <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('room.durations')}</label>
                   <div className="flex flex-wrap gap-1.5">
                     {QUICK_BOOKING_DURATIONS_MINUTES.map(m => (
                       <button key={m} type="button" disabled={!canEditContent}
                         onClick={() => toggleDuration(m)}
                         className={`px-2 py-1 rounded-lg border text-xs font-medium disabled:opacity-50 ${
                           durations.includes(m)
-                            ? 'bg-indigo-600 border-indigo-600 text-white'
-                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                            ? 'bg-[var(--deck-accent)] border-[var(--deck-accent)] text-white'
+                            : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'
                         }`}>
                         {m}m
                       </button>
@@ -318,16 +318,16 @@ function RoomBindingPanel({ screen }: { screen: Screen }) {
               )}
 
               <div>
-                <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('room.startingSoonMinutes')}</label>
+                <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('room.startingSoonMinutes')}</label>
                 <input type="number" min={1} max={120} disabled={!canEditContent}
                   value={startingSoonMinutes} onChange={e => setStartingSoonMinutes(Number(e.target.value))}
-                  className="w-24 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50" />
+                  className="w-24 border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
               </div>
 
               <button
                 onClick={() => saveMut.mutate()}
                 disabled={!canEditContent || durations.length === 0 || saveMut.isPending}
-                className="w-full mt-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                className="w-full mt-1 px-3 py-1.5 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50">
                 {t('room.save')}
               </button>
             </>
@@ -365,22 +365,22 @@ function KioskAttractContentPanel({ screen }: { screen: Screen }) {
   });
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-      <div className="flex items-center gap-1.5 mb-1 text-gray-600 dark:text-gray-300 font-medium text-sm">
+    <div className="border border-[var(--deck-glass-border)] rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-1 text-[var(--deck-text-mid)] font-medium text-sm">
         <Palette className="w-3.5 h-3.5" /> {t('kiosk.attract.title')}
       </div>
-      <p className="text-sm text-gray-400 dark:text-gray-500 mb-2">{t('kiosk.attract.hint')}</p>
+      <p className="text-sm text-[var(--deck-text-low)] mb-2">{t('kiosk.attract.hint')}</p>
 
       <div className="grid grid-cols-2 gap-2 mb-2">
         <button
           onClick={() => setTab('PLAYLIST')}
-          className={`text-sm py-1 rounded font-medium ${tab === 'PLAYLIST' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+          className={`text-sm py-1 rounded font-medium ${tab === 'PLAYLIST' ? 'bg-[var(--deck-accent)] text-white' : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'}`}
         >
           {t('kiosk.attract.playlist')}
         </button>
         <button
           onClick={() => setTab('THEME')}
-          className={`text-sm py-1 rounded font-medium ${tab === 'THEME' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}
+          className={`text-sm py-1 rounded font-medium ${tab === 'THEME' ? 'bg-[var(--deck-accent)] text-white' : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'}`}
         >
           {t('kiosk.attract.theme')}
         </button>
@@ -391,7 +391,7 @@ function KioskAttractContentPanel({ screen }: { screen: Screen }) {
           value={screen.kioskLocation?.attractPlaylistId ?? ''}
           disabled={!canEditContent}
           onChange={e => setPlaylistMut.mutate(e.target.value || null)}
-          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50"
+          className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50"
         >
           <option value="">{t('kiosk.attract.noneOption')}</option>
           {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -401,7 +401,7 @@ function KioskAttractContentPanel({ screen }: { screen: Screen }) {
           value={screen.kioskLocation?.attractThemeId ?? ''}
           disabled={!canEditContent}
           onChange={e => setThemeMut.mutate(e.target.value || null)}
-          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:opacity-50"
+          className="w-full border border-[var(--deck-glass-border)] rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50"
         >
           <option value="">{t('kiosk.attract.noneOption')}</option>
           {themes.map(th => <option key={th.id} value={th.id}>{th.name}</option>)}
@@ -426,14 +426,14 @@ function ScreenshotPanel({ screen }: { screen: Screen }) {
   });
 
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+    <div className="border border-[var(--deck-glass-border)] rounded-lg p-3">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-300 font-medium text-sm">
+        <div className="flex items-center gap-1.5 text-[var(--deck-text-mid)] font-medium text-sm">
           <Camera className="w-3.5 h-3.5" /> {t('screenshot.title')}
         </div>
         {canEditContent && (
           <button onClick={() => captureMut.mutate()} disabled={captureMut.isPending}
-            className="flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 disabled:opacity-50">
+            className="flex items-center gap-1 text-sm text-[var(--deck-accent)] hover:text-[var(--deck-accent)] disabled:opacity-50">
             <RefreshCw className={`w-3 h-3 ${captureMut.isPending ? 'animate-spin' : ''}`} /> {t('screenshot.refresh')}
           </button>
         )}
@@ -443,12 +443,12 @@ function ScreenshotPanel({ screen }: { screen: Screen }) {
           <div className="relative w-full aspect-video rounded overflow-hidden bg-black">
             <NextImage src={screen.screenshotUrl} alt={t('screenshot.title')} fill sizes="400px" className="object-cover" />
           </div>
-          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+          <p className="text-sm text-[var(--deck-text-low)] mt-1">
             {t('screenshot.capturedAt', { when: formatDateTime(screen.screenshotUpdatedAt!, dateFormat) })}
           </p>
         </>
       ) : (
-        <p className="text-sm text-gray-400 dark:text-gray-500 py-3 text-center">{t('screenshot.none')}</p>
+        <p className="text-sm text-[var(--deck-text-low)] py-3 text-center">{t('screenshot.none')}</p>
       )}
     </div>
   );
@@ -467,19 +467,19 @@ function CrashHistoryPanel({ screen }: { screen: Screen }) {
       <div className="flex items-center gap-1.5 mb-2 text-red-700 dark:text-red-400 font-medium text-sm">
         <Bug className="w-3.5 h-3.5" /> {t('crashHistory.title')}
       </div>
-      {isLoading && <p className="text-sm text-gray-400 dark:text-gray-500">{t('crashHistory.loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('crashHistory.loading')}</p>}
       {!isLoading && reports.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 py-2 text-center">{t('crashHistory.none')}</p>
+        <p className="text-sm text-[var(--deck-text-mid)] py-2 text-center">{t('crashHistory.none')}</p>
       )}
       {!isLoading && reports.length > 0 && (
         <ul className="space-y-1.5 max-h-40 overflow-y-auto">
           {reports.map(r => (
-            <li key={r.id} className="text-sm bg-white dark:bg-gray-900 rounded px-2 py-1.5 border border-red-100 dark:border-red-900/60">
+            <li key={r.id} className="text-sm glass-panel rounded px-2 py-1.5 border border-red-100 dark:border-red-900/60">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-red-700 dark:text-red-400">{t(`crashHistory.type.${r.type}`)}</span>
-                <span className="text-gray-400 dark:text-gray-500 shrink-0">{formatDateTime(r.occurredAt, dateFormat)}</span>
+                <span className="text-[var(--deck-text-low)] shrink-0">{formatDateTime(r.occurredAt, dateFormat)}</span>
               </div>
-              <p className="text-gray-600 dark:text-gray-300 truncate" title={r.summary}>{r.summary}</p>
+              <p className="text-[var(--deck-text-mid)] truncate" title={r.summary}>{r.summary}</p>
             </li>
           ))}
         </ul>
@@ -510,15 +510,15 @@ function VolumeControl({ screen, disabled }: { screen: Screen; disabled: boolean
 
   return (
     <div>
-      <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
-        <Volume2 className="w-3 h-3" /> {t('volume')} <span className="ms-auto text-gray-500 dark:text-gray-400">{draft}%</span>
+      <label className="text-sm text-[var(--deck-text-low)] mb-1 flex items-center gap-1">
+        <Volume2 className="w-3 h-3" /> {t('volume')} <span className="ms-auto text-[var(--deck-text-mid)]">{draft}%</span>
       </label>
       <input
         type="range" min={0} max={100} value={draft} disabled={disabled}
         onChange={e => setDraft(Number(e.target.value))}
         onMouseUp={() => volumeMut.mutate(draft)}
         onTouchEnd={() => volumeMut.mutate(draft)}
-        className="w-full accent-indigo-600 disabled:opacity-50"
+        className="w-full accent-[var(--deck-accent)] disabled:opacity-50"
       />
     </div>
   );
@@ -545,7 +545,7 @@ function CustomPlayerPanel({ screen, progress, disabled }: { screen: Screen; pro
 
   if (!progress) {
     return (
-      <p className="text-sm text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
+      <p className="text-sm text-[var(--deck-text-low)] flex items-center gap-1.5">
         <RefreshCw className="w-3 h-3 animate-spin" /> {t('customPlayer.waiting')}
       </p>
     );
@@ -571,20 +571,20 @@ function CustomPlayerPanel({ screen, progress, disabled }: { screen: Screen; pro
         <button type="button" disabled={disabled}
           onClick={() => (progress.paused ? resumeMut.mutate() : pauseMut.mutate())}
           title={progress.paused ? t('customPlayer.resume') : t('customPlayer.pause')}
-          className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
+          className="p-1.5 rounded-lg bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
           {progress.paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
         </button>
         <button type="button" disabled={disabled} onClick={() => commitSeek(Math.max(0, position - 5))}
           title={t('customPlayer.back5')}
-          className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
+          className="p-1.5 rounded-lg bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
         <button type="button" disabled={disabled} onClick={() => commitSeek(Math.min(duration, position + 5))}
           title={t('customPlayer.forward5')}
-          className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
+          className="p-1.5 rounded-lg bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
           <RotateCw className="w-3.5 h-3.5" />
         </button>
-        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono ms-auto">
+        <span className="text-xs text-[var(--deck-text-low)] font-mono ms-auto">
           {formatTime(position)} / {formatTime(duration)}
         </span>
       </div>
@@ -594,15 +594,15 @@ function CustomPlayerPanel({ screen, progress, disabled }: { screen: Screen; pro
         onChange={e => setDragValue(Number(e.target.value))}
         onMouseUp={e => commitSeek(Number((e.target as HTMLInputElement).value))}
         onTouchEnd={e => commitSeek(Number((e.target as HTMLInputElement).value))}
-        className="w-full accent-indigo-600 disabled:opacity-50 mb-1.5"
+        className="w-full accent-[var(--deck-accent)] disabled:opacity-50 mb-1.5"
       />
       <div className="flex gap-1">
         {[0.5, 1, 1.5, 2].map(rate => (
           <button key={rate} type="button" disabled={disabled} onClick={() => speedMut.mutate(rate)}
             className={`flex-1 text-xs py-1 rounded-lg border font-medium disabled:opacity-50 ${
               Math.abs(progress.rate - rate) < 0.01
-                ? 'bg-indigo-600 border-indigo-600 text-white'
-                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                ? 'bg-[var(--deck-accent)] border-[var(--deck-accent)] text-white'
+                : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
             }`}>
             {rate}x
           </button>
@@ -974,15 +974,15 @@ export default function ScreensPage() {
     <div className="px-6 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-base text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+          <h1 className="text-3xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-base text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => void qc.invalidateQueries({ queryKey: ['screens'] })}
             disabled={isFetching}
             title={t('refresh')}
-            className="flex items-center gap-1.5 text-base border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 px-3 py-2 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+            className="flex items-center gap-1.5 text-base border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] px-3 py-2 rounded-lg font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
           </button>
           {canEditContent && (
@@ -995,7 +995,7 @@ export default function ScreensPage() {
               </button>
             ) : (
               <button onClick={() => { setShowPair(true); setPairError(''); }}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-base font-medium hover:bg-indigo-700">
+                className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-base font-medium ">
                 <Plus className="w-4 h-4" /> {t('pairScreen')}
               </button>
             )
@@ -1005,10 +1005,10 @@ export default function ScreensPage() {
 
       {pairedScreens.length > 0 && (
         <div className="relative mb-4 max-w-sm">
-          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tc('search')}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-base focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+            className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-base focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
         </div>
       )}
 
@@ -1017,8 +1017,8 @@ export default function ScreensPage() {
         <button onClick={() => setActiveGroupId(null)}
           className={`text-base px-4 py-2 rounded-full font-medium border transition-colors ${
             activeGroupId === null
-              ? 'bg-indigo-600 text-white border-indigo-600'
-              : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+              ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
+              : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
           }`}>
           {t('groups.allScreens')}
         </button>
@@ -1031,13 +1031,13 @@ export default function ScreensPage() {
                   if (e.key === 'Enter') { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed, previousName: group.name }); }
                   if (e.key === 'Escape') setRenamingGroupId(null);
                 }}
-                className="text-base px-4 py-2 rounded-full border border-indigo-300 dark:border-indigo-700 dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-32" />
+                className="text-base px-4 py-2 rounded-full border border-[var(--deck-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />
             ) : (
               <button onClick={() => setActiveGroupId(group.id)}
                 className={`flex items-center gap-2 text-base px-4 py-2 rounded-full font-medium border transition-colors ${
                   activeGroupId === group.id
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
+                    : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                 }`}>
                 <FolderKanban className="w-3.5 h-3.5" /> {group.name}
                 {canEditContent && (
@@ -1062,21 +1062,21 @@ export default function ScreensPage() {
               <input autoFocus value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && newGroupName.trim()) createGroupMut.mutate(); if (e.key === 'Escape') setCreatingGroup(false); }}
                 placeholder={t('groups.namePlaceholder')}
-                className="text-base px-4 py-2 rounded-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-32" />
+                className="text-base px-4 py-2 rounded-full border border-[var(--deck-glass-border)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />
               <button onClick={() => createGroupMut.mutate()} disabled={!newGroupName.trim() || createGroupMut.isPending}
-                className="text-indigo-600 hover:text-indigo-700 disabled:opacity-50"><Check className="w-5 h-5" /></button>
-              <button onClick={() => setCreatingGroup(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                className="text-[var(--deck-accent)] hover:text-[var(--deck-accent)] disabled:opacity-50"><Check className="w-5 h-5" /></button>
+              <button onClick={() => setCreatingGroup(false)} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"><X className="w-5 h-5" /></button>
             </div>
           ) : (
             <button onClick={() => setCreatingGroup(true)}
-              className="flex items-center gap-1.5 text-base px-4 py-2 rounded-full border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">
+              className="flex items-center gap-1.5 text-base px-4 py-2 rounded-full border border-dashed border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]">
               <Plus className="w-3.5 h-3.5" /> {t('groups.newGroup')}
             </button>
           )
         )}
         {activeGroupId && visibleScreens.length > 0 && canEditContent && !autoPublish && (
           <button onClick={() => bulkPublishMut.mutate(visibleScreens.map(s => s.id))} disabled={bulkPublishMut.isPending}
-            className="ms-auto flex items-center gap-2 text-base px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-50">
+            className="ms-auto flex items-center gap-2 text-base px-4 py-2 rounded-full bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
             <Send className="w-3.5 h-3.5" /> {bulkPublishMut.isPending ? t('groups.publishing') : t('groups.publishToGroup')}
           </button>
         )}
@@ -1089,18 +1089,18 @@ export default function ScreensPage() {
       {/* Pair modal */}
       {showPair && canEditContent && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2"><Unplug className="w-4 h-4 text-indigo-600" /> {t('pairModalTitle')}</h2>
-            <p className="text-base text-gray-500 dark:text-gray-400 mb-3">{t('pairModalBody')}</p>
+          <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4 flex items-center gap-2"><Unplug className="w-4 h-4 text-[var(--deck-accent)]" /> {t('pairModalTitle')}</h2>
+            <p className="text-base text-[var(--deck-text-mid)] mb-3">{t('pairModalBody')}</p>
             <input value={pairCode} onChange={e => { setPairCode(e.target.value.toUpperCase()); setPairError(''); }}
               placeholder="ABC123" maxLength={6}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-base text-center tracking-widest font-mono text-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2" />
+              className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-base text-center tracking-widest font-mono text-xl focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-2" />
             {pairError && <p className="text-sm text-red-600 mb-2">{pairError}</p>}
             <div className="flex gap-2 mt-2">
               <button onClick={() => setShowPair(false)}
-                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-base hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+                className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-base hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
               <button onClick={() => pairMut.mutate()} disabled={pairCode.length < 6 || pairMut.isPending}
-                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-base font-medium hover:bg-indigo-700 disabled:opacity-50">
+                className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-base font-medium  disabled:opacity-50">
                 {pairMut.isPending ? t('pairing') : t('pair')}
               </button>
             </div>
@@ -1113,11 +1113,11 @@ export default function ScreensPage() {
           later. Closing without typing anything just keeps that serial-numbered default. */}
       {namingWarningScreen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <h2 className="font-semibold text-[var(--deck-text-hi)] mb-2 flex items-center gap-2">
               <TriangleAlert className="w-4 h-4 text-amber-500" /> {t('nameWarning.title')}
             </h2>
-            <p className="text-base text-gray-500 dark:text-gray-400 mb-3">
+            <p className="text-base text-[var(--deck-text-mid)] mb-3">
               {t('nameWarning.body', { name: namingWarningScreen.name })}
             </p>
             <input
@@ -1126,14 +1126,14 @@ export default function ScreensPage() {
               onChange={e => setRenameValue(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && renameValue.trim()) commitNamingWarning(); }}
               placeholder={t('nameWarning.placeholder')}
-              className="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-3" />
+              className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
             <div className="flex gap-2">
               <button onClick={() => { setNamingWarningScreen(null); setRenameValue(''); }}
-                className="flex-1 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-base hover:bg-gray-50 dark:hover:bg-gray-800">
+                className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-base hover:bg-[var(--deck-glass-fill-strong)]">
                 {t('nameWarning.skip')}
               </button>
               <button onClick={commitNamingWarning} disabled={!renameValue.trim() || renameMut.isPending}
-                className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-base font-medium hover:bg-indigo-700 disabled:opacity-50">
+                className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-base font-medium  disabled:opacity-50">
                 {renameMut.isPending ? t('nameWarning.saving') : t('nameWarning.save')}
               </button>
             </div>
@@ -1141,10 +1141,10 @@ export default function ScreensPage() {
         </div>
       )}
 
-      {isLoading && <p className="text-base text-gray-400">{t('loading')}</p>}
+      {isLoading && <p className="text-base text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!isLoading && visibleScreens.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Monitor className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-base">{pairedScreens.length === 0 ? t('empty') : tc('noMatches')}</p>
         </div>
@@ -1159,16 +1159,16 @@ export default function ScreensPage() {
               return (
                 <SortableScreenCard key={screen.id} id={screen.id} disabled={!canDragScreens}>
                   {({ attributes, listeners, setNodeRef, style, isDragging }) => (
-            <div ref={setNodeRef} style={style} className={`bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 border-t-4 ${live === 'ONLINE' ? 'border-t-green-500' : 'border-t-gray-300 dark:border-t-gray-700'} p-5 flex flex-col gap-3.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
+            <div ref={setNodeRef} style={style} className={`glass-panel rounded-2xl border border-[var(--deck-glass-border)] border-t-4 ${live === 'ONLINE' ? 'border-t-green-500' : 'border-t-[var(--deck-glass-border)]'} p-5 flex flex-col gap-3.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2 min-w-0">
                   {canDragScreens && (
                     <button type="button" {...attributes} {...listeners} title={t('dragToReorder')}
-                      className="cursor-grab touch-none p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:cursor-grabbing shrink-0">
+                      className="cursor-grab touch-none p-0.5 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)] active:cursor-grabbing shrink-0">
                       <GripVertical className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <Tv2 className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+                  <Tv2 className="w-4 h-4 text-[var(--deck-text-low)] shrink-0" />
                   {renamingId === screen.id ? (
                     <input
                       autoFocus
@@ -1180,31 +1180,31 @@ export default function ScreensPage() {
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
                       disabled={renameMut.isPending}
-                      className="font-medium text-base text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="font-medium text-base text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                     />
                   ) : (
                     <span
                       onClick={() => startRename(screen)}
                       title={canEditContent ? tc('clickToRename') : undefined}
-                      className={`font-medium text-gray-900 dark:text-gray-100 text-base truncate ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                      className={`font-medium text-[var(--deck-text-hi)] text-base truncate ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
                       {screen.name}
                     </span>
                   )}
                 </div>
-                <span className={`flex items-center gap-1 text-sm px-2 py-0.5 rounded-full font-medium shrink-0 ${live === 'ONLINE' ? 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${live === 'ONLINE' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                <span className={`flex items-center gap-1 text-sm px-2 py-0.5 rounded-full font-medium shrink-0 ${live === 'ONLINE' ? 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400' : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${live === 'ONLINE' ? 'bg-green-500 animate-pulse' : 'bg-[var(--deck-text-low)]'}`} />
                   {live === 'ONLINE' ? t('online') : t('offline')}
                 </span>
               </div>
 
-              <div className="flex items-center gap-1 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-1 border-b border-[var(--deck-glass-border-soft)]">
                 {(['content', 'settings'] as const).map(tabKey => (
                   <button key={tabKey} type="button"
                     onClick={() => setActiveTab(prev => ({ ...prev, [screen.id]: tabKey }))}
                     className={`px-3 py-1.5 -mb-px text-sm font-medium border-b-2 ${
                       tab === tabKey
-                        ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                        : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                        ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]'
+                        : 'border-transparent text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]'
                     }`}>
                     {t(`tabs.${tabKey}`)}
                   </button>
@@ -1214,7 +1214,7 @@ export default function ScreensPage() {
               {tab === 'content' && (
                 <>
                   <div>
-                    <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.label')}</label>
+                    <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('streamingType.label')}</label>
                     <div className="grid grid-cols-3 gap-1">
                       {/* WAYFINDING is only offered as a *new* selection when the tenant has the
                           module — but a screen already set to WAYFINDING before the module was
@@ -1233,8 +1233,8 @@ export default function ScreensPage() {
                             onClick={() => streamingTypeMut.mutate({ id: screen.id, streamingType: st })}
                             className={`flex items-center justify-center gap-1 text-sm py-1.5 rounded-lg border font-medium disabled:opacity-50 ${
                               screen.streamingType === st
-                                ? 'bg-indigo-600 border-indigo-600 text-white'
-                                : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                ? 'bg-[var(--deck-accent)] border-[var(--deck-accent)] text-white'
+                                : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                             }`}>
                             <Icon className="w-3 h-3" /> {t(`streamingType.${st}`)}
                           </button>
@@ -1251,7 +1251,7 @@ export default function ScreensPage() {
 
                   {screen.streamingType === 'ASSET' && (
                     <div>
-                      <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('streamingType.assetLabel')}</label>
+                      <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('streamingType.assetLabel')}</label>
                       <AssetPicker
                         value={screen.assetId} disabled={!canEditContent} placeholder={t('none')}
                         onChange={assetId => assetMut.mutate({ id: screen.id, assetId })}
@@ -1264,18 +1264,18 @@ export default function ScreensPage() {
 
                   {screen.streamingType === 'ASSET' && ['VIDEO', 'APP'].includes(assets.find(a => a.id === screen.assetId)?.type ?? '') && (
                     <div>
-                      <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('customPlayer.label')}</label>
+                      <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('customPlayer.label')}</label>
                       <CustomPlayerPanel screen={screen} progress={playbackProgress[screen.id]} disabled={!canEditContent} />
                     </div>
                   )}
 
                   {screen.streamingType === 'PLAYLIST' && (
                     <div>
-                      <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('defaultPlaylist')}</label>
+                      <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('defaultPlaylist')}</label>
                       <select
                         value={screen.playlistId ?? ''} disabled={!canEditContent}
                         onChange={e => assignMut.mutate({ id: screen.id, playlistId: e.target.value || null })}
-                        className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                        className="w-full border border-[var(--deck-glass-border)] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                         <option value="">{t('none')}</option>
                         {playlists.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
@@ -1290,29 +1290,29 @@ export default function ScreensPage() {
                   {screen.streamingType === 'WAYFINDING' && hasWayfinding && <KioskLocationPanel screen={screen} />}
                   {screen.streamingType === 'WAYFINDING' && hasWayfinding && screen.kioskLocation && <KioskAttractContentPanel screen={screen} />}
                   {screen.streamingType === 'WAYFINDING' && !hasWayfinding && (
-                    <p className="text-xs text-gray-400 dark:text-gray-600">{t('streamingType.wayfindingConfigHidden')}</p>
+                    <p className="text-xs text-[var(--deck-text-low)]">{t('streamingType.wayfindingConfigHidden')}</p>
                   )}
 
                   {/* Never mounted for an unlicensed tenant, same reasoning as the wayfinding
                       panels above — the room/display list must not be requested at all. */}
                   {screen.streamingType === 'ROOM_BOOKING' && hasRoomBooking && <RoomBindingPanel screen={screen} />}
                   {screen.streamingType === 'ROOM_BOOKING' && !hasRoomBooking && (
-                    <p className="text-xs text-gray-400 dark:text-gray-600">{t('streamingType.roomBookingConfigHidden')}</p>
+                    <p className="text-xs text-[var(--deck-text-low)]">{t('streamingType.roomBookingConfigHidden')}</p>
                   )}
 
                   <VolumeControl screen={screen} disabled={!canEditContent} />
 
-                  <label className={`flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 ${canEditContent ? 'cursor-pointer' : ''}`}>
+                  <label className={`flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] ${canEditContent ? 'cursor-pointer' : ''}`}>
                     <input type="checkbox" checked={screen.showClock} disabled={!canEditContent}
                       onChange={e => showClockMut.mutate({ id: screen.id, showClock: e.target.checked })}
-                      className="w-3.5 h-3.5 accent-indigo-500 disabled:opacity-50" />
+                      className="w-3.5 h-3.5 accent-[var(--deck-accent)] disabled:opacity-50" />
                     <Clock className="w-3 h-3" /> {t('showClock')}
                   </label>
 
                   {/* Remote diagnostics: live-preview screenshot */}
                   <button
                     onClick={() => setExpandedScreenshot(expandedScreenshot === screen.id ? null : screen.id)}
-                    className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                    className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                     <Camera className="w-3.5 h-3.5" />
                     {expandedScreenshot === screen.id ? t('screenshot.hide') : t('screenshot.show')}
                     {screen.screenshotUrl && <span className="ml-auto text-emerald-500 opacity-70">{t('set')}</span>}
@@ -1333,7 +1333,7 @@ export default function ScreensPage() {
                           onClick={() => publishMut.mutate(screen.id)}
                           disabled={publishMut.isPending && publishMut.variables === screen.id}
                           title={t('publishTitle')}
-                          className="flex-1 flex items-center justify-center gap-1 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50">
+                          className="flex-1 flex items-center justify-center gap-1 border border-[var(--deck-accent)] text-[var(--deck-accent)] py-1.5 rounded-lg text-sm font-medium hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
                           <Send className="w-3 h-3" /> {t('publish')}
                         </button>
                       )}
@@ -1344,7 +1344,7 @@ export default function ScreensPage() {
                         className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-sm font-medium disabled:opacity-50 ${
                           screen.stopped
                             ? 'border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-950'
-                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                            : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                         }`}>
                         {screen.stopped ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
                         {screen.stopped ? t('resume') : t('pause')}
@@ -1353,20 +1353,20 @@ export default function ScreensPage() {
                         onClick={() => reloadMut.mutate(screen.id)}
                         disabled={reloadMut.isPending && reloadMut.variables === screen.id}
                         title={t('reloadTitle')}
-                        className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                        className="flex items-center justify-center gap-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] py-1.5 px-3 rounded-lg text-sm font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
                         <RefreshCw className="w-3 h-3" /> {t('reload')}
                       </button>
                     </div>
                   )}
 
-                  <div className="flex justify-between items-center pt-1 border-t border-gray-100 dark:border-gray-800">
-                    <span className="text-sm text-gray-400 dark:text-gray-500">
+                  <div className="flex justify-between items-center pt-1 border-t border-[var(--deck-glass-border-soft)]">
+                    <span className="text-sm text-[var(--deck-text-low)]">
                       {screen.lastSeenAt ? t('lastSeen', { when: formatDateTime(screen.lastSeenAt, dateFormat) }) : t('neverSeen')}
                     </span>
                     {canEditContent && (
                       <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(screen); }}
                         title={t('deleteTitle')} aria-label={t('deleteTitle')}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors">
+                        className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -1382,10 +1382,10 @@ export default function ScreensPage() {
                     <>
                       <button
                         onClick={() => setExpandedTimezone(expandedTimezone === screen.id ? null : screen.id)}
-                        className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                        className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                         <Clock className="w-3.5 h-3.5" />
                         {expandedTimezone === screen.id ? t('hideTimezone') : t('configureTimezone')}
-                        <span className="ml-auto text-gray-400 dark:text-gray-500 opacity-70 truncate max-w-[8rem]">{screen.timezone}</span>
+                        <span className="ml-auto text-[var(--deck-text-low)] opacity-70 truncate max-w-[8rem]">{screen.timezone}</span>
                       </button>
                       {expandedTimezone === screen.id && (
                         <TimezoneSelect
@@ -1397,13 +1397,13 @@ export default function ScreensPage() {
                   )}
 
                   <div>
-                    <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+                    <label className="text-sm text-[var(--deck-text-low)] mb-1 flex items-center gap-1">
                       <FolderKanban className="w-3 h-3" /> {t('groups.label')}
                     </label>
                     <select
                       value={groupAssignments[screen.id] ?? ''} disabled={!canEditContent}
                       onChange={e => assignGroupMut.mutate({ screen, groupId: e.target.value || null })}
-                      className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                      className="w-full border border-[var(--deck-glass-border)] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                       <option value="">{t('groups.noGroup')}</option>
                       {groups.map((g: ScreenGroup) => <option key={g.id} value={g.id}>{g.name}</option>)}
                     </select>
@@ -1414,14 +1414,14 @@ export default function ScreensPage() {
                       picking a mounting angle should drive the matching aspect ratio by default. */}
                   <button
                     onClick={() => setExpandedDisplay(expandedDisplay === screen.id ? null : screen.id)}
-                    className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                    className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                     <Monitor className="w-3.5 h-3.5" />
                     {expandedDisplay === screen.id ? t('display.hide') : t('display.show')}
                   </button>
                   {expandedDisplay === screen.id && (
                     <div className="space-y-2 pl-1">
                       <div>
-                        <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('orientation.label')}</label>
+                        <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('orientation.label')}</label>
                         <select
                           value={screen.orientation} disabled={!canEditContent}
                           onChange={e => {
@@ -1437,7 +1437,7 @@ export default function ScreensPage() {
                               }
                             }
                           }}
-                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                           {([0, 90, 180, 270] as const).map(deg => (
                             <option key={deg} value={deg}>{t(`orientation.options.${deg}`)}</option>
                           ))}
@@ -1445,11 +1445,11 @@ export default function ScreensPage() {
                       </div>
 
                       <div>
-                        <label className="text-sm text-gray-400 dark:text-gray-500 mb-1 block">{t('aspectRatio.label')}</label>
+                        <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('aspectRatio.label')}</label>
                         <select
                           value={screen.aspectRatio} disabled={!canEditContent}
                           onChange={e => aspectRatioMut.mutate({ id: screen.id, aspectRatio: e.target.value as '16:9' | '9:16' | 'stretch' })}
-                          className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                          className="w-full border border-[var(--deck-glass-border)] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                           <option value="16:9">16:9</option>
                           <option value="9:16">9:16</option>
                           <option value="stretch">{t('aspectRatio.options.stretch')}</option>
@@ -1462,7 +1462,7 @@ export default function ScreensPage() {
                       shouldn't be locked behind the faith-features toggle */}
                   <button
                     onClick={() => setExpandedLocation(expandedLocation === screen.id ? null : screen.id)}
-                    className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                    className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                     <MapPin className="w-3.5 h-3.5" />
                     {expandedLocation === screen.id ? t('hideLocation') : t('configureLocation')}
                     {screen.latitude != null && screen.longitude != null && (
@@ -1487,7 +1487,7 @@ export default function ScreensPage() {
 
                   <button
                     onClick={() => setExpandedCrash(expandedCrash === screen.id ? null : screen.id)}
-                    className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+                    className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                     <Bug className="w-3.5 h-3.5" />
                     {expandedCrash === screen.id ? t('crashHistory.hide') : t('crashHistory.show')}
                   </button>
@@ -1503,7 +1503,7 @@ export default function ScreensPage() {
                         className={`flex items-center justify-center gap-1 border py-1.5 px-3 rounded-lg text-sm font-medium disabled:opacity-50 ${
                           screen.emergencyActive
                             ? 'border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-950'
-                            : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                            : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                         }`}>
                         <AlertTriangle className="w-3 h-3" />
                         {screen.emergencyActive ? t('stopEmergency') : t('emergency')}
@@ -1512,14 +1512,14 @@ export default function ScreensPage() {
                         onClick={() => clearCacheMut.mutate(screen.id)}
                         disabled={clearCacheMut.isPending && clearCacheMut.variables === screen.id}
                         title={t('clearCacheTitle')}
-                        className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                        className="flex items-center justify-center gap-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] py-1.5 px-3 rounded-lg text-sm font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
                         <Eraser className="w-3 h-3" /> {t('clearCache')}
                       </button>
                       <button
                         onClick={() => { if (confirmDelete(t('unpairConfirm'))) unpairMut.mutate(screen); }}
                         disabled={unpairMut.isPending && unpairMut.variables?.id === screen.id}
                         title={t('unpairTitle')}
-                        className="flex items-center justify-center gap-1 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 py-1.5 px-3 rounded-lg text-sm font-medium hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
+                        className="flex items-center justify-center gap-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] py-1.5 px-3 rounded-lg text-sm font-medium hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-200 dark:hover:border-amber-800 disabled:opacity-50">
                         <Unplug className="w-3 h-3" /> {t('unpair')}
                       </button>
                     </div>
@@ -1540,10 +1540,10 @@ export default function ScreensPage() {
           with no way to see or clean them up. Collapsed by default since day-to-day management
           only cares about the paired list above. */}
       {unpairedScreens.length > 0 && (
-        <div className="mt-8 border-t border-gray-100 dark:border-gray-800 pt-4">
+        <div className="mt-8 border-t border-[var(--deck-glass-border-soft)] pt-4">
           <button
             onClick={() => setShowUnpaired(v => !v)}
-            className="flex items-center gap-1.5 text-base text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium">
+            className="flex items-center gap-1.5 text-base text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
             <Unplug className="w-4 h-4" />
             {showUnpaired
               ? t('unpairedSection.hide', { count: unpairedScreens.length })
@@ -1551,20 +1551,20 @@ export default function ScreensPage() {
           </button>
           {showUnpaired && (
             <div className="mt-3">
-              <p className="text-sm text-gray-400 dark:text-gray-500 mb-3 max-w-2xl">{t('unpairedSection.hint')}</p>
+              <p className="text-sm text-[var(--deck-text-low)] mb-3 max-w-2xl">{t('unpairedSection.hint')}</p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {unpairedScreens.map(screen => (
-                  <div key={screen.id} className="flex items-center justify-between gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-3 py-2.5">
+                  <div key={screen.id} className="flex items-center justify-between gap-2 glass-panel rounded-xl px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="text-base text-gray-700 dark:text-gray-300 truncate">{screen.name}</p>
-                      <p className="text-sm text-gray-400 dark:text-gray-500">
+                      <p className="text-base text-[var(--deck-text-hi)] truncate">{screen.name}</p>
+                      <p className="text-sm text-[var(--deck-text-low)]">
                         {screen.lastSeenAt ? t('lastSeen', { when: formatDateTime(screen.lastSeenAt, dateFormat) }) : t('neverSeen')}
                       </p>
                     </div>
                     {canEditContent && (
                       <button onClick={() => { if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(screen); }}
                         title={t('deleteTitle')} aria-label={t('deleteTitle')}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors shrink-0">
+                        className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors shrink-0">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}

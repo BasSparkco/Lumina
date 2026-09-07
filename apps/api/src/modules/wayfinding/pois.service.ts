@@ -42,6 +42,7 @@ export class PoisService {
     if (dto.iconAssetId) await this.assertOwnsAsset(orgId, dto.iconAssetId);
     const poi = await this.prisma.poi.create({
       data: {
+        organizationId: orgId,
         floorId,
         name: dto.name,
         nameAr: dto.nameAr,
@@ -107,6 +108,7 @@ export class PoisService {
         throw new BadRequestException(`Row ${i + 1}: no POI category named "${row.categoryLabel}"`);
       }
       return {
+        organizationId: orgId,
         floorId,
         name: row.name,
         nameAr: row.nameAr,

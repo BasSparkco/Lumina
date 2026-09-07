@@ -1,6 +1,7 @@
 import Cookies from 'js-cookie';
 import type { DesignDocument } from '@lumina/design-schema';
 import type { ModuleKey, OrganizationStatus, TenantModuleStatus, TenantCapabilities } from '@lumina/types';
+import { getActiveQueryClient } from '@/context/QueryProvider';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/v1';
 // playsetting.md Phase 4 — the player PWA's own origin (a separate deployment, see
@@ -30,6 +31,14 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    // Populated only for the "your session is no longer valid" family of 401s (see
+    // apps/api/src/common/auth-error-codes.ts) — undefined for every other error. Nothing in the
+    // dashboard branches on a specific code today (the existing 401 handling below already
+    // covers all of them uniformly); it exists mainly so this is visible in logs/devtools
+    // instead of indistinguishable from a network hiccup, and to mirror the WebSocket gateway's
+    // 'auth-invalidated' event, which carries the same codes for the one path that has no HTTP
+    // response to read this from.
+    public readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -51,16 +60,24 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers ?? {}),
     },
   });
-  // Only auto-redirect when a previously-valid session got rejected (token expired/revoked).
-  // Without the `token` check, this also fires for a plain wrong-password attempt on the
-  // login endpoint itself (also a 401), forcing a hard navigation mid-attempt and wiping
-  // whatever the login form was showing (error message, entered email, etc.).
-  if (token && res.status === 401) { clearToken(); if (typeof window !== 'undefined') window.location.replace(loginPath()); }
+  // Only auto-redirect when a previously-valid session got rejected (token expired/revoked, or
+  // one of AuthErrorCode's live-invalidation reasons — see JwtStrategy/TenantStatusGuard — which
+  // all surface as a plain 401 here too). Without the `token` check, this also fires for a plain
+  // wrong-password attempt on the login endpoint itself (also a 401), forcing a hard navigation
+  // mid-attempt and wiping whatever the login form was showing (error message, entered email,
+  // etc.). The cache is cleared explicitly rather than relying only on the redirect's full page
+  // reload to discard it — see docs/adr/tenant-isolation-and-shared-content.md §Dashboard
+  // identity and cache boundary.
+  if (token && res.status === 401) {
+    clearToken();
+    getActiveQueryClient()?.clear();
+    if (typeof window !== 'undefined') window.location.replace(loginPath());
+  }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { message?: string };
+    const body = await res.json().catch(() => ({})) as { message?: string; code?: string };
     // res.statusText is always '' on HTTP/2 responses (no reason-phrase), so it can't be
     // trusted as a non-empty fallback — always fall through to the status code.
-    throw new ApiError(body.message || res.statusText || `Request failed (${res.status})`, res.status);
+    throw new ApiError(body.message || res.statusText || `Request failed (${res.status})`, res.status, body.code);
   }
   // NestJS's default status for DELETE routes is 200, not 204, and these controllers don't
   // override it — so a successful delete comes back as `200` with a genuinely empty body,
@@ -93,6 +110,32 @@ export const orgApi = {
   getCapabilities: () => req<TenantCapabilities>('/org/capabilities'),
 };
 
+// ── Members & invites ────────────────────────────────────────────────────────
+// Real, org-scoped backend (apps/api/src/modules/org) — replaces
+// apps/dashboard/src/lib/mocks/members.ts per
+// docs/tenant_isolation_and_platform_admin_plan.md P1. `Member` (a real `User` row) and
+// `PendingInvite` (a real `OrgInvite` row) are genuinely different shapes, unlike the mock's
+// single unified type — the Members page renders them as two lists merged for display.
+export interface Member { id: string; email: string; name: string; role: UserRole; createdAt: string }
+export interface PendingInvite { id: string; email: string; role: UserRole; token: string; expiresAt: string; createdAt: string }
+// Deliberately minimal — served by a public, unauthenticated endpoint to whoever holds the
+// invite link, before they've signed in. Never carries organizationId or anything else.
+export interface InvitePreview { email: string; organizationName: string; role: UserRole }
+
+export const membersApi = {
+  list: () => req<Member[]>('/org/members'),
+  listInvites: () => req<PendingInvite[]>('/org/invites'),
+  invite: (email: string, role: UserRole) =>
+    req<PendingInvite>('/org/invite', { method: 'POST', body: JSON.stringify({ email, role }) }),
+  updateRole: (id: string, role: UserRole) =>
+    req<Member>(`/org/members/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+  remove: (id: string) => req<void>(`/org/members/${id}`, { method: 'DELETE' }),
+  revokeInvite: (id: string) => req<void>(`/org/invites/${id}`, { method: 'DELETE' }),
+  getInvite: (token: string) => req<InvitePreview>(`/org/invite/${token}`),
+  acceptInvite: (token: string, name: string, password: string) =>
+    req<{ token: string; user: User }>('/org/invite/accept', { method: 'POST', body: JSON.stringify({ token, name, password }) }),
+};
+
 // ── Platform tenants (Super Admin control plane) ─────────────────────────────
 export interface TenantModuleAssignment {
   key: ModuleKey;
@@ -112,8 +155,21 @@ export interface TenantDetail {
   name: string;
   slug: string;
   status: OrganizationStatus;
+  suspensionReason: string | null;
   createdAt: string;
+  owner: { id: string; email: string; name: string } | null;
   capabilities: TenantCapabilities;
+}
+export interface PlatformAuditEntry {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  metadata: unknown;
+  reason: string | null;
+  result: string;
+  createdAt: string;
+  actor: { id: string; name: string; email: string } | null;
 }
 export interface OwnerInviteResult {
   email: string;
@@ -138,12 +194,30 @@ export const platformTenantsApi = {
   list: () => req<TenantSummary[]>('/admin/tenants'),
   detail: (tenantId: string) => req<TenantDetail>(`/admin/tenants/${tenantId}`),
   create: (input: CreateTenantInput) => req<CreateTenantResult>('/admin/tenants', { method: 'POST', body: JSON.stringify(input) }),
-  updateStatus: (tenantId: string, status: OrganizationStatus) =>
-    req<{ id: string; status: OrganizationStatus }>(`/admin/tenants/${tenantId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   setModules: (tenantId: string, assignments: { key: ModuleKey; status: TenantModuleStatus; expiresAt?: string }[]) =>
     req<TenantCapabilities>(`/admin/tenants/${tenantId}/modules`, { method: 'PUT', body: JSON.stringify({ assignments }) }),
   reissueOwnerInvite: (tenantId: string, email: string) =>
     req<OwnerInviteResult>(`/admin/tenants/${tenantId}/owner-invite`, { method: 'POST', body: JSON.stringify({ email }) }),
+  revokeOwnerInvite: (tenantId: string, inviteId: string) =>
+    req<void>(`/admin/tenants/${tenantId}/owner-invite/${inviteId}`, { method: 'DELETE' }),
+  updateName: (tenantId: string, name: string) =>
+    req<{ id: string; name: string }>(`/admin/tenants/${tenantId}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  // P6a — "suspend/reactivate with a required reason": reason is required by the API only when
+  // status is SUSPENDED, so it's an optional param here rather than a second required argument
+  // every ACTIVE-reactivation call site would otherwise have to pass `undefined` for.
+  updateStatus: (tenantId: string, status: OrganizationStatus, reason?: string) =>
+    req<{ id: string; status: OrganizationStatus }>(`/admin/tenants/${tenantId}/status`, { method: 'PUT', body: JSON.stringify({ status, reason }) }),
+  listMembers: (tenantId: string) => req<Member[]>(`/admin/tenants/${tenantId}/members`),
+  listInvites: (tenantId: string) => req<PendingInvite[]>(`/admin/tenants/${tenantId}/invites`),
+  updateMemberRole: (tenantId: string, memberId: string, role: UserRole) =>
+    req<Member>(`/admin/tenants/${tenantId}/members/${memberId}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+  removeMember: (tenantId: string, memberId: string) =>
+    req<void>(`/admin/tenants/${tenantId}/members/${memberId}`, { method: 'DELETE' }),
+  revokeMemberSessions: (tenantId: string, memberId: string) =>
+    req<{ id: string }>(`/admin/tenants/${tenantId}/members/${memberId}/revoke-sessions`, { method: 'POST' }),
+  revokeAllSessions: (tenantId: string) =>
+    req<{ revokedCount: number }>(`/admin/tenants/${tenantId}/revoke-sessions`, { method: 'POST' }),
+  listAuditLog: (tenantId: string) => req<PlatformAuditEntry[]>(`/admin/tenants/${tenantId}/audit`),
 };
 
 // ── Screens ─────────────────────────────────────────────────────────────────
@@ -639,7 +713,7 @@ export const realScreenGroupsApi = {
 // ── Types ───────────────────────────────────────────────────────────────────
 export type ZoneType = 'MEDIA' | 'PRAYER' | 'WEATHER' | 'CURRENCY' | 'TICKER' | 'TIME' | 'DATE' | 'QR';
 export type ElementShape = 'rectangle' | 'rounded' | 'circle' | 'triangle' | 'pentagon' | 'hexagon' | 'octagon' | 'star' | 'arrow';
-export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | 'LIBRARY_MANAGER';
+export type UserRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
 export type StreamingType = 'ASSET' | 'PLAYLIST' | 'WAYFINDING' | 'ROOM_BOOKING';
 export interface User { id: string; email: string; name: string; role: UserRole; orgId: string; isSuperAdmin: boolean; }
 export interface ZoneInput {

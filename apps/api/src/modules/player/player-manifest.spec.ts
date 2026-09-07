@@ -46,7 +46,12 @@ function makeService(records: unknown[]) {
     screen: { findUnique: jest.fn().mockResolvedValue({ organizationId: 'org-1' }) },
   } as unknown as PrismaService;
   const storage = {
-    publicUrl: jest.fn((key: string) => `https://media.test/${key}`),
+    assetUrl: jest.fn((id: string) => `https://media.test/assets/${id}`),
+    assetThumbnailUrl: jest.fn((id: string) => `https://media.test/assets/${id}/thumbnail`),
+    assetPageUrls: jest.fn((id: string, pageCount: number | null) =>
+      Array.from({ length: pageCount ?? 0 }, (_, i) => `https://media.test/assets/${id}/pages/${i + 1}`)),
+    assetBinaryUrl: jest.fn((id: string) => `https://media.test/binaries/${id}`),
+    screenshotUrl: jest.fn((id: string) => `https://media.test/screens/${id}/screenshot`),
   } as unknown as StorageService;
   const service = new PlayerService(
     prisma,

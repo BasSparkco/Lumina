@@ -61,12 +61,13 @@ interface DesignerTopBarProps {
 }
 
 const btn =
-  'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-30 disabled:hover:bg-transparent dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100';
+  'inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)] disabled:opacity-30 disabled:hover:bg-transparent';
 // Selected-state variant for toggleable tools (currently just the Hand tool) — the plain `btn`
 // class has no "pressed" look of its own (aria-pressed alone isn't styled), so a real color
 // change on click needs its own class swapped in based on the active flag.
 const btnActive =
-  'inline-flex h-8 w-8 items-center justify-center rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900';
+  'inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--deck-accent)] bg-[var(--deck-accent-soft)] shadow-[0_0_0_1px_var(--deck-accent-soft)]';
+const divider = 'mx-2 h-5 w-px bg-[var(--deck-glass-border)]';
 
 export function DesignerTopBar({
   name,
@@ -114,13 +115,13 @@ export function DesignerTopBar({
   }
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
+    <div className="glass-panel mx-4 mt-[14px] mb-[14px] flex h-14 shrink-0 items-center gap-2 rounded-2xl px-3">
       {appSidebar && !appSidebar.open && (
         <>
           <button className={btn} onClick={() => appSidebar.setOpen(true)} aria-label="Open menu">
             <Menu className="h-4 w-4" />
           </button>
-          <div className="h-5 w-px bg-gray-200 dark:bg-gray-800" />
+          <div className={divider} />
         </>
       )}
       <button className={btn} onClick={onBack} aria-label="Back">
@@ -136,19 +137,19 @@ export function DesignerTopBar({
             if (e.key === 'Enter') commitRename();
             if (e.key === 'Escape') setRenaming(false);
           }}
-          className="mx-1 w-48 truncate rounded border border-indigo-300 bg-white px-1 text-sm font-medium text-gray-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-indigo-700 dark:bg-gray-900 dark:text-gray-100"
+          className="mx-1 w-48 truncate rounded border border-[var(--deck-accent)] bg-[var(--deck-glass-fill-strong)] px-1 text-sm font-medium text-[var(--deck-text-hi)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
         />
       ) : (
         <span
           onClick={startRename}
           title={onRename ? 'Click to rename' : undefined}
-          className={`mx-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100 ${onRename ? 'cursor-text rounded px-1 hover:bg-gray-100 dark:hover:bg-gray-800' : ''}`}
+          className={`mx-1 truncate text-sm font-medium text-[var(--deck-text-hi)] ${onRename ? 'cursor-text rounded px-1 hover:bg-[var(--deck-glass-fill-strong)]' : ''}`}
         >
           {name}
         </span>
       )}
 
-      <div className="mx-2 h-5 w-px bg-gray-200 dark:bg-gray-800" />
+      <div className={divider} />
 
       <button className={btn} onClick={onUndo} disabled={!canUndo} aria-label="Undo">
         <Undo2 className="h-4 w-4" />
@@ -157,7 +158,7 @@ export function DesignerTopBar({
         <Redo2 className="h-4 w-4" />
       </button>
 
-      <div className="mx-2 h-5 w-px bg-gray-200 dark:bg-gray-800" />
+      <div className={divider} />
 
       <button
         className={handToolActive ? btnActive : btn}
@@ -169,12 +170,12 @@ export function DesignerTopBar({
         <Hand className="h-4 w-4" />
       </button>
 
-      <div className="mx-2 h-5 w-px bg-gray-200 dark:bg-gray-800" />
+      <div className={divider} />
 
       <button className={btn} onClick={onZoomOut} aria-label="Zoom out">
         <ZoomOut className="h-4 w-4" />
       </button>
-      <span className="w-12 text-center text-xs tabular-nums text-gray-500 dark:text-gray-400">
+      <span className="w-12 text-center text-xs tabular-nums text-[var(--deck-text-low)]">
         {Math.round(zoom * 100)}%
       </span>
       <button className={btn} onClick={onZoomIn} aria-label="Zoom in">
@@ -194,15 +195,15 @@ export function DesignerTopBar({
 
       <div className="ml-auto flex items-center gap-3">
         {saveTargetChoice && (
-          <div className="flex items-center rounded-md border border-gray-200 p-0.5 text-xs dark:border-gray-800">
+          <div className="flex items-center rounded-md border border-[var(--deck-glass-border)] p-0.5 text-xs">
             {(['design', 'template'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => saveTargetChoice.onChange(v)}
                 className={`rounded px-2 py-1 font-medium transition-colors ${
                   saveTargetChoice.value === v
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                    ? 'bg-[var(--deck-accent)] text-white'
+                    : 'text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'
                 }`}
               >
                 {v === 'template' ? 'Save as Template' : 'Save as Design'}
@@ -231,7 +232,13 @@ export function DesignerTopBar({
         >
           {previewing ? <Square className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
-        <button className={btn} disabled={!onSave || saving} onClick={onSave} aria-label="Save">
+        <button
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm disabled:opacity-30"
+          style={{ background: 'linear-gradient(135deg, var(--deck-glow-violet), #8F6CFF 60%, var(--deck-glow-magenta))' }}
+          disabled={!onSave || saving}
+          onClick={onSave}
+          aria-label="Save"
+        >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </button>
       </div>

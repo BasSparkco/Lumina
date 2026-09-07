@@ -38,20 +38,20 @@ export function TemplatesGalleryPanel() {
       {useMut.isError && <p className="mb-2 text-xs text-red-500">{(useMut.error as Error).message}</p>}
 
       <div className="grid grid-cols-2 gap-2">
-        {isLoading && <p className="col-span-full py-8 text-center text-xs text-gray-400 dark:text-gray-600">Loading…</p>}
+        {isLoading && <p className="col-span-full py-8 text-center text-xs text-[var(--deck-text-low)]">Loading…</p>}
         {!isLoading && templates.length === 0 && (
-          <p className="col-span-full py-8 text-center text-xs text-gray-400 dark:text-gray-600">No templates are available yet.</p>
+          <p className="col-span-full py-8 text-center text-xs text-[var(--deck-text-low)]">No templates are available yet.</p>
         )}
         {templates.map((t) => (
-          <div key={t.id} className="flex flex-col gap-1.5 rounded-lg border border-gray-200 p-2 dark:border-gray-800">
-            <div className="flex h-16 items-center justify-center rounded-md bg-gray-100 text-center text-[9px] text-gray-400 dark:bg-gray-800 dark:text-gray-500">
+          <div key={t.id} className="flex flex-col gap-1.5 rounded-lg border border-[var(--deck-glass-border)] p-2">
+            <div className="flex h-16 items-center justify-center rounded-md bg-[var(--deck-glass-fill-strong)] text-center text-[9px] text-[var(--deck-text-low)]">
               {CATEGORY_LABELS[t.category] ?? t.category}
             </div>
-            <p className="truncate text-[11px] font-medium text-gray-900 dark:text-gray-100">{t.name}</p>
+            <p className="truncate text-[11px] font-medium text-[var(--deck-text-hi)]">{t.name}</p>
             <button
               disabled={useMut.isPending}
               onClick={() => useMut.mutate(t.id)}
-              className="mt-auto rounded-md bg-indigo-600 py-1 text-[11px] font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="mt-auto rounded-md bg-[var(--deck-accent)] py-1 text-[11px] font-medium text-white  disabled:opacity-50"
             >
               Use this template
             </button>

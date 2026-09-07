@@ -6,6 +6,7 @@ import { DEFAULT_FONT_ID } from '@lumina/types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
+import { PlatformAuditService } from '../platform-audit/platform-audit.service';
 
 // The icon libraries the dashboard's icon picker offers — kept as an allow-list (rather than
 // letting a client request any of Iconify's 150+ collections) so results stay to the curated,
@@ -81,6 +82,7 @@ export class AssetsService {
     private readonly storage: StorageService,
     private readonly orgScoped: OrgScopedService,
     private readonly config: ConfigService,
+    private readonly platformAudit: PlatformAuditService,
   ) {}
 
   async upload(
@@ -369,9 +371,9 @@ export class AssetsService {
       // "url" built from it would 404, so each derives its own url/thumbnail instead.
       if (a.type === 'TEXT') return this.toDto(a, null, undefined, undefined, usageCount);
       if (a.type === 'APP') return this.toDto(a, ...this.appUrls(a), usageCount);
-      const url = this.storage.publicUrl(a.storageKey);
-      const downloadUrl = this.storage.publicUrl(a.storageKey, a.name);
-      const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
+      const url = this.storage.assetUrl(a.id);
+      const downloadUrl = this.storage.assetUrl(a.id, a.name);
+      const thumbUrl = a.thumbnailKey ? this.storage.assetThumbnailUrl(a.id) : null;
       return this.toDto(a, url, thumbUrl, downloadUrl, usageCount);
     });
   }
@@ -410,8 +412,8 @@ export class AssetsService {
       orderBy: { createdAt: 'desc' },
     });
     return assets.map((a: (typeof assets)[number]) => {
-      const url = this.storage.publicUrl(a.storageKey);
-      const thumbUrl = a.thumbnailKey ? this.storage.publicUrl(a.thumbnailKey) : null;
+      const url = this.storage.assetUrl(a.id);
+      const thumbUrl = a.thumbnailKey ? this.storage.assetThumbnailUrl(a.id) : null;
       return this.toDto(a, url, thumbUrl, null);
     });
   }
@@ -439,6 +441,7 @@ export class AssetsService {
         tags: source.tags,
         status: 'READY',
         organizationId: orgId,
+        sourceLibraryAssetId: source.id,
         binaries: {
           create: source.binaries.map(binary => ({
             kind: binary.kind,
@@ -452,17 +455,20 @@ export class AssetsService {
       },
     });
 
-    const url = this.storage.publicUrl(copy.storageKey);
-    const downloadUrl = this.storage.publicUrl(copy.storageKey, copy.name);
-    const thumbUrl = copy.thumbnailKey ? this.storage.publicUrl(copy.thumbnailKey) : null;
+    const url = this.storage.assetUrl(copy.id);
+    const downloadUrl = this.storage.assetUrl(copy.id, copy.name);
+    const thumbUrl = copy.thumbnailKey ? this.storage.assetThumbnailUrl(copy.id) : null;
     return this.toDto(copy, url, thumbUrl, downloadUrl);
   }
 
   /** Adds a new stock asset to the shared library (organizationId: null) — the in-app equivalent
-   * of running seed-library.ts, reachable only by LIBRARY_MANAGER (see AssetsController). Same
-   * mimetype/magic-byte validation as upload(); storage key uses the "system/" prefix
-   * seed-library.ts already established rather than an org id, since there is none here. */
+   * of running seed-library.ts, reachable only by a live-checked Super Admin (see AssetsController
+   * / docs/tenant_isolation_and_platform_admin_plan.md §P3). Same mimetype/magic-byte validation
+   * as upload(); storage key uses the "platform/" prefix seed-library.ts already established
+   * rather than an org id, since there is none here — kept clearly distinct from `${orgId}/...` so
+   * a platform key can never collide with or be mistaken for a tenant's own. */
   async uploadToLibrary(
+    actorUserId: string,
     file: Express.Multer.File,
     category: AssetCategory | undefined,
     tags: string[] | undefined,
@@ -481,7 +487,7 @@ export class AssetsService {
     }
 
     const ext = file.originalname.split('.').pop() ?? 'bin';
-    const key = `system/assets/${crypto.randomUUID()}.${ext}`;
+    const key = `platform/assets/${crypto.randomUUID()}.${ext}`;
     await this.storage.upload(key, file.buffer, file.mimetype);
 
     const asset = await this.prisma.asset.create({
@@ -499,14 +505,21 @@ export class AssetsService {
     });
 
     await queueThumbnail(asset.id, key, assetType, file.mimetype);
+    await this.platformAudit.log({
+      actorUserId,
+      action: 'library-asset.create',
+      resourceType: 'asset',
+      resourceId: asset.id,
+      metadata: { name: asset.name, category: asset.category, mimeType: asset.mimeType },
+    });
     return this.toDto(asset, null);
   }
 
   /** Renames / recategorizes / retags a library asset. There's no orgId to scope by — assertOwns
    * just confirms the row exists and is actually a library row (organizationId: null), not some
    * tenant's private asset. */
-  async updateLibraryAsset(id: string, dto: { name?: string; category?: AssetCategory; tags?: string[] }) {
-    await this.orgScoped.assertOwns(
+  async updateLibraryAsset(actorUserId: string, id: string, dto: { name?: string; category?: AssetCategory; tags?: string[] }) {
+    const before = await this.orgScoped.assertOwns(
       () => this.prisma.asset.findFirst({ where: { id, organizationId: null } }),
       'Library asset not found',
     );
@@ -518,28 +531,46 @@ export class AssetsService {
         ...(dto.tags !== undefined ? { tags: dto.tags } : {}),
       },
     });
-    const url = this.storage.publicUrl(updated.storageKey);
-    const thumbUrl = updated.thumbnailKey ? this.storage.publicUrl(updated.thumbnailKey) : null;
+    await this.platformAudit.log({
+      actorUserId,
+      action: 'library-asset.update',
+      resourceType: 'asset',
+      resourceId: id,
+      metadata: {
+        before: { name: before.name, category: before.category, tags: before.tags },
+        after: { name: updated.name, category: updated.category, tags: updated.tags },
+      },
+    });
+    const url = this.storage.assetUrl(updated.id);
+    const thumbUrl = updated.thumbnailKey ? this.storage.assetThumbnailUrl(updated.id) : null;
     return this.toDto(updated, url, thumbUrl, null);
   }
 
   /** Removes a library listing. Tenant copies made via copyFromLibrary above own an independent
-   * Asset row (their own id, same storageKey) — nothing ever references a library row's id
-   * directly, so unlike remove() there's no playlist/screen/zone in-use check to run here. The
-   * storage object itself is only deleted once no other row (a tenant's copy, or another library
-   * row that happens to share the key) still points at it — same otherRefs gate remove() uses —
-   * so retiring a library listing never breaks a tenant who already copied it. */
-  async removeFromLibrary(id: string) {
+   * Asset row (their own id, same storageKey) that points back at this one through
+   * sourceLibraryAssetId — nothing ever references a library row's id directly otherwise, so
+   * unlike remove() there's no playlist/screen/zone in-use check to run here. The storage object
+   * itself is only deleted once no copy still points at it through that column — explicit
+   * ownership tracking rather than re-deriving "is this shared" from a storageKey match at delete
+   * time (P3 task 7) — so retiring a library listing never breaks a tenant who already copied it. */
+  async removeFromLibrary(actorUserId: string, id: string) {
     const asset = await this.orgScoped.assertOwns(
       () => this.prisma.asset.findFirst({ where: { id, organizationId: null } }),
       'Library asset not found',
     );
-    const otherRefs = await this.prisma.asset.count({ where: { storageKey: asset.storageKey, id: { not: id } } });
-    if (otherRefs === 0) {
+    const copyCount = await this.prisma.asset.count({ where: { sourceLibraryAssetId: id } });
+    if (copyCount === 0) {
       await this.storage.delete(asset.storageKey);
       if (asset.thumbnailKey) await this.storage.delete(asset.thumbnailKey);
     }
     await this.prisma.asset.delete({ where: { id } });
+    await this.platformAudit.log({
+      actorUserId,
+      action: 'library-asset.delete',
+      resourceType: 'asset',
+      resourceId: id,
+      metadata: { name: asset.name, storageDeleted: copyCount === 0, remainingCopies: copyCount },
+    });
   }
 
   /** Whether PEXELS_API_KEY is set — drives the dashboard's "stock photos" tab between a live
@@ -791,9 +822,9 @@ export class AssetsService {
     if (asset.type === 'TEXT') return this.toDto(asset, null);
     if (asset.type === 'APP') return this.toDto(asset, ...this.appUrls(asset));
 
-    const url = this.storage.publicUrl(asset.storageKey);
-    const downloadUrl = this.storage.publicUrl(asset.storageKey, asset.name);
-    const thumbUrl = asset.thumbnailKey ? this.storage.publicUrl(asset.thumbnailKey) : null;
+    const url = this.storage.assetUrl(asset.id);
+    const downloadUrl = this.storage.assetUrl(asset.id, asset.name);
+    const thumbUrl = asset.thumbnailKey ? this.storage.assetThumbnailUrl(asset.id) : null;
     return this.toDto(asset, url, thumbUrl, downloadUrl);
   }
 
@@ -850,12 +881,13 @@ export class AssetsService {
     }
 
     // TEXT/APP assets never had anything uploaded (see createText/createApp) — deleting their
-    // placeholder storageKey would just be a wasted round-trip to the storage backend. Assets
-    // copied from the library (see copyFromLibrary) share their storageKey/thumbnailKey with the
-    // library original and every other org's copy — only delete the actual object once nothing
-    // else still points at it, or every other copy silently loses its file underneath it.
-    const otherRefs = await this.prisma.asset.count({ where: { storageKey: asset.storageKey, id: { not: id } } });
-    if (asset.type !== 'TEXT' && asset.type !== 'APP' && otherRefs === 0) {
+    // placeholder storageKey would just be a wasted round-trip to the storage backend. A copy made
+    // via copyFromLibrary (sourceLibraryAssetId set) shares its storageKey/thumbnailKey with the
+    // library original and every other org's copy but never owns that object — skip the physical
+    // delete unconditionally rather than re-deriving "is this shared" from a storageKey match at
+    // delete time, which could race a concurrent copy/delete of the same key (P3 task 7). Only
+    // removeFromLibrary (the library original's own delete path) may ever delete a shared object.
+    if (asset.type !== 'TEXT' && asset.type !== 'APP' && asset.sourceLibraryAssetId === null) {
       await this.storage.delete(asset.storageKey);
       if (asset.thumbnailKey) await this.storage.delete(asset.thumbnailKey);
     }

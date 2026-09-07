@@ -8,6 +8,29 @@ import {
 } from '@aws-sdk/client-s3';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import type { Readable } from 'stream';
+import { MediaTokenService } from './media-token.service';
+
+// P4 TTL policy (docs/tenant_isolation_and_platform_admin_plan.md §P4 tasks 6/8) — how long a
+// minted media URL stays valid before MediaController rejects it:
+//   - SCREENSHOT: shortest. Operationally sensitive (a live view of the screen) and the object is
+//     overwritten in place on every capture, so there's no "immutable content" argument for a
+//     longer TTL the way there is for assets.
+//   - DASHBOARD_ASSET: bounds a browsing session. The dashboard re-mints URLs on every list/detail
+//     fetch, so this only matters if a tab is left open unusually long — an expired thumbnail on a
+//     stale tab is an acceptable, self-healing (reload) trade-off for not handing out a
+//     long-lived bearer link.
+//   - MANIFEST_ASSET: long-bounded, not short. apps/player's media-download-manager.ts caches
+//     content by immutable identity (assetId/binaryId/sha256), never by URL (task 7), but an
+//     already-in-flight download's retries reuse the exact URL it started with rather than
+//     pulling a fresh one from the next manifest poll — and a single large-file attempt is
+//     allowed up to a 4h timeout with its own retry backoff on top. This TTL has to safely outlive
+//     that worst case; the security win over the previous permanent, unauthenticated URL is still
+//     substantial (resource-scoped, revocable by rotating JWT_SECRET, bounded at all).
+const MEDIA_TOKEN_TTL_SEC = {
+  SCREENSHOT: 5 * 60,
+  DASHBOARD_ASSET: 60 * 60,
+  MANIFEST_ASSET: 24 * 60 * 60,
+} as const;
 
 export interface MediaObject {
   body: Readable;
@@ -25,7 +48,7 @@ export class StorageService {
   private readonly bucket: string;
   private readonly cdnBase: string;
 
-  constructor(config: ConfigService) {
+  constructor(config: ConfigService, private readonly mediaTokens: MediaTokenService) {
     this.bucket = config.getOrThrow<string>('S3_BUCKET');
     this.cdnBase = config.getOrThrow<string>('CDN_BASE_URL');
     this.client = new S3Client({
@@ -95,15 +118,55 @@ export class StorageService {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  publicUrl(key: string, downloadFilename?: string): string {
-    const url = `${this.cdnBase}/${key}`;
-    return downloadFilename ? `${url}?download=${encodeURIComponent(downloadFilename)}` : url;
-  }
-
   // Deterministic, overwritten in place on every upload — a screen's screenshot is a single
   // "latest" live preview, not a history, so both the uploader (PlayerService) and the reader
-  // (ScreensService) need to agree on the same key without either owning the other.
+  // (MediaController) need to agree on the same key without either owning the other.
   screenshotKey(orgId: string, screenId: string): string {
     return `${orgId}/screenshots/${screenId}.jpg`;
+  }
+
+  // Reconstructs the derived page-image key media.processor.ts uploaded during DOCUMENT
+  // conversion (1-indexed `_p${n}.webp` sibling of the asset's own storageKey).
+  documentPageKey(storageKey: string, page: number): string {
+    return storageKey.replace(/(\.[^.]+)$/, `_p${page}.webp`);
+  }
+
+  private mediaUrl(path: string, token: string, download?: string): string {
+    const params = new URLSearchParams({ token });
+    if (download) params.set('download', download);
+    return `${this.cdnBase}/${path}?${params.toString()}`;
+  }
+
+  // P4 (docs/tenant_isolation_and_platform_admin_plan.md §P4) — every URL below resolves through
+  // MediaController by database identity (never a client-suppliable org id + filename) and is
+  // authorized by a short-lived signed token instead of the storage key itself being the secret.
+  // Callers pass the *database id* they already have in hand (an Asset/AssetBinary/Screen row),
+  // never a raw storageKey — the whole point is that nothing outside this service and
+  // MediaController ever needs to know or handle a real storage key again.
+
+  assetUrl(assetId: string, download?: string): string {
+    return this.mediaUrl(`assets/${assetId}`, this.mediaTokens.sign('asset', assetId, MEDIA_TOKEN_TTL_SEC.DASHBOARD_ASSET), download);
+  }
+
+  assetThumbnailUrl(assetId: string): string {
+    return this.mediaUrl(`assets/${assetId}/thumbnail`, this.mediaTokens.sign('asset-thumb', assetId, MEDIA_TOKEN_TTL_SEC.DASHBOARD_ASSET));
+  }
+
+  assetPageUrl(assetId: string, page: number): string {
+    return this.mediaUrl(`assets/${assetId}/pages/${page}`, this.mediaTokens.sign('asset-page', assetId, MEDIA_TOKEN_TTL_SEC.DASHBOARD_ASSET, page));
+  }
+
+  assetPageUrls(assetId: string, pageCount: number | null): string[] {
+    return Array.from({ length: pageCount ?? 0 }, (_, i) => this.assetPageUrl(assetId, i + 1));
+  }
+
+  // Manifest-embedded only (PlayerService's offline-integrity builder) — see MEDIA_TOKEN_TTL_SEC
+  // above for why this TTL is much longer than the dashboard-facing URLs above.
+  assetBinaryUrl(binaryId: string): string {
+    return this.mediaUrl(`binaries/${binaryId}`, this.mediaTokens.sign('binary', binaryId, MEDIA_TOKEN_TTL_SEC.MANIFEST_ASSET));
+  }
+
+  screenshotUrl(screenId: string): string {
+    return this.mediaUrl(`screens/${screenId}/screenshot`, this.mediaTokens.sign('screenshot', screenId, MEDIA_TOKEN_TTL_SEC.SCREENSHOT));
   }
 }

@@ -77,7 +77,7 @@ export function VideoPicker({ value, onChange, placeholder, disabled, labels }: 
 
   return (
     <div className="space-y-1.5">
-      <div className="flex gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
+      <div className="flex gap-0.5 rounded-lg bg-[var(--deck-glass-fill-strong)] p-0.5">
         {(['existing', 'upload', 'stock'] as const).map((m) => (
           <button
             key={m}
@@ -86,8 +86,8 @@ export function VideoPicker({ value, onChange, placeholder, disabled, labels }: 
             onClick={() => setMode(m)}
             className={`flex-1 rounded px-1.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
               mode === m
-                ? 'bg-white text-indigo-600 shadow-sm dark:bg-gray-700 dark:text-indigo-300'
-                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                ? 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-accent)] shadow-sm'
+                : 'text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'
             }`}
           >
             {labels[m]}
@@ -105,7 +105,7 @@ export function VideoPicker({ value, onChange, placeholder, disabled, labels }: 
             type="button"
             disabled={disabled || busy}
             onClick={() => inputRef.current?.click()}
-            className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-gray-300 px-2 py-1.5 text-[11px] text-gray-600 hover:border-indigo-400 hover:text-indigo-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
+            className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-[var(--deck-glass-border)] px-2 py-1.5 text-[11px] text-[var(--deck-text-mid)] hover:border-[var(--deck-accent)] hover:text-[var(--deck-accent)] disabled:opacity-50"
           >
             {busy ? (
               <>
@@ -146,7 +146,7 @@ export function VideoPicker({ value, onChange, placeholder, disabled, labels }: 
       {error && <p className="text-[10px] text-red-500">{error}</p>}
 
       {preview && (
-        <div className="overflow-hidden rounded border border-gray-200 bg-black dark:border-gray-700">
+        <div className="overflow-hidden rounded border border-[var(--deck-glass-border)] bg-black">
           <video src={preview} muted controls className="block max-h-28 w-full" />
         </div>
       )}
@@ -201,29 +201,29 @@ function StockVideosTab({
   }
 
   if (data && !data.configured) {
-    return <p className="px-1 py-2 text-[11px] text-gray-500 dark:text-gray-400">{labels.stockNotConfigured}</p>;
+    return <p className="px-1 py-2 text-[11px] text-[var(--deck-text-mid)]">{labels.stockNotConfigured}</p>;
   }
 
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--deck-text-low)]" />
         <input
           type="text"
           disabled={disabled}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={labels.stockSearchPlaceholder}
-          className="w-full rounded border border-gray-200 py-1 pl-6 pr-2 text-[11px] focus:border-indigo-400 focus:outline-none disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          className="w-full rounded border border-[var(--deck-glass-border)] py-1 pl-6 pr-2 text-[11px] focus:border-[var(--deck-accent)] focus:outline-none disabled:opacity-50"
         />
       </div>
 
       {isFetching ? (
-        <div className="flex items-center justify-center gap-1.5 py-4 text-[11px] text-gray-400">
+        <div className="flex items-center justify-center gap-1.5 py-4 text-[11px] text-[var(--deck-text-low)]">
           <RefreshCw className="h-3 w-3 animate-spin" />
         </div>
       ) : !data?.videos.length ? (
-        <div className="flex flex-col items-center gap-1 py-4 text-center text-[11px] text-gray-400">
+        <div className="flex flex-col items-center gap-1 py-4 text-center text-[11px] text-[var(--deck-text-low)]">
           <VideoOff className="h-4 w-4" />
           {labels.stockEmpty}
         </div>
@@ -236,7 +236,7 @@ function StockVideosTab({
               disabled={disabled || importingId !== null}
               onClick={() => void handlePick(video)}
               title={`${video.photographer} · ${Math.round(video.duration)}s`}
-              className="relative aspect-square overflow-hidden rounded border border-gray-200 disabled:cursor-wait dark:border-gray-700"
+              className="relative aspect-square overflow-hidden rounded border border-[var(--deck-glass-border)] disabled:cursor-wait"
               style={{ opacity: importingId !== null && importingId !== video.id ? 0.5 : 1 }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary remote Pexels thumbnail, not a static/local image */}
@@ -256,7 +256,7 @@ function StockVideosTab({
 
       {error && <p className="text-[10px] text-red-500">{error}</p>}
 
-      {!!data?.videos.length && <p className="text-center text-[10px] text-gray-400">{labels.stockCredit}</p>}
+      {!!data?.videos.length && <p className="text-center text-[10px] text-[var(--deck-text-low)]">{labels.stockCredit}</p>}
     </div>
   );
 }

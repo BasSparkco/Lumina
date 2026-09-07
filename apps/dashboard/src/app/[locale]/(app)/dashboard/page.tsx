@@ -87,53 +87,53 @@ export default function DashboardPage() {
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+          <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         <button
           onClick={refresh}
           disabled={screensFetching}
           title={t('refresh')}
-          className="flex items-center gap-1.5 text-sm border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 shrink-0">
+          className="flex items-center gap-1.5 text-sm border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] px-3 py-1.5 rounded-lg font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50 shrink-0">
           <RefreshCw className={`w-3.5 h-3.5 ${screensFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
         </button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('totalScreens')}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{screens.length}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1">{t('totalScreens')}</p>
+          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{screens.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{ts('online')}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1">{ts('online')}</p>
           <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{onlineCount}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{ts('offline')}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1">{ts('offline')}</p>
           <p className="text-2xl font-bold text-red-600 dark:text-red-400">{offlineRows.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('avgUptime')}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{avgUptime}%</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1">{t('avgUptime')}</p>
+          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{avgUptime}%</p>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1.5"><List className="w-3.5 h-3.5" /> {t('totalPlaylists')}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{playlists.length}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1 flex items-center gap-1.5"><List className="w-3.5 h-3.5" /> {t('totalPlaylists')}</p>
+          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{playlists.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> {t('totalAssets')}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{assets.length}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1 flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> {t('totalAssets')}</p>
+          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{assets.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" /> {t('storageUsed')}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatBytes(totalStorageBytes)}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1 flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" /> {t('storageUsed')}</p>
+          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{formatBytes(totalStorageBytes)}</p>
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-          <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {t('screensWithCrashes')}</p>
-          <p className={`text-2xl font-bold ${screensWithCrashes > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>{screensWithCrashes}</p>
+        <div className="glass-panel rounded-2xl p-4">
+          <p className="text-xs text-[var(--deck-text-low)] mb-1 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> {t('screensWithCrashes')}</p>
+          <p className={`text-2xl font-bold ${screensWithCrashes > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--deck-text-hi)]'}`}>{screensWithCrashes}</p>
         </div>
       </div>
 
@@ -144,20 +144,20 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {screensLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {screensLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!screensLoading && screens.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Activity className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
       {!screensLoading && screens.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+        <div className="glass-panel rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-800 text-start text-xs text-gray-400 dark:text-gray-500">
+              <tr className="border-b border-[var(--deck-glass-border-soft)] text-start text-xs text-[var(--deck-text-low)]">
                 <th className="text-start font-medium px-4 py-2.5">{t('screen')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('status')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('lastSeenColumn')}</th>
@@ -165,12 +165,12 @@ export default function DashboardPage() {
                 <th className="text-start font-medium px-4 py-2.5">{t('crashes7d')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+            <tbody className="divide-y divide-[var(--deck-glass-border-soft)]">
               {rows.map(({ screen, status }) => (
                 <tr key={screen.id}>
                   <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1.5 text-gray-900 dark:text-gray-100">
-                      <Tv2 className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-[var(--deck-text-hi)]">
+                      <Tv2 className="w-3.5 h-3.5 text-[var(--deck-text-low)] shrink-0" />
                       {screen.name}
                     </div>
                   </td>
@@ -185,10 +185,10 @@ export default function DashboardPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  <td className="px-4 py-2.5 text-[var(--deck-text-mid)] whitespace-nowrap">
                     {screen.lastSeenAt ? formatDateTime(screen.lastSeenAt, dateFormat) : ts('neverSeen')}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">{uptimeByScreen[screen.id] ?? 0}%</td>
+                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{uptimeByScreen[screen.id] ?? 0}%</td>
                   <td className="px-4 py-2.5">
                     {(crashCountByScreen[screen.id] ?? 0) > 0 ? (
                       <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -200,7 +200,7 @@ export default function DashboardPage() {
                         {crashCountByScreen[screen.id]}
                       </span>
                     ) : (
-                      <span className="text-gray-300 dark:text-gray-600">—</span>
+                      <span className="text-[var(--deck-text-low)]">—</span>
                     )}
                   </td>
                 </tr>

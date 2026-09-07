@@ -37,8 +37,11 @@ interface DesignerSidebarProps {
 }
 
 const tabBtn =
-  'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100';
-const disabledTabBtn = 'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-gray-300 dark:text-gray-700';
+  'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)]';
+// Colored fill + soft ring, matching the mockups' `.tool.active` treatment.
+const tabBtnActive =
+  'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-[var(--deck-accent)] bg-[var(--deck-accent-soft)] shadow-[0_0_0_1px_var(--deck-accent-soft)]';
+const disabledTabBtn = 'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-[var(--deck-text-low)]';
 
 const SHAPE_OPTIONS: { kind: ShapeKind; label: string; icon: typeof Square }[] = [
   { kind: 'rectangle', label: 'Rectangle', icon: RectangleHorizontal },
@@ -63,8 +66,8 @@ export function DesignerSidebar({
   const [shapesOpen, setShapesOpen] = useState(false);
 
   return (
-    <div className="relative flex w-16 shrink-0 flex-col items-center gap-1 border-r border-gray-200 py-3 dark:border-gray-800">
-      <button className={tabBtn} aria-pressed={isTemplatesActive} onClick={onShowTemplates}>
+    <div className="glass-panel relative flex w-16 shrink-0 flex-col items-center gap-1 rounded-2xl py-3">
+      <button className={isTemplatesActive ? tabBtnActive : tabBtn} aria-pressed={isTemplatesActive} onClick={onShowTemplates}>
         <LayoutTemplate className="h-4 w-4" />
         Templates
       </button>
@@ -92,7 +95,7 @@ export function DesignerSidebar({
         {shapesOpen && (
           <>
             <div className="fixed inset-0 z-30" onClick={() => setShapesOpen(false)} />
-            <div className="absolute start-full top-0 z-40 ml-1 grid grid-cols-3 gap-1 rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+            <div className="glass-popup absolute start-full top-0 z-40 ml-1 grid grid-cols-3 gap-1 rounded-lg p-2">
               {SHAPE_OPTIONS.map(({ kind, label, icon: Icon }) => (
                 <button
                   key={kind}
@@ -101,7 +104,7 @@ export function DesignerSidebar({
                     onAddShape(kind);
                     setShapesOpen(false);
                   }}
-                  className="flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                  className="flex h-12 w-12 flex-col items-center justify-center gap-1 rounded-md text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)]"
                 >
                   <Icon className="h-4 w-4" />
                 </button>
@@ -116,7 +119,7 @@ export function DesignerSidebar({
         QR
       </button>
 
-      <button className={tabBtn} aria-pressed={isVariablesActive} onClick={onShowVariables} title="Design variables (designer.md §17.2)">
+      <button className={isVariablesActive ? tabBtnActive : tabBtn} aria-pressed={isVariablesActive} onClick={onShowVariables} title="Design variables (designer.md §17.2)">
         <Braces className="h-4 w-4" />
         Variables
       </button>

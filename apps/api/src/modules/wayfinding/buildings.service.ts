@@ -119,7 +119,7 @@ export class BuildingsService {
     const existing = await this.prisma.floor.findFirst({ where: { buildingId, level: dto.level } });
     if (existing) throw new BadRequestException(`This building already has a floor at level ${dto.level}`);
     return this.prisma.floor.create({
-      data: { buildingId, level: dto.level, label: dto.label, floorPlanAssetId: dto.floorPlanAssetId },
+      data: { organizationId: orgId, buildingId, level: dto.level, label: dto.label, floorPlanAssetId: dto.floorPlanAssetId },
     });
   }
 

@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { CheckCircle2, Eye, EyeOff } from 'lucide-react';
-import { membersApi } from '@/lib/mocks/members';
+import { membersApi } from '@/lib/api';
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -31,7 +31,7 @@ function AcceptInviteForm() {
   });
 
   const acceptMut = useMutation({
-    mutationFn: () => membersApi.acceptInvite(token, name.trim()),
+    mutationFn: () => membersApi.acceptInvite(token, name.trim(), password),
     onError: () => setPassword(''),
   });
 
@@ -76,7 +76,7 @@ function AcceptInviteForm() {
 
   return (
     <Card>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('joinOrg', { org: invite.orgName })}</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">{t('joinOrg', { org: invite.organizationName })}</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
         {t('invitedAs', { role: tc(`roles.${invite.role}`), email: invite.email })}
       </p>

@@ -103,7 +103,7 @@ export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, o
             </button>
             <input type="range" min={ZOOM_MIN} max={ZOOM_MAX} step={0.05} value={zoom}
               onChange={e => setZoomClamped(parseFloat(e.target.value))}
-              className="w-40 accent-indigo-500" />
+              className="w-40 accent-[var(--deck-accent)]" />
             <button onClick={() => setZoomClamped(zoom + 0.25)} className="text-white/80 hover:text-white">
               <ZoomIn className="w-4 h-4" />
             </button>
@@ -117,26 +117,26 @@ export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, o
       </div>
 
       {/* Side panel */}
-      <div className="w-72 bg-white dark:bg-gray-900 flex flex-col shrink-0" onClick={e => e.stopPropagation()}>
-        <div className="p-5 border-b border-gray-100 dark:border-gray-800">
+      <div className="w-72 glass-popup flex flex-col shrink-0" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-[var(--deck-glass-border-soft)]">
           {renaming ? (
             <input autoFocus value={nameValue} onChange={e => setNameValue(e.target.value)}
               onBlur={commitRename}
               onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setNameValue(name); setRenaming(false); } }}
-              className="w-full text-sm font-semibold text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+              className="w-full text-sm font-semibold text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
           ) : (
             <p onClick={() => canEdit && onRename && setRenaming(true)}
               title={canEdit && onRename ? tc('clickToRename') : undefined}
-              className={`text-sm font-semibold text-gray-900 dark:text-gray-100 break-words ${canEdit && onRename ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+              className={`text-sm font-semibold text-[var(--deck-text-hi)] break-words ${canEdit && onRename ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
               {name}
             </p>
           )}
         </div>
 
         {(typeLabel ?? sizeLabel) && (
-          <div className="p-5 space-y-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-800">
-            {typeLabel && <p><span className="text-gray-400 dark:text-gray-500">{tc('type')}: </span>{typeLabel}</p>}
-            {sizeLabel && <p><span className="text-gray-400 dark:text-gray-500">{tc('size')}: </span>{sizeLabel}</p>}
+          <div className="p-5 space-y-1.5 text-xs text-[var(--deck-text-mid)] border-b border-[var(--deck-glass-border-soft)]">
+            {typeLabel && <p><span className="text-[var(--deck-text-low)]">{tc('type')}: </span>{typeLabel}</p>}
+            {sizeLabel && <p><span className="text-[var(--deck-text-low)]">{tc('size')}: </span>{sizeLabel}</p>}
           </div>
         )}
 
@@ -144,13 +144,13 @@ export function ImageLightbox({ name, imageUrl, sizeLabel, typeLabel, canEdit, o
         <div className="p-5 mt-auto space-y-2">
           {downloadUrl && (
             <a href={downloadUrl}
-              className="w-full flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800">
+              className="w-full flex items-center justify-center gap-2 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm font-medium hover:bg-[var(--deck-glass-fill-strong)]">
               <Download className="w-4 h-4" /> {downloadLabel}
             </a>
           )}
           {onConvertToAudio && (
             <button onClick={onConvertToAudio} disabled={convertToAudioBusy}
-              className="w-full flex items-center justify-center gap-2 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+              className="w-full flex items-center justify-center gap-2 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
               <AudioLines className="w-4 h-4" /> {convertToAudioLabel}
             </button>
           )}

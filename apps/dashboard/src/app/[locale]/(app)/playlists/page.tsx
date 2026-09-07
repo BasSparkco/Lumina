@@ -84,46 +84,46 @@ function PlaylistItemRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center gap-3 px-3 py-2.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}
+      className={`bg-[var(--deck-glass-fill-strong)]/60 border border-[var(--deck-glass-border)] rounded-xl flex items-center gap-3 px-3 py-2.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}
     >
       {canEditContent && (
         <button type="button" {...attributes} {...listeners}
-          className="cursor-grab touch-none p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:cursor-grabbing">
+          className="cursor-grab touch-none p-0.5 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)] active:cursor-grabbing">
           <GripVertical className="w-3.5 h-3.5" />
         </button>
       )}
 
-      <span className="text-xs text-gray-300 dark:text-gray-500 w-4 text-center">{index + 1}</span>
+      <span className="text-xs text-[var(--deck-text-low)] w-4 text-center">{index + 1}</span>
 
       {item.kind === 'ASSET' && item.asset ? (
         item.asset.thumbnailUrl ? (
           <button onClick={onView} title={t('clickToView')}
-            className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-indigo-400 transition-all">
+            className="w-10 h-10 rounded overflow-hidden shrink-0 hover:ring-2 hover:ring-[var(--deck-accent)] transition-all">
             <Image src={item.asset.thumbnailUrl} width={40} height={40} className="w-full h-full object-cover" alt="" />
           </button>
         ) : (
-          <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
+          <div className="w-10 h-10 rounded bg-[var(--deck-glass-fill-strong)] flex items-center justify-center shrink-0">{TYPE_ICON[item.asset.type]}</div>
         )
       ) : (
-        <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-          {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-indigo-500" />
-            : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />
-            : <LayoutTemplate className="w-3.5 h-3.5 text-indigo-500" />}
+        <div className="w-10 h-10 rounded bg-[var(--deck-glass-fill-strong)] flex items-center justify-center shrink-0">
+          {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5 text-[var(--deck-accent)]" />
+            : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5 text-[var(--deck-accent)]" />
+            : <LayoutTemplate className="w-3.5 h-3.5 text-[var(--deck-accent)]" />}
         </div>
       )}
 
       <div className="flex-1 min-w-0">
         {item.kind === 'ASSET' && item.asset ? (
           <>
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.asset.name}</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[item.asset.type]} {item.asset.type}</p>
+            <p className="text-sm font-medium text-[var(--deck-text-hi)] truncate">{item.asset.name}</p>
+            <p className="text-xs text-[var(--deck-text-low)] flex items-center gap-1">{TYPE_ICON[item.asset.type]} {item.asset.type}</p>
           </>
         ) : (
           <>
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+            <p className="text-sm font-medium text-[var(--deck-text-hi)] truncate">
               {item.kind === 'THEME' ? item.theme?.name : item.kind === 'LAYOUT' ? item.layout?.name : item.design?.name}
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+            <p className="text-xs text-[var(--deck-text-low)] flex items-center gap-1">
               {item.kind === 'THEME' ? <Palette className="w-3.5 h-3.5" />
                 : item.kind === 'LAYOUT' ? <LayoutGrid className="w-3.5 h-3.5" />
                 : <LayoutTemplate className="w-3.5 h-3.5" />}
@@ -137,7 +137,7 @@ function PlaylistItemRow({
         {item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && (
           <input type="checkbox" checked={item.playFullVideo} disabled={!canEditContent}
             onChange={onTogglePlayFullVideo} title={t('playFullVideo')}
-            className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
+            className="w-3.5 h-3.5 rounded border-[var(--deck-glass-border)] text-[var(--deck-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
         )}
         <input type="number" min={1} max={3600}
           disabled={!canEditContent || (item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo)}
@@ -146,20 +146,20 @@ function PlaylistItemRow({
             : item.durationSecs}
           title={item.kind === 'ASSET' && item.asset?.type === 'VIDEO' && item.playFullVideo ? t('videoDuration') : undefined}
           onChange={e => onDurationChange(Number(e.target.value))}
-          className="w-14 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50" />
-        <span className="text-xs text-gray-400 dark:text-gray-500">{t('seconds')}</span>
+          className="w-14 border border-[var(--deck-glass-border)] rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
+        <span className="text-xs text-[var(--deck-text-low)]">{t('seconds')}</span>
       </div>
 
       {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'VIDEO' || item.asset.type === 'APP') && (
         <button onClick={onToggleMuted} title={item.muted ? t('unmute') : t('mute')}
-          className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+          className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors">
           {item.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
         </button>
       )}
 
       {canEditContent && item.kind === 'ASSET' && item.asset && (item.asset.type === 'IMAGE' || item.asset.type === 'VIDEO') && (
         <button onClick={onCrop} title={tCrop('editCrop')}
-          className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-500 transition-colors">
+          className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors">
           <Crop className="w-3.5 h-3.5" />
         </button>
       )}
@@ -169,7 +169,7 @@ function PlaylistItemRow({
           value={item.transitionStyle ?? 'DEFAULT'}
           title={t('itemTransition.label')}
           onChange={e => onTransitionChange(e.target.value === 'DEFAULT' ? null : e.target.value as TransitionStyle)}
-          className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="border border-[var(--deck-glass-border)] rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
         >
           <option value="DEFAULT">{t('itemTransition.default')}</option>
           {TRANSITION_STYLE_OPTIONS.map(id => (
@@ -180,7 +180,7 @@ function PlaylistItemRow({
 
       {canEditContent && (
         <button onClick={onRemove}
-          className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+          className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       )}
@@ -353,19 +353,19 @@ function PlaylistDetail({ id }: { id: string }) {
     reorderMut.mutate(arrayMove(orderedIds, oldIndex, newIndex));
   }
 
-  if (isLoading) return <div className="px-4 py-6 text-sm text-gray-400">{t('loading')}</div>;
+  if (isLoading) return <div className="px-4 py-6 text-sm text-[var(--deck-text-low)]">{t('loading')}</div>;
   if (!playlist) return <div className="px-4 py-6 text-sm text-red-500">{t('notFound')}</div>;
 
   return (
-    <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-4 space-y-4" onClick={e => e.stopPropagation()}>
+    <div className="border-t border-[var(--deck-glass-border-soft)] px-4 py-4 space-y-4" onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-4 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3">
+        <div className="flex flex-wrap items-center gap-4 bg-[var(--deck-glass-fill-strong)]/60 border border-[var(--deck-glass-border)] rounded-xl px-4 py-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
-            <label className="text-xs text-gray-500 dark:text-gray-400">{t('transition.label')}</label>
+            <Sparkles className="w-3.5 h-3.5 text-[var(--deck-text-low)]" />
+            <label className="text-xs text-[var(--deck-text-mid)]">{t('transition.label')}</label>
             <select value={playlist.transitionStyle} disabled={!canEditContent}
               onChange={e => configMut.mutate({ transitionStyle: e.target.value as TransitionStyle })}
-              className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+              className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
               {TRANSITION_STYLE_OPTIONS.map(id => (
                 <option key={id} value={id}>{t(`transition.${TRANSITION_LABEL_KEYS[id]}`)}</option>
               ))}
@@ -375,17 +375,17 @@ function PlaylistDetail({ id }: { id: string }) {
                 <input type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
                   disabled={!canEditContent}
                   onChange={e => configMut.mutate({ transitionDurationMs: Math.min(3000, Math.max(100, Number(e.target.value) || 100)) })}
-                  className="w-20 border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50" />
-                <span className="text-xs text-gray-400 dark:text-gray-500">{t('transition.ms')}</span>
+                  className="w-20 border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
+                <span className="text-xs text-[var(--deck-text-low)]">{t('transition.ms')}</span>
               </>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Shuffle className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
-            <label className="text-xs text-gray-500 dark:text-gray-400">{t('playbackOrder.label')}</label>
+            <Shuffle className="w-3.5 h-3.5 text-[var(--deck-text-low)]" />
+            <label className="text-xs text-[var(--deck-text-mid)]">{t('playbackOrder.label')}</label>
             <select value={playlist.playbackOrder} disabled={!canEditContent}
               onChange={e => configMut.mutate({ playbackOrder: e.target.value as PlaybackOrder })}
-              className="border border-gray-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+              className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
               <option value="SEQUENTIAL">{t('playbackOrder.sequential')}</option>
               <option value="SHUFFLE">{t('playbackOrder.shuffle')}</option>
             </select>
@@ -394,14 +394,14 @@ function PlaylistDetail({ id }: { id: string }) {
         <div className="flex items-center gap-2 shrink-0">
           {canEditContent && !approvalLoading && (status === 'DRAFT' || status === 'REJECTED') && (
             <button onClick={() => submitMut.mutate()} disabled={submitMut.isPending}
-              className="flex items-center gap-2 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 px-3 py-2 rounded-lg text-xs font-medium hover:bg-indigo-50 dark:hover:bg-indigo-950 disabled:opacity-50">
+              className="flex items-center gap-2 border border-[var(--deck-accent)] text-[var(--deck-accent)] px-3 py-2 rounded-lg text-xs font-medium hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
               <Send className="w-3.5 h-3.5" />
               {submitMut.isPending ? t('submitting') : canApproveContent ? ta('approve') : t('submitForReview')}
             </button>
           )}
           {canEditContent && (
             <button onClick={() => setShowAssetPicker(true)}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-indigo-700">
+              className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-3 py-2 rounded-lg text-xs font-medium ">
               <Plus className="w-3.5 h-3.5" /> {t('addItem')}
             </button>
           )}
@@ -422,8 +422,8 @@ function PlaylistDetail({ id }: { id: string }) {
       {/* Asset picker modal */}
       {showAssetPicker && canEditContent && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}>
-          <div className="bg-white dark:bg-gray-900 rounded-xl p-5 w-full max-w-lg shadow-xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">{t('pickAsset')}</h2>
+          <div className="glass-popup rounded-2xl p-5 w-full max-w-lg shadow-xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3">{t('pickAsset')}</h2>
             <div className="grid grid-cols-4 gap-1 mb-3">
               {([
                 { kind: 'ASSET' as const, label: t('itemKind.asset'), Icon: ImageIcon },
@@ -434,8 +434,8 @@ function PlaylistDetail({ id }: { id: string }) {
                 <button key={kind} type="button" onClick={() => setItemKindTab(kind)}
                   className={`flex items-center justify-center gap-1 text-xs py-1.5 rounded-lg border font-medium ${
                     itemKindTab === kind
-                      ? 'bg-indigo-600 border-indigo-600 text-white'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'bg-[var(--deck-accent)] border-[var(--deck-accent)] text-white'
+                      : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                   }`}>
                   <Icon className="w-3.5 h-3.5" /> {label}
                 </button>
@@ -446,13 +446,13 @@ function PlaylistDetail({ id }: { id: string }) {
               <>
                 <div className="flex gap-1.5 mb-2">
                   <div className="relative flex-1">
-                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <Search className="w-3.5 h-3.5 text-[var(--deck-text-low)] absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input value={assetSearch} onChange={(e) => setAssetSearch(e.target.value)}
                       placeholder="Search assets…"
-                      className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                      className="w-full border border-[var(--deck-glass-border)] rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
                   </div>
                   <select value={assetSort} onChange={(e) => setAssetSort(e.target.value as AssetSortKey)} title="Sort by"
-                    className="border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                    className="border border-[var(--deck-glass-border)] rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]">
                     {ASSET_SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
                   </select>
                 </div>
@@ -461,8 +461,8 @@ function PlaylistDetail({ id }: { id: string }) {
                     <button type="button" onClick={() => setAssetTypeFilter(new Set())}
                       className={`rounded-full border px-2 py-0.5 text-[11px] ${
                         assetTypeFilter.size === 0
-                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-                          : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                          ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                          : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                       }`}>
                       All
                     </button>
@@ -472,8 +472,8 @@ function PlaylistDetail({ id }: { id: string }) {
                         <button key={ty} type="button" onClick={() => toggleAssetType(ty)}
                           className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${
                             active
-                              ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-                              : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+                              ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                              : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                           }`}>
                           {TYPE_ICON[ty]} {ASSET_TYPE_LABELS[ty]}
                         </button>
@@ -484,16 +484,16 @@ function PlaylistDetail({ id }: { id: string }) {
                 <div className="overflow-y-auto flex-1 space-y-1">
                   {pickableAssets.map((a: Asset) => (
                     <button key={a.id} onClick={() => addMut.mutate({ kind: 'ASSET', assetId: a.id, dur: defaultDuration })}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--deck-glass-fill-strong)] text-start transition-colors">
                       {a.thumbnailUrl
                         ? <Image src={a.thumbnailUrl} width={40} height={40} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
-                        : <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">{TYPE_ICON[a.type]}</div>
+                        : <div className="w-10 h-10 rounded bg-[var(--deck-glass-fill-strong)] flex items-center justify-center shrink-0">{TYPE_ICON[a.type]}</div>
                       }
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{a.name}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">{TYPE_ICON[a.type]} {a.type}</p>
+                        <p className="text-sm font-medium text-[var(--deck-text-hi)] truncate">{a.name}</p>
+                        <p className="text-xs text-[var(--deck-text-low)] flex items-center gap-1">{TYPE_ICON[a.type]} {a.type}</p>
                       </div>
-                      <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
+                      <span className="shrink-0 text-[11px] text-[var(--deck-text-low)]">
                         {assetSort === 'mostUsed'
                           ? `${a.usageCount ?? 0}×`
                           : assetSort === 'recentlyUsed'
@@ -502,11 +502,11 @@ function PlaylistDetail({ id }: { id: string }) {
                               ? formatRelativeTime(a.createdAt)
                               : ''}
                       </span>
-                      {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                      {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-[var(--deck-text-low)] animate-spin" />}
                     </button>
                   ))}
                   {pickableAssets.length === 0 && (
-                    <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
+                    <p className="text-sm text-[var(--deck-text-low)] py-4 text-center">
                       {readyAssets.length === 0 ? t('noReadyAssets') : 'No assets found'}
                     </p>
                   )}
@@ -518,18 +518,18 @@ function PlaylistDetail({ id }: { id: string }) {
               <div className="overflow-y-auto flex-1 space-y-1">
                 {themesList.map((th: Theme) => (
                   <button key={th.id} onClick={() => addMut.mutate({ kind: 'THEME', themeId: th.id, dur: defaultDuration })}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
-                    <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                      <Palette className="w-3.5 h-3.5 text-indigo-500" />
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--deck-glass-fill-strong)] text-start transition-colors">
+                    <div className="w-10 h-10 rounded bg-[var(--deck-glass-fill-strong)] flex items-center justify-center shrink-0">
+                      <Palette className="w-3.5 h-3.5 text-[var(--deck-accent)]" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{th.name}</p>
+                      <p className="text-sm font-medium text-[var(--deck-text-hi)] truncate">{th.name}</p>
                     </div>
-                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-[var(--deck-text-low)] animate-spin" />}
                   </button>
                 ))}
                 {themesList.length === 0 && (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noThemes')}</p>
+                  <p className="text-sm text-[var(--deck-text-low)] py-4 text-center">{t('noThemes')}</p>
                 )}
               </div>
             )}
@@ -538,18 +538,18 @@ function PlaylistDetail({ id }: { id: string }) {
               <div className="overflow-y-auto flex-1 space-y-1">
                 {layoutsList.map((l: Layout) => (
                   <button key={l.id} onClick={() => addMut.mutate({ kind: 'LAYOUT', layoutId: l.id, dur: defaultDuration })}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
-                    <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                      <LayoutGrid className="w-3.5 h-3.5 text-indigo-500" />
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--deck-glass-fill-strong)] text-start transition-colors">
+                    <div className="w-10 h-10 rounded bg-[var(--deck-glass-fill-strong)] flex items-center justify-center shrink-0">
+                      <LayoutGrid className="w-3.5 h-3.5 text-[var(--deck-accent)]" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{l.name}</p>
+                      <p className="text-sm font-medium text-[var(--deck-text-hi)] truncate">{l.name}</p>
                     </div>
-                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-[var(--deck-text-low)] animate-spin" />}
                   </button>
                 ))}
                 {layoutsList.length === 0 && (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noLayouts')}</p>
+                  <p className="text-sm text-[var(--deck-text-low)] py-4 text-center">{t('noLayouts')}</p>
                 )}
               </div>
             )}
@@ -558,30 +558,30 @@ function PlaylistDetail({ id }: { id: string }) {
               <div className="overflow-y-auto flex-1 space-y-1">
                 {designsList.map((d: DesignAsset) => (
                   <button key={d.id} onClick={() => addMut.mutate({ kind: 'DESIGN', designAssetId: d.id, dur: defaultDuration })}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-start transition-colors">
-                    <div className="w-10 h-10 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                      <LayoutTemplate className="w-3.5 h-3.5 text-indigo-500" />
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--deck-glass-fill-strong)] text-start transition-colors">
+                    <div className="w-10 h-10 rounded bg-[var(--deck-glass-fill-strong)] flex items-center justify-center shrink-0">
+                      <LayoutTemplate className="w-3.5 h-3.5 text-[var(--deck-accent)]" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{d.name}</p>
+                      <p className="text-sm font-medium text-[var(--deck-text-hi)] truncate">{d.name}</p>
                     </div>
-                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 animate-spin" />}
+                    {addMut.isPending && <RefreshCw className="w-3.5 h-3.5 text-[var(--deck-text-low)] animate-spin" />}
                   </button>
                 ))}
                 {designsList.length === 0 && (
-                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">{t('noDesigns')}</p>
+                  <p className="text-sm text-[var(--deck-text-low)] py-4 text-center">{t('noDesigns')}</p>
                 )}
               </div>
             )}
 
             <button onClick={() => { setShowAssetPicker(false); setAssetSearch(''); }}
-              className="mt-3 w-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+              className="mt-3 w-full border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
           </div>
         </div>
       )}
 
       {playlist.items.length === 0 && (
-        <div className="text-center py-10 text-gray-400">
+        <div className="text-center py-10 text-[var(--deck-text-low)]">
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
@@ -850,12 +850,12 @@ export default function PlaylistsPage() {
     <div className="p-8 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('subtitle')}</p>
+          <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         {canEditContent && (
           <button onClick={() => setCreating(true)}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium ">
             <Plus className="w-4 h-4" /> {t('newPlaylist')}
           </button>
         )}
@@ -867,10 +867,10 @@ export default function PlaylistsPage() {
       {canApproveContent && !settingsLoading && <PreviewFeatureNotice />}
 
       {canApproveContent && !settingsLoading && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 mb-4 flex items-center justify-between gap-4">
+        <div className="glass-panel rounded-2xl p-4 mb-4 flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{tApp('requireApproval')}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{tApp('requireApprovalDesc')}</p>
+            <p className="text-sm font-medium text-[var(--deck-text-hi)]">{tApp('requireApproval')}</p>
+            <p className="text-xs text-[var(--deck-text-mid)]">{tApp('requireApprovalDesc')}</p>
           </div>
           <Toggle checked={approvalSettings.required} onChange={v => settingsMut.mutate({ required: v })} />
         </div>
@@ -878,7 +878,7 @@ export default function PlaylistsPage() {
 
       {canApproveContent && !approvalsLoading && !settingsLoading && pending.length > 0 && (
         <div className="mb-6">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--deck-text-hi)] mb-2">
             <ClipboardCheck className="w-4 h-4 text-amber-600" /> {tApp('pendingSectionTitle', { count: pending.length })}
           </p>
           <div className="space-y-2">
@@ -893,10 +893,10 @@ export default function PlaylistsPage() {
                         setExpandedId(pl.id);
                         document.getElementById(`playlist-row-${pl.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                       }}
-                        className="text-sm font-medium text-gray-900 dark:text-gray-100 hover:text-indigo-600 dark:hover:text-indigo-400 text-start">
+                        className="text-sm font-medium text-[var(--deck-text-hi)] hover:text-[var(--deck-accent)] text-start">
                         {pl.name}
                       </button>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                      <p className="text-xs text-[var(--deck-text-low)]">
                         {t('itemCount', { count: pl._count.items })}
                         {record?.submittedByName && ` · ${tApp('submittedBy', { name: record.submittedByName })}`}
                       </p>
@@ -917,13 +917,13 @@ export default function PlaylistsPage() {
 
                   {isRejecting && (
                     <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-900">
-                      <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">{tApp('rejectReasonLabel')}</label>
+                      <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{tApp('rejectReasonLabel')}</label>
                       <textarea autoFocus value={rejectComment} onChange={e => setRejectComment(e.target.value)}
                         placeholder={tApp('rejectReasonPlaceholder')} rows={2}
-                        className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
                       <div className="flex justify-end gap-2 mt-2">
                         <button onClick={() => { setRejectingId(null); setRejectComment(''); }}
-                          className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800">
+                          className="px-3 py-1.5 text-xs text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)]">
                           {tApp('cancel')}
                         </button>
                         <button onClick={() => rejectMut.mutate({ playlist: pl, comment: rejectComment.trim() })}
@@ -942,17 +942,17 @@ export default function PlaylistsPage() {
       )}
 
       {creating && canEditContent && (
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4 mb-4 flex gap-2">
+        <div className="glass-panel rounded-2xl p-4 mb-4 flex gap-2">
           <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) createMut.mutate(); if (e.key === 'Escape') setCreating(false); }}
             placeholder={t('namePlaceholder')}
-            className="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="flex-1 border border-[var(--deck-glass-border)] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
           <button onClick={() => createMut.mutate()} disabled={!newName.trim() || createMut.isPending}
-            className="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50">
+            className="bg-[var(--deck-accent)] text-white px-4 py-1.5 rounded-lg text-sm font-medium  disabled:opacity-50">
             {createMut.isPending ? t('creating') : tc('create')}
           </button>
           <button onClick={() => setCreating(false)}
-            className="border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-800">{tc('cancel')}</button>
+            className="border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] px-3 py-1.5 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
         </div>
       )}
 
@@ -960,17 +960,17 @@ export default function PlaylistsPage() {
 
       {playlists.length > 0 && (
         <div className="relative mb-5 max-w-sm">
-          <Search className="w-4 h-4 text-gray-400 absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tc('search')}
-            className="w-full border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+            className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!isLoading && playlists.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <List className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
@@ -978,7 +978,7 @@ export default function PlaylistsPage() {
 
       {!isLoading && playlists.length > 0 &&
         playlists.filter((pl: PlaylistSummary) => pl.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
-        <div className="text-center py-16 text-gray-400">
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{tc('noMatches')}</p>
         </div>
@@ -999,17 +999,17 @@ export default function PlaylistsPage() {
                     <SortablePlaylistRow key={pl.id} id={pl.id} disabled={!canDragPlaylists}>
                       {({ attributes, listeners, setNodeRef, style, isDragging }) => (
                         <div ref={setNodeRef} style={style} id={`playlist-row-${pl.id}`}
-                          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden transition-colors hover:border-indigo-200 dark:hover:border-indigo-800 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
+                          className={`glass-panel rounded-2xl overflow-hidden transition-colors hover:border-[var(--deck-accent)] ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
                           <div
                             onClick={() => { if (renamingId !== pl.id) toggleExpanded(pl.id); }}
                             className="flex items-center gap-3 px-4 py-3 cursor-pointer group">
                             {canDragPlaylists && (
                               <button type="button" {...attributes} {...listeners} onClick={e => e.stopPropagation()} title={t('dragToReorder')}
-                                className="cursor-grab touch-none p-0.5 text-gray-300 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 active:cursor-grabbing shrink-0">
+                                className="cursor-grab touch-none p-0.5 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)] active:cursor-grabbing shrink-0">
                                 <GripVertical className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            <List className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+                            <List className="w-4 h-4 text-[var(--deck-text-low)] shrink-0" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 {renamingId === pl.id ? (
@@ -1024,13 +1024,13 @@ export default function PlaylistsPage() {
                                       if (e.key === 'Escape') setRenamingId(null);
                                     }}
                                     disabled={renameMut.isPending}
-                                    className="text-sm font-medium text-gray-900 dark:text-gray-100 dark:bg-gray-800 border border-indigo-300 dark:border-indigo-700 rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    className="text-sm font-medium text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
                                   />
                                 ) : (
                                   <p
                                     onClick={e => { if (canEditContent) { e.stopPropagation(); startRename(pl); } }}
                                     title={canEditContent ? tc('clickToRename') : undefined}
-                                    className={`text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}>
+                                    className={`text-sm font-medium text-[var(--deck-text-hi)] ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}>
                                     {pl.name}
                                   </p>
                                 )}
@@ -1040,37 +1040,37 @@ export default function PlaylistsPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-400 dark:text-gray-500">
+                              <p className="text-xs text-[var(--deck-text-low)]">
                                 {t('itemCount', { count: pl._count.items })}
                                 {pl._count.items > 0 && ` · ${formatDuration(pl.totalDurationSecs)} · ${formatBytes(pl.totalSizeBytes)}`}
                               </p>
                             </div>
                             {canEditContent && (
                               <button onClick={e => { e.stopPropagation(); duplicateMut.mutate(pl); }} disabled={duplicateMut.isPending}
-                                title={t('duplicate')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors disabled:opacity-50">
+                                title={t('duplicate')} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors disabled:opacity-50">
                                 <Copy className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {canEditContent && (
                               <button onClick={e => { e.stopPropagation(); if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(pl); }}
-                                className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors">
+                                className="p-1 text-[var(--deck-text-low)] hover:text-red-500 transition-colors">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                             <button onClick={e => { e.stopPropagation(); previewMut.mutate(pl.id); }}
                               disabled={previewMut.isPending}
-                              title={t('preview')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors disabled:opacity-50">
+                              title={t('preview')} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors disabled:opacity-50">
                               <Eye className="w-3.5 h-3.5" />
                             </button>
                             {canEditContent && (
                               <button onClick={e => { e.stopPropagation(); setSettingsPlaylist({ id: pl.id, name: pl.name }); }}
-                                title={t('settings')} className="p-1 text-gray-300 dark:text-gray-500 hover:text-indigo-600 transition-colors">
+                                title={t('settings')} className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] transition-colors">
                                 <Settings className="w-3.5 h-3.5" />
                               </button>
                             )}
                             {isExpanded
-                              ? <ChevronDown className="w-4 h-4 text-indigo-500 shrink-0" />
-                              : <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-500 group-hover:text-indigo-400 transition-colors shrink-0" />}
+                              ? <ChevronDown className="w-4 h-4 text-[var(--deck-accent)] shrink-0" />
+                              : <ChevronRight className="w-4 h-4 text-[var(--deck-text-low)] group-hover:text-[var(--deck-accent)] transition-colors shrink-0" />}
                           </div>
 
                           {isExpanded && <PlaylistDetail id={pl.id} />}

@@ -17,7 +17,7 @@ export class RoomAvailabilityService {
   ) {}
 
   async getAvailability(room: {
-    id: string; providerKey: 'LUMINA' | 'MICROSOFT_365' | 'GOOGLE_WORKSPACE';
+    id: string; organizationId: string; providerKey: 'LUMINA' | 'MICROSOFT_365' | 'GOOGLE_WORKSPACE';
     externalResourceId: string | null; externalResourceEmail: string | null; calendarConnectionId: string | null;
   }, from: Date, to: Date): Promise<NormalizedReservation[]> {
     if (!(from < to)) throw new BadRequestException('from must be before to');

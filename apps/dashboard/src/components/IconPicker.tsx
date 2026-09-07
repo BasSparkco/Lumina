@@ -83,14 +83,14 @@ export function IconPicker({ onPick, disabled, labels }: IconPickerProps) {
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--deck-text-low)]" />
         <input
           type="text"
           disabled={disabled}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={labels.searchPlaceholder}
-          className="w-full rounded border border-gray-200 py-1 pl-6 pr-2 text-[11px] focus:border-indigo-400 focus:outline-none disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          className="w-full rounded border border-[var(--deck-glass-border)] py-1 pl-6 pr-2 text-[11px] focus:border-[var(--deck-accent)] focus:outline-none disabled:opacity-50"
         />
       </div>
 
@@ -103,8 +103,8 @@ export function IconPicker({ onPick, disabled, labels }: IconPickerProps) {
             onClick={() => toggleLibrary(prefix)}
             className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium disabled:opacity-50 ${
               activePrefixes.has(prefix)
-                ? 'border-indigo-400 bg-indigo-50 text-indigo-600 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-300'
-                : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:border-[var(--deck-glass-border)]'
             }`}
           >
             {label}
@@ -113,11 +113,11 @@ export function IconPicker({ onPick, disabled, labels }: IconPickerProps) {
       </div>
 
       {!debouncedSearch ? null : isFetching ? (
-        <div className="flex items-center justify-center gap-1.5 py-4 text-[11px] text-gray-400">
+        <div className="flex items-center justify-center gap-1.5 py-4 text-[11px] text-[var(--deck-text-low)]">
           <RefreshCw className="h-3 w-3 animate-spin" />
         </div>
       ) : !icons.length ? (
-        <div className="flex flex-col items-center gap-1 py-4 text-center text-[11px] text-gray-400">
+        <div className="flex flex-col items-center gap-1 py-4 text-center text-[11px] text-[var(--deck-text-low)]">
           <ImageOff className="h-4 w-4" />
           {labels.empty}
         </div>
@@ -130,7 +130,7 @@ export function IconPicker({ onPick, disabled, labels }: IconPickerProps) {
               disabled={disabled || importingId !== null}
               onClick={() => void handlePick(iconId)}
               title={iconId}
-              className="relative flex aspect-square items-center justify-center overflow-hidden rounded border border-gray-200 bg-gray-50 p-1.5 disabled:cursor-wait dark:border-gray-700 dark:bg-gray-800"
+              className="relative flex aspect-square items-center justify-center overflow-hidden rounded border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-1.5 disabled:cursor-wait"
               style={{ opacity: importingId !== null && importingId !== iconId ? 0.5 : 1 }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary remote Iconify SVG, not a static/local image */}
@@ -147,7 +147,7 @@ export function IconPicker({ onPick, disabled, labels }: IconPickerProps) {
 
       {error && <p className="text-[10px] text-red-500">{error}</p>}
 
-      {!!icons.length && <p className="text-center text-[10px] text-gray-400">{labels.credit}</p>}
+      {!!icons.length && <p className="text-center text-[10px] text-[var(--deck-text-low)]">{labels.credit}</p>}
     </div>
   );
 }

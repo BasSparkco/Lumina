@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { authApi, clearToken, getToken, loginPath, setToken, type User } from '@/lib/api';
 
 interface AuthCtx {
@@ -15,6 +16,8 @@ const Ctx = createContext<AuthCtx | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(() => Boolean(getToken()));
+  // Valid here — AuthProvider always renders inside QueryProvider (see app/layout.tsx).
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!getToken()) return;
@@ -24,24 +27,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Cleared *before* the new identity is set, not just cancelled — on every login/register/
+  // logout, so a component can never render a frame with the previous identity's cached data
+  // (members, assets, playlists, screens, designs, rooms, reports, ...) under the new one. This
+  // is what makes "switching from Tenant A to Tenant B in the same browser" safe even when the
+  // transition happens without an intervening full page reload — see
+  // docs/adr/tenant-isolation-and-shared-content.md §Dashboard identity and cache boundary.
   const login = useCallback(async (email: string, password: string) => {
     const res = await authApi.login(email, password);
+    await queryClient.cancelQueries();
+    queryClient.clear();
     setToken(res.token);
     setUser(res.user);
-  }, []);
+  }, [queryClient]);
 
   const register = useCallback(async (orgName: string, email: string, password: string, name: string) => {
     const res = await authApi.register(orgName, email, password, name);
+    await queryClient.cancelQueries();
+    queryClient.clear();
     setToken(res.token);
     setUser(res.user);
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(() => {
     clearToken();
+    queryClient.clear();
     setUser(null);
     // Use replace to prevent back-navigation to protected pages
     if (typeof window !== 'undefined') window.location.replace(loginPath());
-  }, []);
+  }, [queryClient]);
 
   // useAuth() is consumed across a dozen pages including the large editor components — without
   // this, a fresh object literal here re-renders every one of them whenever AuthProvider

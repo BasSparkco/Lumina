@@ -2,8 +2,8 @@
 import { Info } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-// Shown at the top of every section still backed by lib/mocks/* (Members, Billing, Audit Log,
-// Reports, Approvals) instead of a real API — those pages work, but only ever persist to the
+// Shown at the top of every section still backed by lib/mocks/* (Billing, Audit Log, Reports,
+// Approvals) instead of a real API — those pages work, but only ever persist to the
 // current browser's localStorage, so nothing here syncs across teammates or devices. This makes
 // that limitation visible in the product itself rather than something a customer discovers the
 // hard way (e.g. inviting a teammate who then sees no invite waiting for them).

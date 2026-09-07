@@ -12,3 +12,161 @@
 [dir='rtl'] {
   font-family: 'Cairo', 'Noto Sans Arabic', system-ui, sans-serif;
 }
+
+/* Designer2 "glass command deck" theme tokens */
+:root {
+  --deck-bg-base: #EEF0F8;
+  --deck-bg-base-2: #E4E7F5;
+
+  --deck-glow-violet: #6C7BFF;
+  --deck-glow-cyan: #29B7C2;
+  --deck-glow-magenta: #B15CFF;
+
+  --deck-glass-fill: rgba(255, 255, 255, 0.58);
+  --deck-glass-fill-strong: rgba(255, 255, 255, 0.85);
+  --deck-glass-border: rgba(28, 32, 64, 0.10);
+  --deck-glass-border-soft: rgba(28, 32, 64, 0.07);
+
+  /* Near-opaque surface for anything that floats freely over arbitrary page content and must
+     stay readable on its own — modals, dropdown/select popovers, context menus. .glass-panel's
+     fill is deliberately thin so the ambient command-deck glow shows through *persistent chrome*
+     (topbar/sidebar/cards); a transient popup has no such design goal and just needs contrast. */
+  --deck-popup-fill: rgba(255, 255, 255, 0.97);
+
+  --deck-text-hi: #1A1D2E;
+  --deck-text-mid: #5B6079;
+  --deck-text-low: #8A8FA6;
+
+  --deck-accent: #5C6BEF;
+  --deck-accent-soft: rgba(92, 107, 239, 0.12);
+
+  --deck-shadow-panel: 0 10px 30px rgba(45, 50, 110, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --deck-shadow-popup: 0 20px 50px rgba(30, 34, 80, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  --screen-gradient: linear-gradient(160deg, #101426 0%, #171B33 55%, #1C1440 100%);
+  --screen-glow-cyan: #6EE7EC;
+
+  /* Tells the browser this page supports a light UI so native form controls (the option list a
+     <select> opens, scrollbars, etc.) render with matching light chrome — overridden to `dark`
+     below. Without this the native <select> popover always renders with the OS's light-mode
+     colors regardless of our own dark-mode CSS. */
+  color-scheme: light;
+}
+
+.dark {
+  --deck-bg-base: #080A14;
+  --deck-bg-base-2: #0D1020;
+
+  --deck-glow-violet: #6C7BFF;
+  --deck-glow-cyan: #4BD3D9;
+  --deck-glow-magenta: #B15CFF;
+
+  --deck-glass-fill: rgba(255, 255, 255, 0.055);
+  --deck-glass-fill-strong: rgba(255, 255, 255, 0.09);
+  --deck-glass-border: rgba(255, 255, 255, 0.14);
+  --deck-glass-border-soft: rgba(255, 255, 255, 0.08);
+
+  --deck-text-hi: #F2F4FF;
+  --deck-text-mid: #9CA3C4;
+  --deck-text-low: #5C6288;
+
+  --deck-popup-fill: rgba(17, 19, 36, 0.97);
+
+  --deck-accent: #7C8BFF;
+  --deck-accent-soft: rgba(124, 139, 255, 0.16);
+
+  --deck-shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --deck-shadow-popup: 0 20px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  color-scheme: dark;
+}
+
+.glass-panel {
+  background: var(--deck-glass-fill);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--deck-glass-border);
+  box-shadow: var(--deck-shadow-panel);
+}
+
+/* Modals, dropdown/select popovers, context menus, flyouts — anything that floats freely over
+   arbitrary page content rather than sitting as part of the persistent chrome. Same frosted
+   look as .glass-panel but a near-opaque fill so text inside stays readable regardless of
+   what's behind it (the thin .glass-panel fill was designed for the ambient glow to show
+   through fixed chrome, not for a transient overlay's own legibility). */
+.glass-popup {
+  background: var(--deck-popup-fill);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid var(--deck-glass-border);
+  box-shadow: var(--deck-shadow-popup);
+}
+
+/* App-wide "glass command deck" ambient backdrop (glow + dot-grid), sits behind every glass
+   panel/canvas — originally Designer2-only, now the shared shell background too. Kept as one
+   class (not per-page) so the whole app reads as one surface. */
+.command-deck {
+  position: relative;
+  isolation: isolate;
+}
+.command-deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 700px 500px at 15% 10%, color-mix(in srgb, var(--deck-glow-violet) 16%, transparent), transparent 60%),
+    radial-gradient(ellipse 620px 480px at 88% 18%, color-mix(in srgb, var(--deck-glow-cyan) 16%, transparent), transparent 60%),
+    radial-gradient(ellipse 800px 620px at 55% 100%, color-mix(in srgb, var(--deck-glow-magenta) 13%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--deck-bg-base) 0%, var(--deck-bg-base-2) 100%);
+}
+.dark .command-deck::before {
+  background:
+    radial-gradient(ellipse 700px 500px at 15% 10%, color-mix(in srgb, var(--deck-glow-violet) 30%, transparent), transparent 60%),
+    radial-gradient(ellipse 620px 480px at 88% 18%, color-mix(in srgb, var(--deck-glow-cyan) 22%, transparent), transparent 60%),
+    radial-gradient(ellipse 800px 620px at 55% 100%, color-mix(in srgb, var(--deck-glow-magenta) 20%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--deck-bg-base) 0%, var(--deck-bg-base-2) 100%);
+}
+.command-deck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(color-mix(in srgb, var(--deck-text-hi) 6%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 90% 90% at 50% 40%, black 40%, transparent 90%);
+}
+
+/* Reusable primary-action treatment (Designer2's Save button, extended app-wide for any
+   primary/CTA button) — the three-stop violet -> magenta gradient from the approved mockups. */
+.deck-btn-primary {
+  background: linear-gradient(135deg, var(--deck-glow-violet), #8F6CFF 60%, var(--deck-glow-magenta));
+  color: white;
+}
+.deck-btn-primary:hover {
+  filter: brightness(1.08);
+}
+.deck-btn-primary:disabled {
+  opacity: 0.5;
+  filter: none;
+}
+
+/* Native <select>/<option> fallback colors. `color-scheme` above fixes the browser-drawn option
+   *list* popover's own background/text in dark mode, but the closed control's displayed value
+   still needs an explicit color or it renders at the browser default (black) — unreadable
+   against a dark background. Layered under `base` so any component's own text-* utility class
+   (higher-priority `utilities` layer) still wins where one is already set. */
+@layer base {
+  /* A native <select>'s widget chrome (its own box fill, independent of the text inside) is
+     painted by the browser/OS and ignores a `transparent`/unset background — it has to be given
+     an explicit, non-transparent color or it falls back to its own opaque default (white),
+     regardless of `color-scheme` or the `color` override above. */
+  select {
+    color: var(--deck-text-hi);
+    background-color: var(--deck-glass-fill-strong);
+  }
+  option {
+    background: var(--deck-popup-fill);
+    color: var(--deck-text-hi);
+  }
+}

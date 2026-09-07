@@ -99,19 +99,19 @@ export function AssetSelect({
           type="button"
           disabled={disabled}
           onClick={() => setOpen((o) => !o)}
-          className="flex flex-1 items-center justify-between gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-left text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          className="flex flex-1 items-center justify-between gap-1 rounded-lg border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] px-2 py-1.5 text-left text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50"
         >
-          <span className={`truncate ${!selected ? 'text-gray-400 dark:text-gray-500' : ''}`}>
+          <span className={`truncate ${!selected ? 'text-[var(--deck-text-low)]' : ''}`}>
             {selected ? selected.name : placeholder}
           </span>
-          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-[var(--deck-text-low)] transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
         {selected && !disabled && (
           <button
             type="button"
             onClick={() => onChange(null)}
             title="Clear"
-            className="shrink-0 rounded-lg border border-gray-200 px-1.5 text-gray-400 hover:text-gray-600 dark:border-gray-700 dark:hover:text-gray-200"
+            className="shrink-0 rounded-lg border border-[var(--deck-glass-border)] px-1.5 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -119,23 +119,23 @@ export function AssetSelect({
       </div>
 
       {open && (
-        <div className="mt-1 space-y-1.5 rounded-lg border border-gray-200 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-800">
+        <div className="glass-popup mt-1 space-y-1.5 rounded-lg p-1.5">
           <div className="flex gap-1">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-1.5 h-3 w-3 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute top-1/2 left-1.5 h-3 w-3 -translate-y-1/2 text-[var(--deck-text-low)]" />
               <input
                 ref={searchRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full rounded border border-gray-200 bg-white py-1 pr-1.5 pl-5 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full rounded border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] py-1 pr-1.5 pl-5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
               />
             </div>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as AssetSortKey)}
               title="Sort by"
-              className="rounded border border-gray-200 bg-white px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              className="rounded border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
             >
               {ASSET_SORT_OPTIONS.map((o) => (
                 <option key={o.key} value={o.key}>{o.label}</option>
@@ -150,8 +150,8 @@ export function AssetSelect({
                 onClick={() => setTypeFilter(new Set())}
                 className={`rounded-full border px-1.5 py-0.5 text-[10px] ${
                   typeFilter.size === 0
-                    ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                    ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                    : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                 }`}
               >
                 All
@@ -165,8 +165,8 @@ export function AssetSelect({
                     onClick={() => toggleType(t)}
                     className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${
                       active
-                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'
-                        : 'border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                        ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                        : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
                     }`}
                   >
                     {TYPE_ICON[t]} {ASSET_TYPE_LABELS[t]}
@@ -178,15 +178,15 @@ export function AssetSelect({
 
           <div className="max-h-48 space-y-0.5 overflow-y-auto">
             {filtered.length === 0 && (
-              <p className="px-1.5 py-2 text-center text-[11px] text-gray-400 dark:text-gray-500">{emptyLabel}</p>
+              <p className="px-1.5 py-2 text-center text-[11px] text-[var(--deck-text-low)]">{emptyLabel}</p>
             )}
             {filtered.map((a) => (
               <button
                 key={a.id}
                 type="button"
                 onClick={() => pick(a)}
-                className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                  a.id === value ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-200'
+                className={`flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[11px] hover:bg-[var(--deck-glass-fill-strong)] ${
+                  a.id === value ? 'bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]' : 'text-[var(--deck-text-hi)]'
                 }`}
               >
                 {a.thumbnailUrl ? (
@@ -196,7 +196,7 @@ export function AssetSelect({
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center">{TYPE_ICON[a.type]}</span>
                 )}
                 <span className="flex-1 truncate">{a.name}</span>
-                <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500">
+                <span className="shrink-0 text-[10px] text-[var(--deck-text-low)]">
                   {sort === 'mostUsed'
                     ? `${a.usageCount ?? 0}×`
                     : sort === 'recentlyUsed'

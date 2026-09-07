@@ -59,8 +59,8 @@ function DynamicBindingField({
 }) {
   const current = bindings?.find((b) => b.property === property);
   return (
-    <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
-      <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Dynamic value</span>
+    <div className="space-y-1.5 border-t border-[var(--deck-glass-border-soft)] pt-3">
+      <span className="text-[11px] font-medium text-[var(--deck-text-mid)]">Dynamic value</span>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Variable">
           <input
@@ -135,14 +135,14 @@ function AnimationPhaseFields({
   }
 
   return (
-    <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+    <div className="space-y-1.5 border-t border-[var(--deck-glass-border-soft)] pt-3">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{title}</span>
+        <span className="text-[11px] font-medium text-[var(--deck-text-mid)]">{title}</span>
         {step && onPreview && (
           <button
             title={`Preview ${title.toLowerCase()}`}
             onClick={onPreview}
-            className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-indigo-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-indigo-400"
+            className="flex h-5 w-5 items-center justify-center rounded text-[var(--deck-text-low)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-accent)]"
           >
             <Play className="h-3 w-3" />
           </button>
@@ -262,14 +262,14 @@ function Panel({ children }: { children: React.ReactNode }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] font-medium text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="mb-1 block text-[11px] font-medium text-[var(--deck-text-mid)]">{label}</span>
       {children}
     </label>
   );
 }
 
 const inputClass =
-  'w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:border-indigo-400 focus:outline-none disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+  'w-full rounded-md border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] px-2 py-1 text-xs text-[var(--deck-text-hi)] focus:border-[var(--deck-accent)] focus:outline-none disabled:opacity-40';
 
 function NumberField({
   label,
@@ -302,14 +302,14 @@ function NumberField({
 function ColorField({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
   return (
     <Field label={label}>
-      <input type="color" className="h-7 w-full rounded-md border border-gray-200 dark:border-gray-700" value={value} onChange={(e) => onCommit(e.target.value)} />
+      <input type="color" className="h-7 w-full rounded-md border border-[var(--deck-glass-border)]" value={value} onChange={(e) => onCommit(e.target.value)} />
     </Field>
   );
 }
 
 function ToggleField({ label, checked, onCommit }: { label: string; checked: boolean; onCommit: (v: boolean) => void }) {
   return (
-    <label className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
+    <label className="flex items-center justify-between text-xs text-[var(--deck-text-mid)]">
       {label}
       <input type="checkbox" checked={checked} onChange={(e) => onCommit(e.target.checked)} className="h-3.5 w-3.5" />
     </label>
@@ -317,10 +317,10 @@ function ToggleField({ label, checked, onCommit }: { label: string; checked: boo
 }
 
 function AlignmentRow({ onAlign }: { onAlign: (axis: 'left' | 'center-h' | 'right' | 'top' | 'middle' | 'bottom') => void }) {
-  const btn = 'flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100';
+  const btn = 'flex h-7 w-7 items-center justify-center rounded-md text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)]';
   return (
     <div>
-      <span className="mb-1 block text-[11px] font-medium text-gray-500 dark:text-gray-400">Align to canvas</span>
+      <span className="mb-1 block text-[11px] font-medium text-[var(--deck-text-mid)]">Align to canvas</span>
       <div className="flex gap-1">
         <button title="Align left" className={btn} onClick={() => onAlign('left')}><AlignHorizontalJustifyStart className="h-4 w-4" /></button>
         <button title="Align center" className={btn} onClick={() => onAlign('center-h')}><AlignHorizontalJustifyCenter className="h-4 w-4" /></button>
@@ -385,7 +385,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
   if (selectedElements.length === 0) {
     return (
       <Panel>
-        <p className="text-sm text-gray-400 dark:text-gray-600">Select an element</p>
+        <p className="text-sm text-[var(--deck-text-low)]">Select an element</p>
       </Panel>
     );
   }
@@ -393,11 +393,11 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
   if (selectedElements.length > 1) {
     return (
       <Panel>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{selectedElements.length} selected</p>
+        <p className="text-sm text-[var(--deck-text-mid)]">{selectedElements.length} selected</p>
         <AlignmentRow onAlign={alignSelection} />
         <div className="flex gap-2 pt-2">
           <button
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--deck-glass-border)] py-1.5 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
             onClick={() => commit(() => duplicateElements(selectedElementIds))}
           >
             <Copy className="h-3.5 w-3.5" /> Duplicate
@@ -446,7 +446,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
 
       <AlignmentRow onAlign={alignSelection} />
 
-      <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <div className="space-y-1.5 border-t border-[var(--deck-glass-border-soft)] pt-3">
         <ToggleField label="Visible" checked={element.visible} onCommit={(v) => commitUpdate({ visible: v })} />
         <ToggleField label="Movable" checked={element.movable} onCommit={(v) => commitUpdate({ movable: v })} />
         <ToggleField label="Resizable" checked={element.resizable} onCommit={(v) => commitUpdate({ resizable: v })} />
@@ -481,8 +481,8 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       />
 
       {isTemplateMode && (
-        <div className="space-y-1.5 border-t border-gray-100 pt-3 dark:border-gray-800">
-          <p className="text-[11px] font-medium text-gray-400 dark:text-gray-600">Template customization (designer.md §7)</p>
+        <div className="space-y-1.5 border-t border-[var(--deck-glass-border-soft)] pt-3">
+          <p className="text-[11px] font-medium text-[var(--deck-text-low)]">Template customization (designer.md §7)</p>
           <ToggleField
             label="Content editable by customer"
             checked={element.templatePolicy?.contentEditable ?? false}
@@ -497,7 +497,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       )}
 
       {element.type === 'text' && (
-        <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
           <Field label="Text">
             <textarea
               className={inputClass}
@@ -531,7 +531,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       )}
 
       {element.type === 'shape' && (
-        <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
           <ColorField label="Fill" value={element.fill ?? '#6366f1'} onCommit={(v) => commitUpdate({ fill: v })} />
           <ColorField label="Stroke" value={element.stroke ?? '#000000'} onCommit={(v) => commitUpdate({ stroke: v })} />
           <NumberField label="Stroke Width" value={element.strokeWidth ?? 0} onLive={(v) => liveUpdate({ strokeWidth: v })} onCommit={(v) => commitUpdate({ strokeWidth: v })} />
@@ -542,7 +542,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       )}
 
       {element.type === 'image' && (
-        <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
           <Field label="Image">
             <ImagePicker
               value={element.assetId ?? null}
@@ -560,13 +560,13 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           </Field>
           <div className="flex gap-2">
             <button
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs ${element.flipX ? 'border-indigo-400 text-indigo-600' : 'border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300'}`}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs ${element.flipX ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'}`}
               onClick={() => commitUpdate({ flipX: !element.flipX })}
             >
               <FlipHorizontal className="h-3.5 w-3.5" /> Flip X
             </button>
             <button
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs ${element.flipY ? 'border-indigo-400 text-indigo-600' : 'border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300'}`}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs ${element.flipY ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'}`}
               onClick={() => commitUpdate({ flipY: !element.flipY })}
             >
               <FlipVertical className="h-3.5 w-3.5" /> Flip Y
@@ -575,14 +575,14 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           <div className="flex gap-2">
             <button
               disabled={!element.assetId}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--deck-glass-border)] py-1.5 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
               onClick={() => setCropOpen(true)}
             >
               <CropIcon className="h-3.5 w-3.5" /> Crop
             </button>
             <button
               disabled={!element.assetId}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--deck-glass-border)] py-1.5 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
               onClick={() => setAdjustOpen(true)}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" /> Adjust
@@ -634,7 +634,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       )}
 
       {element.type === 'qr' && (
-        <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
           <Field label="Value">
             <input type="text" className={inputClass} defaultValue={element.value ?? ''} onBlur={(e) => commitUpdate({ value: e.target.value })} />
           </Field>
@@ -647,7 +647,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       )}
 
       {element.type === 'video' && (
-        <div className="space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+        <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
           <Field label="Video">
             <VideoPicker
               value={element.assetId ?? null}
@@ -708,9 +708,9 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
         </div>
       )}
 
-      <div className="flex gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <div className="flex gap-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
         <button
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-200 py-1.5 text-xs text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--deck-glass-border)] py-1.5 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
           onClick={() => commit(() => duplicateElements([element.id]))}
         >
           <Copy className="h-3.5 w-3.5" /> Duplicate

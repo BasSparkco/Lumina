@@ -17,7 +17,7 @@ export function PowerPreviewChip({ screenId, onLabel, offLabel }: { screenId: st
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
       data.poweredOn
         ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
-        : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+        : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'
     }`}>
       {data.poweredOn ? onLabel : offLabel}
     </span>

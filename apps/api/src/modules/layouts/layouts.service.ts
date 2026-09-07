@@ -45,8 +45,9 @@ export class LayoutsService {
     }
   }
 
-  private zoneCreateData(z: CreateLayoutDto['zones'][number]) {
+  private zoneCreateData(orgId: string, z: CreateLayoutDto['zones'][number]) {
     return {
+      organizationId: orgId,
       name: z.name,
       x: z.x,
       y: z.y,
@@ -74,7 +75,7 @@ export class LayoutsService {
       data: {
         name: dto.name,
         organizationId: orgId,
-        zones: { create: dto.zones.map(z => this.zoneCreateData(z)) },
+        zones: { create: dto.zones.map(z => this.zoneCreateData(orgId, z)) },
       },
       include: this.zonesInclude,
     });
@@ -112,7 +113,7 @@ export class LayoutsService {
         where: { id },
         data: {
           name: dto.name,
-          zones: { create: dto.zones.map(z => this.zoneCreateData(z)) },
+          zones: { create: dto.zones.map(z => this.zoneCreateData(orgId, z)) },
         },
         include: this.zonesInclude,
       });

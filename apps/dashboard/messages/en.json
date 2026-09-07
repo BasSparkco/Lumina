@@ -90,8 +90,7 @@
       "OWNER": "Owner",
       "ADMIN": "Admin",
       "EDITOR": "Editor",
-      "VIEWER": "Viewer",
-      "LIBRARY_MANAGER": "Library Manager"
+      "VIEWER": "Viewer"
     },
     "approvalStatus": {
       "DRAFT": "Draft",
@@ -1341,7 +1340,9 @@
     "copyLink": "Copy link",
     "removeConfirm": "Remove {name}?",
     "ownerCannotBeRemoved": "The owner cannot be removed",
-    "removeMember": "Remove member"
+    "removeMember": "Remove member",
+    "revokeInvite": "Revoke invite",
+    "revokeConfirm": "Revoke the invite sent to {email}?"
   },
   "adminTenants": {
     "title": "Tenants",
@@ -1386,7 +1387,35 @@
       "WAYFINDING_AI": "AI Wayfinding",
       "ROOM_BOOKING": "Room Booking",
       "INDOOR_POSITIONING": "Indoor Positioning"
-    }
+    },
+    "suspendReasonPrompt": "Reason for suspending {name} (shown in the platform audit log):",
+    "suspendReasonRequired": "A reason is required to suspend a tenant.",
+    "suspensionReason": "Suspension reason",
+    "owner": "Owner",
+    "noOwner": "No owner yet",
+    "editName": "Edit name",
+    "tenantNamePrompt": "New name for this tenant:",
+    "membersSection": "Members",
+    "invitesSection": "Pending invites",
+    "role": "Role",
+    "actions": "Actions",
+    "removeMember": "Remove",
+    "removeMemberConfirm": "Remove {name} from this tenant? This cannot be undone.",
+    "revokeSessions": "Revoke sessions",
+    "revokeSessionsConfirm": "Revoke every session for {name}? They will be signed out immediately.",
+    "revokeAllSessions": "Revoke all sessions",
+    "revokeAllSessionsConfirm": "Revoke every active session for every member of this tenant? Everyone will be signed out immediately.",
+    "revokeInvite": "Revoke",
+    "revokeInviteConfirm": "Revoke the pending invite to {email}?",
+    "noMembers": "No members yet.",
+    "noInvites": "No pending invites.",
+    "auditSection": "Platform audit",
+    "noAuditEntries": "No platform actions recorded for this tenant yet.",
+    "auditAction": "Action",
+    "auditActor": "Actor",
+    "auditWhen": "When",
+    "auditReason": "Reason",
+    "platformSuperAdmin": "Platform Super Admin"
   },
   "auditLog": {
     "title": "Audit log",

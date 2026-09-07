@@ -61,12 +61,12 @@ export function AdjustmentsEditor({ mediaUrl, name, initial, onClose, onSave }: 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6" onClick={onClose}>
       <div
-        className="flex max-h-full w-full max-w-3xl flex-col gap-4 overflow-y-auto rounded-xl bg-white p-5 dark:bg-gray-900"
+        className="flex max-h-full w-full max-w-3xl flex-col gap-4 overflow-y-auto rounded-xl bg-[var(--deck-glass-fill-strong)] p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex w-full items-center justify-between gap-6">
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('title')}</p>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+          <p className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('title')}</p>
+          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-hi)]">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -90,8 +90,8 @@ export function AdjustmentsEditor({ mediaUrl, name, initial, onClose, onSave }: 
                   onClick={() => applyPreset(key)}
                   className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                     values.preset === key
-                      ? 'border-indigo-400 bg-indigo-50 text-indigo-600 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-300'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'
+                      ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                      : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:border-[var(--deck-glass-border)]'
                   }`}
                 >
                   {t(`presets.${key}`)}
@@ -103,8 +103,8 @@ export function AdjustmentsEditor({ mediaUrl, name, initial, onClose, onSave }: 
               {SLIDERS.map(({ key, min, max }) => (
                 <div key={key}>
                   <div className="mb-0.5 flex items-center justify-between">
-                    <label className="text-[10px] text-gray-400 dark:text-gray-500">{t(`fields.${key}`)}</label>
-                    <span className="font-mono text-[9px] text-gray-400 dark:text-gray-500">{values[key]}</span>
+                    <label className="text-[10px] text-[var(--deck-text-low)]">{t(`fields.${key}`)}</label>
+                    <span className="font-mono text-[9px] text-[var(--deck-text-low)]">{values[key]}</span>
                   </div>
                   <input
                     type="range"
@@ -112,14 +112,14 @@ export function AdjustmentsEditor({ mediaUrl, name, initial, onClose, onSave }: 
                     max={max}
                     value={values[key]}
                     onChange={(e) => set(key, parseInt(e.target.value, 10))}
-                    className="w-full accent-indigo-500"
+                    className="w-full accent-[var(--deck-accent)]"
                   />
                 </div>
               ))}
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+              <label className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--deck-text-mid)]">
                 <input
                   type="checkbox"
                   checked={!!values.duotone}
@@ -139,13 +139,13 @@ export function AdjustmentsEditor({ mediaUrl, name, initial, onClose, onSave }: 
                     type="color"
                     value={values.duotone.color1}
                     onChange={(e) => setValues((v) => ({ ...v, preset: 'custom', duotone: { ...v.duotone!, color1: e.target.value } }))}
-                    className="h-7 w-7 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+                    className="h-7 w-7 cursor-pointer rounded border border-[var(--deck-glass-border)]"
                   />
                   <input
                     type="color"
                     value={values.duotone.color2}
                     onChange={(e) => setValues((v) => ({ ...v, preset: 'custom', duotone: { ...v.duotone!, color2: e.target.value } }))}
-                    className="h-7 w-7 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+                    className="h-7 w-7 cursor-pointer rounded border border-[var(--deck-glass-border)]"
                   />
                 </div>
               )}
@@ -156,20 +156,20 @@ export function AdjustmentsEditor({ mediaUrl, name, initial, onClose, onSave }: 
         <div className="flex w-full items-center justify-between gap-2 pt-1">
           <button
             onClick={() => setValues(NEUTRAL)}
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            className="flex items-center gap-1.5 text-xs font-medium text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
           >
             <RotateCcw className="h-3.5 w-3.5" /> {t('reset')}
           </button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="rounded-lg border border-[var(--deck-glass-border)] px-3 py-1.5 text-xs font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]"
             >
               {tc('cancel')}
             </button>
             <button
               onClick={() => onSave(isNeutral ? undefined : values)}
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700"
+              className="rounded-lg bg-[var(--deck-accent)] px-3 py-1.5 text-xs font-medium text-white "
             >
               {tc('save')}
             </button>

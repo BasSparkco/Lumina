@@ -28,24 +28,24 @@ function DesignerPageInner() {
 
   return (
     <div className="mx-auto max-w-2xl p-8">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-      <p className="mt-1 mb-6 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+      <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+      <p className="mt-1 mb-6 text-sm text-[var(--deck-text-mid)]">{t('subtitle')}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Link
           href={`/${locale}/designer?type=layout`}
-          className="flex flex-col items-start gap-2 rounded-xl border border-gray-200 bg-white p-5 text-start hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/20"
+          className="flex flex-col items-start gap-2 rounded-xl border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-5 text-start hover:border-[var(--deck-accent)] hover:bg-[var(--deck-accent-soft)]/50"
         >
-          <LayoutTemplate className="h-5 w-5 text-indigo-600" />
-          <span className="font-medium text-gray-900 dark:text-gray-100">{t('newLayout')}</span>
-          <span className="text-xs text-gray-500 dark:text-gray-400">{t('newLayoutHint')}</span>
+          <LayoutTemplate className="h-5 w-5 text-[var(--deck-accent)]" />
+          <span className="font-medium text-[var(--deck-text-hi)]">{t('newLayout')}</span>
+          <span className="text-xs text-[var(--deck-text-mid)]">{t('newLayoutHint')}</span>
         </Link>
         <Link
           href={`/${locale}/designer?type=theme`}
-          className="flex flex-col items-start gap-2 rounded-xl border border-gray-200 bg-white p-5 text-start hover:border-indigo-300 hover:bg-indigo-50/50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/20"
+          className="flex flex-col items-start gap-2 rounded-xl border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-5 text-start hover:border-[var(--deck-accent)] hover:bg-[var(--deck-accent-soft)]/50"
         >
-          <Palette className="h-5 w-5 text-indigo-600" />
-          <span className="font-medium text-gray-900 dark:text-gray-100">{t('newTheme')}</span>
-          <span className="text-xs text-gray-500 dark:text-gray-400">{t('newThemeHint')}</span>
+          <Palette className="h-5 w-5 text-[var(--deck-accent)]" />
+          <span className="font-medium text-[var(--deck-text-hi)]">{t('newTheme')}</span>
+          <span className="text-xs text-[var(--deck-text-mid)]">{t('newThemeHint')}</span>
         </Link>
       </div>
     </div>

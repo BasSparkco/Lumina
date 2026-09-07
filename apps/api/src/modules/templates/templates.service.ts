@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@lumina/db';
-import { buildBlankDesignDocument, DesignDocumentSchema } from '@lumina/design-schema';
+import { buildBlankDesignDocument, DesignDocumentSchema, type DesignDocument } from '@lumina/design-schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import { DesignsService } from '../designs/designs.service';
@@ -67,34 +67,56 @@ export class TemplatesService {
     });
   }
 
-  // Snapshots the current designJson into an immutable DesignTemplateVersion row and flips the
-  // template customer-visible (designer.md §10.1's "Create Template versions" + §10.2). Unlike
-  // Theme (no draft/live distinction at all), a Template keeps evolving after publish — an admin
-  // edit made afterward is customer-visible immediately, since customerList/customerGet/
-  // createDesign all read the live designTemplate row directly, not the version snapshot; the
-  // version table exists for future admin history/rollback tooling, not built yet.
+  // P7 (docs/tenant_isolation_and_platform_admin_plan.md) — every assetId/posterAssetId a
+  // template's designJson references must resolve to a platform-shared asset (organizationId:
+  // null), never a tenant-owned one: a template visible to every authorized tenant must not leak
+  // one specific tenant's private media through an embedded reference. thumbnailAssetId is already
+  // enforced at the DB layer by the `designtemplate_thumbnail_shared` trigger (P5a); this covers
+  // the designJson body, which the trigger can't see inside a JSON column.
+  private async assertTemplateAssetsShared(document: DesignDocument): Promise<void> {
+    const assetIds = this.designs.collectAssetIds(document);
+    if (assetIds.length === 0) return;
+    const shared = await this.prisma.asset.findMany({
+      where: { id: { in: assetIds }, organizationId: null },
+      select: { id: true },
+    });
+    if (shared.length !== assetIds.length) {
+      const sharedIds = new Set(shared.map((a) => a.id));
+      const nonShared = assetIds.filter((assetId) => !sharedIds.has(assetId));
+      throw new BadRequestException(
+        `Cannot publish: template references non-shared assets, which would leak a tenant's private media: ${nonShared.join(', ')}`,
+      );
+    }
+  }
+
+  // Snapshots the current designJson into an immutable DesignTemplateVersion row and atomically
+  // points `publishedVersionId` at it (designer.md §10.1's "Create Template versions" + §10.2, P7).
+  // customerList/customerGet/createDesign all resolve that pointer, never the live designJson
+  // above — a Template keeps evolving after publish, but an admin edit made afterward is *not*
+  // customer-visible until the next explicit publish, and a design already cloned from an earlier
+  // version can never be retroactively changed by a later edit/unpublish/archive.
   async adminPublish(id: string) {
     const template = await this.adminGet(id);
-    const scenes = (template.designJson as { scenes?: unknown[] } | null)?.scenes;
-    if (!Array.isArray(scenes) || scenes.length === 0) {
+    const document = this.validateDesignJson(template.designJson);
+    if (document.scenes.length === 0) {
       throw new BadRequestException('Cannot publish a template with no scenes');
     }
+    await this.assertTemplateAssetsShared(document);
     const nextVersion = template.versionNumber + 1;
-    const [, updated] = await this.prisma.$transaction([
-      this.prisma.designTemplateVersion.create({
+    return this.prisma.$transaction(async (tx) => {
+      const version = await tx.designTemplateVersion.create({
         data: {
           templateId: id,
           versionNumber: nextVersion,
           designJson: template.designJson as Prisma.InputJsonValue,
           schemaVersion: template.schemaVersion,
         },
-      }),
-      this.prisma.designTemplate.update({
+      });
+      return tx.designTemplate.update({
         where: { id },
-        data: { status: 'PUBLISHED', publishedAt: new Date(), versionNumber: nextVersion },
-      }),
-    ]);
-    return updated;
+        data: { status: 'PUBLISHED', publishedAt: new Date(), versionNumber: nextVersion, publishedVersionId: version.id },
+      });
+    });
   }
 
   async adminUnpublish(id: string) {
@@ -133,6 +155,11 @@ export class TemplatesService {
   private customerVisibleWhere(orgId: string): Prisma.DesignTemplateWhereInput {
     return {
       status: 'PUBLISHED',
+      // Defense-in-depth alongside the status check: status flips to PUBLISHED and
+      // publishedVersionId is set in the same adminPublish transaction, so this should always be
+      // redundant — but a template must never be customer-resolvable without an immutable version
+      // to point at.
+      publishedVersionId: { not: null },
       OR: [{ visibility: 'GLOBAL' }, { visibility: 'SELECTED_TENANTS', tenantAccess: { some: { tenantId: orgId } } }],
     };
   }
@@ -146,12 +173,32 @@ export class TemplatesService {
   }
 
   // Not found and not-authorized deliberately return the same 404 (designer.md §24 — "unauthorized
-  // tenant cannot see/retrieve Template" must not be distinguishable from "doesn't exist").
+  // tenant cannot see/retrieve Template" must not be distinguishable from "doesn't exist"). Returns
+  // the immutable published version's designJson/schemaVersion (P7), never the live, still-editable
+  // DesignTemplate.designJson.
   async customerGet(orgId: string, id: string) {
-    return this.orgScoped.assertOwns(
-      () => this.prisma.designTemplate.findFirst({ where: { id, ...this.customerVisibleWhere(orgId) } }),
+    const template = await this.orgScoped.assertOwns(
+      () =>
+        this.prisma.designTemplate.findFirst({
+          where: { id, ...this.customerVisibleWhere(orgId) },
+          include: { publishedVersion: true },
+        }),
       'Template not found',
     );
+    // customerVisibleWhere already requires publishedVersionId: { not: null }; this narrows the
+    // type for TypeScript and is otherwise unreachable.
+    if (!template.publishedVersion) throw new NotFoundException('Template not found');
+    return {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      thumbnailAssetId: template.thumbnailAssetId,
+      publishedAt: template.publishedAt,
+      versionNumber: template.publishedVersion.versionNumber,
+      designJson: template.publishedVersion.designJson,
+      schemaVersion: template.publishedVersion.schemaVersion,
+    };
   }
 
   async createDesign(orgId: string, id: string) {

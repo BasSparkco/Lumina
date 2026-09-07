@@ -281,8 +281,8 @@ function ShapeQuickAddPanel({ palette, onAdd }: {
             onClick={() => setShape(s)}
             className={`flex h-7 w-7 items-center justify-center rounded border ${
               shape === s
-                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950'
-                : 'border-gray-200 dark:border-gray-700'
+                ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)]'
+                : 'border-[var(--deck-glass-border)]'
             }`}
           >
             {fill === 'outline' ? (
@@ -303,8 +303,8 @@ function ShapeQuickAddPanel({ palette, onAdd }: {
             onClick={() => setFill(f)}
             className={`flex-1 rounded px-2 py-1 text-[10px] font-medium transition-colors ${
               fill === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                ? 'bg-[var(--deck-accent)] text-white'
+                : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'
             }`}
           >
             {f === 'solid' ? t('fillStyleSolid') : t('fillStyleOutline')}
@@ -320,7 +320,7 @@ function ShapeQuickAddPanel({ palette, onAdd }: {
             onClick={() => setColor(`palette.${r}`)}
             style={{ background: palette[r] }}
             className={`h-5 w-5 rounded-full border-2 ${
-              color === `palette.${r}` ? 'border-indigo-500' : 'border-transparent'
+              color === `palette.${r}` ? 'border-[var(--deck-accent)]' : 'border-transparent'
             }`}
           />
         ))}
@@ -328,7 +328,7 @@ function ShapeQuickAddPanel({ palette, onAdd }: {
           title={t('customColor')}
           style={{ background: isCustomColor ? color : undefined }}
           className={`relative flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 ${
-            isCustomColor ? 'border-indigo-500' : 'border-gray-300 dark:border-gray-600'
+            isCustomColor ? 'border-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)]'
           } ${isCustomColor ? '' : 'bg-[conic-gradient(#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)]'}`}
         >
           <input
@@ -342,7 +342,7 @@ function ShapeQuickAddPanel({ palette, onAdd }: {
       <button
         type="button"
         onClick={() => onAdd({ shape, shapeFill: fill, backgroundColor: color })}
-        className="mt-1 rounded-md bg-indigo-600 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-700"
+        className="mt-1 rounded-md bg-[var(--deck-accent)] px-2 py-1.5 text-[11px] font-semibold text-white "
       >
         {t('quickAddShape')}
       </button>
@@ -361,7 +361,7 @@ function TextQuickAddPanel({ onAdd }: { onAdd: (content: { text: string; transla
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5 text-[10px] dark:bg-gray-900">
+      <div className="flex gap-1 rounded-lg bg-[var(--deck-glass-fill-strong)] p-0.5 text-[10px]">
         {(['typed', 'asset'] as const).map((m) => (
           <button
             key={m}
@@ -369,8 +369,8 @@ function TextQuickAddPanel({ onAdd }: { onAdd: (content: { text: string; transla
             onClick={() => setMode(m)}
             className={`flex-1 rounded-md py-1 font-medium transition-colors ${
               m === mode
-                ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
-                : 'text-gray-500 dark:text-gray-400'
+                ? 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-hi)] shadow-sm'
+                : 'text-[var(--deck-text-mid)]'
             }`}
           >
             {m === 'typed' ? t('textSourceTyped') : t('textSourceAsset')}
@@ -392,19 +392,19 @@ function TextQuickAddPanel({ onAdd }: { onAdd: (content: { text: string; transla
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={t('text')}
-            className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
           />
           <input
             dir="rtl"
             value={ar}
             onChange={(e) => setAr(e.target.value)}
             placeholder={t('translationAr')}
-            className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
           />
           <button
             type="button"
             onClick={() => onAdd({ text: text.trim() || 'New text', translations: ar.trim() ? { ar: ar.trim() } : undefined })}
-            className="mt-1 rounded-md bg-indigo-600 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-700"
+            className="mt-1 rounded-md bg-[var(--deck-accent)] px-2 py-1.5 text-[11px] font-semibold text-white "
           >
             {t('quickAdd')}
           </button>
@@ -539,7 +539,7 @@ function PlaylistQuickAddPanel({
       onChange={(e) => {
         if (e.target.value) onAdd(e.target.value);
       }}
-      className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+      className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
     >
       <option value="">{placeholder}</option>
       {playlists.map((p) => (
@@ -577,7 +577,7 @@ function WidgetQuickAddPanel({
       <button
         type="button"
         onClick={() => onAdd(config)}
-        className="rounded-md bg-indigo-600 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-700"
+        className="rounded-md bg-[var(--deck-accent)] px-2 py-1.5 text-[11px] font-semibold text-white "
       >
         {t('quickAdd')}
       </button>
@@ -604,7 +604,7 @@ function CopyHexButton({ value }: { value: string }) {
         })();
       }}
       title={copied ? 'Copied!' : `Copy ${value}`}
-      className="shrink-0 p-1 text-gray-400 hover:text-indigo-600 dark:text-gray-500 dark:hover:text-indigo-400"
+      className="shrink-0 p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)]"
     >
       {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
     </button>
@@ -625,7 +625,7 @@ function ColorField({ label, value, onChange, onFocusField, onBlurField }: Color
   const isPaletteRef = value?.startsWith('palette.') ?? false;
   return (
     <div>
-      {label && <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">{label}</label>}
+      {label && <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">{label}</label>}
       <div className="flex items-center gap-1">
         <select
           value={isPaletteRef ? value!.slice(8) : value ? 'custom' : ''}
@@ -635,7 +635,7 @@ function ColorField({ label, value, onChange, onFocusField, onBlurField }: Color
             else if (v === 'custom') onChange(value && !isPaletteRef ? value : '#000000');
             else onChange(`palette.${v}`);
           }}
-          className="min-w-0 flex-1 rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          className="min-w-0 flex-1 rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
         >
           <option value="">—</option>
           {PALETTE_ROLES.map((r) => (
@@ -653,9 +653,9 @@ function ColorField({ label, value, onChange, onFocusField, onBlurField }: Color
               onFocus={onFocusField}
               onBlur={onBlurField}
               onChange={(e) => onChange(e.target.value)}
-              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-[var(--deck-glass-border)]"
             />
-            <span className="shrink-0 font-mono text-[9px] text-gray-400 dark:text-gray-500">
+            <span className="shrink-0 font-mono text-[9px] text-[var(--deck-text-low)]">
               {value}
             </span>
             <CopyHexButton value={value} />
@@ -683,12 +683,12 @@ function FillField({ label, value, onChange, onFocusField, onBlurField }: FillFi
   return (
     <div>
       <div className="mb-0.5 flex items-center justify-between gap-1">
-        <label className="block text-[10px] text-gray-400 dark:text-gray-500">{label}</label>
-        <div className="flex overflow-hidden rounded border border-gray-200 dark:border-gray-700">
+        <label className="block text-[10px] text-[var(--deck-text-low)]">{label}</label>
+        <div className="flex overflow-hidden rounded border border-[var(--deck-glass-border)]">
           <button
             type="button"
             onClick={() => isGradient && onChange(value.from)}
-            className={`px-1.5 py-0.5 text-[9px] ${!isGradient ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500'}`}
+            className={`px-1.5 py-0.5 text-[9px] ${!isGradient ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]'}`}
           >
             {t('fillModeSolid')}
           </button>
@@ -703,7 +703,7 @@ function FillField({ label, value, onChange, onFocusField, onBlurField }: FillFi
                 to: '#a855f7',
               })
             }
-            className={`px-1.5 py-0.5 text-[9px] ${isGradient ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500'}`}
+            className={`px-1.5 py-0.5 text-[9px] ${isGradient ? 'bg-[var(--deck-accent)] text-white' : 'text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]'}`}
           >
             {t('fillModeGradient')}
           </button>
@@ -722,7 +722,7 @@ function FillField({ label, value, onChange, onFocusField, onBlurField }: FillFi
               onChange={(e) => onChange({ ...value, angle: parseInt(e.target.value, 10) })}
               className="min-w-0 flex-1"
             />
-            <span className="w-8 shrink-0 text-right font-mono text-[9px] text-gray-400 dark:text-gray-500">
+            <span className="w-8 shrink-0 text-right font-mono text-[9px] text-[var(--deck-text-low)]">
               {value.angle}°
             </span>
           </div>
@@ -733,7 +733,7 @@ function FillField({ label, value, onChange, onFocusField, onBlurField }: FillFi
               onFocus={onFocusField}
               onBlur={onBlurField}
               onChange={(e) => onChange({ ...value, from: e.target.value })}
-              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-[var(--deck-glass-border)]"
             />
             <input
               type="color"
@@ -741,7 +741,7 @@ function FillField({ label, value, onChange, onFocusField, onBlurField }: FillFi
               onFocus={onFocusField}
               onBlur={onBlurField}
               onChange={(e) => onChange({ ...value, to: e.target.value })}
-              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+              className="h-7 w-7 shrink-0 cursor-pointer rounded border border-[var(--deck-glass-border)]"
             />
           </div>
         </div>
@@ -1356,13 +1356,13 @@ export function ThemesSection(props: ThemesSectionProps) {
       {mode === 'list' && (
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{t('subtitle')}</p>
+            <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+            <p className="mt-1 text-sm text-[var(--deck-text-mid)]">{t('subtitle')}</p>
           </div>
           {canEditContent && (
             <button
               onClick={() => router.push(`/${locale}/designer?type=theme`)}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="flex items-center gap-2 rounded-lg bg-[var(--deck-accent)] px-4 py-2 text-sm font-medium text-white "
             >
               <Plus className="h-4 w-4" /> {t('newTheme')}
             </button>
@@ -1375,16 +1375,16 @@ export function ThemesSection(props: ThemesSectionProps) {
           onClick={() =>
             guardNavigation(tn('unsavedChangesConfirm'), () => router.push(`/${locale}/templates`))
           }
-          className="mb-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          className="mb-4 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
         >
           &larr; {tn('templates')}
         </button>
       )}
 
-      {mode === 'edit' && isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {mode === 'edit' && isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {mode === 'edit' && !isLoading && !editing && targetId !== 'new' && (
-        <div className="py-16 text-center text-gray-400">
+        <div className="py-16 text-center text-[var(--deck-text-low)]">
           <Palette className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{t('notFound')}</p>
         </div>
@@ -1392,21 +1392,21 @@ export function ThemesSection(props: ThemesSectionProps) {
 
       {/* Editor panel */}
       {editing && canEditContent && (
-        <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm min-[1440px]:pe-72 dark:border-gray-800 dark:bg-gray-900">
+        <div className="mb-8 rounded-xl border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-6 shadow-sm min-[1440px]:pe-72">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               onFocus={captureForHistory}
               onBlur={commitCaptured}
-              className="w-64 border-b border-transparent bg-transparent text-lg font-semibold text-gray-900 hover:border-gray-300 focus:border-indigo-500 focus:outline-none dark:text-gray-100 dark:hover:border-gray-600"
+              className="w-64 border-b border-transparent bg-transparent text-lg font-semibold text-[var(--deck-text-hi)] hover:border-[var(--deck-glass-border)] focus:border-[var(--deck-accent)] focus:outline-none"
               placeholder={t('themeName')}
             />
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={category}
                 onChange={(e) => commit(() => setCategory(e.target.value as ThemeCategory))}
-                className="rounded border border-gray-200 px-2 py-1.5 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="rounded border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:outline-none"
               >
                 {CATEGORY_VALUES.map((c) => (
                   <option key={c} value={c}>
@@ -1417,7 +1417,7 @@ export function ThemesSection(props: ThemesSectionProps) {
               <select
                 value={aspectRatio}
                 onChange={(e) => commit(() => setAspectRatio(e.target.value))}
-                className="rounded border border-gray-200 px-2 py-1.5 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="rounded border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:outline-none"
               >
                 {ASPECT_RATIOS.map((a) => (
                   <option key={a} value={a}>
@@ -1430,12 +1430,12 @@ export function ThemesSection(props: ThemesSectionProps) {
 
           {/* Save/cancel sit above the canvas (not just below the element cards) so they're
               reachable without scrolling past the whole editor on tall themes. */}
-          <div className="mb-5 flex items-center justify-end gap-2 border-b border-gray-100 pb-4 dark:border-gray-800">
+          <div className="mb-5 flex items-center justify-end gap-2 border-b border-[var(--deck-glass-border-soft)] pb-4">
             <button
               onClick={undo}
               disabled={!canUndo}
               title={`${t('undo')} (Ctrl+Z)`}
-              className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+              className="rounded-lg border border-[var(--deck-glass-border)] p-2 text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-30"
             >
               <Undo2 className="h-4 w-4" />
             </button>
@@ -1443,7 +1443,7 @@ export function ThemesSection(props: ThemesSectionProps) {
               onClick={redo}
               disabled={!canRedo}
               title={`${t('redo')} (Ctrl+Shift+Z)`}
-              className="me-auto rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:opacity-30 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+              className="me-auto rounded-lg border border-[var(--deck-glass-border)] p-2 text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-30"
             >
               <Redo2 className="h-4 w-4" />
             </button>
@@ -1451,10 +1451,10 @@ export function ThemesSection(props: ThemesSectionProps) {
               onClick={() => setLayersPanelOpen((v) => !v)}
               title={tc('layers')}
               aria-pressed={layersPanelOpen}
-              className={`rounded-lg border p-2 hover:bg-gray-50 dark:hover:bg-gray-800 ${
+              className={`rounded-lg border p-2 hover:bg-[var(--deck-glass-fill-strong)] ${
                 layersPanelOpen
-                  ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400'
-                  : 'border-gray-200 text-gray-500 dark:border-gray-700 dark:text-gray-400'
+                  ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] text-[var(--deck-accent)]'
+                  : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'
               }`}
             >
               <Layers className="h-4 w-4" />
@@ -1463,21 +1463,21 @@ export function ThemesSection(props: ThemesSectionProps) {
               onClick={() => saveAsAssetMut.mutate()}
               disabled={elements.length === 0 || saveAsAssetMut.isPending}
               title={t('saveAsAssetHint')}
-              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="flex items-center gap-2 rounded-lg border border-[var(--deck-glass-border)] px-4 py-2 text-sm text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50"
             >
               <ImageDown className="h-4 w-4" />{' '}
               {saveAsAssetMut.isPending ? t('savingAsset') : t('saveAsAsset')}
             </button>
             <button
               onClick={() => router.push(`/${locale}/templates`)}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="rounded-lg border border-[var(--deck-glass-border)] px-4 py-2 text-sm text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
             >
               {tc('cancel')}
             </button>
             <button
               onClick={() => (editing === 'new' ? createMut.mutate() : updateMut.mutate())}
               disabled={!name.trim() || elements.length === 0 || saving}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-[var(--deck-accent)] px-4 py-2 text-sm text-white  disabled:opacity-50"
             >
               <Check className="h-4 w-4" /> {saving ? t('saving') : t('saveTheme')}
             </button>
@@ -1526,14 +1526,14 @@ export function ThemesSection(props: ThemesSectionProps) {
                 element cards below, unlike the layout editor which has neither. */}
             <div id="theme-palette-section" className="grid gap-6 sm:grid-cols-2">
               <div>
-                <div className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                <div className="mb-2 text-xs font-medium text-[var(--deck-text-mid)]">
                   {t('palette')}
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {PALETTE_ROLES.map((role) => (
                     <div key={role}>
                       <label
-                        className="mb-0.5 block truncate text-[10px] text-gray-400 dark:text-gray-500"
+                        className="mb-0.5 block truncate text-[10px] text-[var(--deck-text-low)]"
                         title={t(`paletteRoles.${role}`)}
                       >
                         {t(`paletteRoles.${role}`)}
@@ -1547,7 +1547,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             setPalette((prev) => ({ ...prev, [role]: e.target.value }))
                           }
                           onBlur={commitCaptured}
-                          className="h-7 min-w-0 flex-1 cursor-pointer rounded border border-gray-200 dark:border-gray-700"
+                          className="h-7 min-w-0 flex-1 cursor-pointer rounded border border-[var(--deck-glass-border)]"
                         />
                         <CopyHexButton value={palette[role]} />
                       </div>
@@ -1557,12 +1557,12 @@ export function ThemesSection(props: ThemesSectionProps) {
               </div>
 
               <div>
-                <div className="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                <div className="mb-2 text-xs font-medium text-[var(--deck-text-mid)]">
                   {t('typography')}
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                    <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                       {t('headingFont')}
                     </label>
                     <FontPicker
@@ -1573,7 +1573,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                     />
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                    <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                       {t('bodyFont')}
                     </label>
                     <FontPicker
@@ -1584,7 +1584,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                     />
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                    <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                       {t('baseSize')}
                     </label>
                     <input
@@ -1600,11 +1600,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                           baseSizePx: parseInt(e.target.value, 10) || 16,
                         }))
                       }
-                      className="w-full rounded border border-gray-200 px-2 py-1 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                      className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                    <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                       {t('scale')}
                     </label>
                     <input
@@ -1621,7 +1621,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                           scale: parseFloat(e.target.value) || 1.25,
                         }))
                       }
-                      className="w-full rounded border border-gray-200 px-2 py-1 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                      className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1631,12 +1631,12 @@ export function ThemesSection(props: ThemesSectionProps) {
             {/* Element cards — one per element, mirroring the layout editor's zone cards. */}
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <div className="text-xs text-gray-400 dark:text-gray-500">{t('elements')}</div>
+                <div className="text-xs text-[var(--deck-text-low)]">{t('elements')}</div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setElementCardsCollapsed((v) => !v)}
                     title={elementCardsCollapsed ? t('expandAll') : t('collapseAll')}
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className="flex items-center gap-1 text-xs text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
                   >
                     {elementCardsCollapsed ? (
                       <ChevronsUpDown className="h-3 w-3" />
@@ -1648,18 +1648,18 @@ export function ThemesSection(props: ThemesSectionProps) {
                   <div className="relative" ref={filterMenuRef}>
                     <button
                       onClick={() => setFilterMenuOpen((v) => !v)}
-                      className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                      className="flex items-center gap-1 text-xs text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]"
                     >
                       <Filter className="h-3 w-3" /> {t('filter')}
                       {elementKindFilter.size < ELEMENT_KIND_VALUES.length && (
-                        <span className="rounded-full bg-indigo-100 px-1.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                        <span className="rounded-full bg-[var(--deck-accent-soft)] px-1.5 text-[10px] font-medium text-[var(--deck-accent)]">
                           {elementKindFilter.size}
                         </span>
                       )}
                     </button>
                     {filterMenuOpen && (
-                      <div className="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                        <label className="mb-1 flex cursor-pointer items-center gap-2 border-b border-gray-100 pb-1.5 text-xs font-medium text-gray-700 dark:border-gray-700 dark:text-gray-200">
+                      <div className="glass-popup absolute right-0 z-20 mt-1 w-44 rounded-lg p-2">
+                        <label className="mb-1 flex cursor-pointer items-center gap-2 border-b border-[var(--deck-glass-border-soft)] pb-1.5 text-xs font-medium text-[var(--deck-text-hi)]">
                           <input
                             type="checkbox"
                             checked={elementKindFilter.size === ELEMENT_KIND_VALUES.length}
@@ -1676,7 +1676,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                           return (
                             <label
                               key={k}
-                              className="flex cursor-pointer items-center gap-2 py-1 text-xs text-gray-600 dark:text-gray-300"
+                              className="flex cursor-pointer items-center gap-2 py-1 text-xs text-[var(--deck-text-mid)]"
                             >
                               <input
                                 type="checkbox"
@@ -1704,7 +1704,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                   </div>
                   <button
                     onClick={addElement}
-                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                    className="flex items-center gap-1 text-xs text-[var(--deck-accent)] hover:text-[var(--deck-accent)]"
                   >
                     <Plus className="h-3 w-3" /> {t('addElement')}
                   </button>
@@ -1720,10 +1720,10 @@ export function ThemesSection(props: ThemesSectionProps) {
                       key={el.id}
                       id={`theme-el-card-${el.id}`}
                       onClick={() => setSelectedElementId(el.id)}
-                      className={`flex cursor-pointer flex-col gap-2.5 rounded-xl border bg-white p-3 transition-colors dark:bg-gray-900 ${
+                      className={`flex cursor-pointer flex-col gap-2.5 rounded-xl border bg-[var(--deck-glass-fill-strong)] p-3 transition-colors ${
                         isSelected
-                          ? 'border-indigo-500 bg-indigo-50/50 ring-1 ring-indigo-500 dark:bg-indigo-950/20'
-                          : 'border-gray-200 hover:border-gray-300 dark:border-gray-800 dark:hover:border-gray-600'
+                          ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)]/50 ring-1 ring-[var(--deck-accent)]'
+                          : 'border-[var(--deck-glass-border)] hover:border-[var(--deck-glass-border)]'
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -1737,10 +1737,10 @@ export function ThemesSection(props: ThemesSectionProps) {
                           onFocus={captureForHistory}
                           onBlur={commitCaptured}
                           placeholder={t('elementLabel')}
-                          className="min-w-0 flex-1 rounded border border-transparent px-1.5 py-1 text-sm font-medium hover:border-gray-200 focus:border-indigo-500 focus:outline-none dark:bg-gray-800 dark:text-gray-100 dark:hover:border-gray-700"
+                          className="min-w-0 flex-1 rounded border border-transparent px-1.5 py-1 text-sm font-medium hover:border-[var(--deck-glass-border)] focus:border-[var(--deck-accent)] focus:outline-none"
                         />
                         <label
-                          className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500"
+                          className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-[var(--deck-text-low)]"
                           title={t('editableHint')}
                         >
                           <input
@@ -1761,7 +1761,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             e.stopPropagation();
                             removeElement(el.id);
                           }}
-                          className="shrink-0 text-gray-400 hover:text-red-500 dark:text-gray-500"
+                          className="shrink-0 text-[var(--deck-text-low)] hover:text-red-500"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -1769,7 +1769,7 @@ export function ThemesSection(props: ThemesSectionProps) {
 
                       <div className="grid grid-cols-2 gap-1.5">
                         <div>
-                          <label className="mb-1 block text-xs text-gray-400 dark:text-gray-500">
+                          <label className="mb-1 block text-xs text-[var(--deck-text-low)]">
                             {tc('type')}
                           </label>
                           <select
@@ -1779,7 +1779,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 updateElementKind(el.id, e.target.value as ThemeElementKind),
                               )
                             }
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                            className="w-full rounded-lg border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                           >
                             {ELEMENT_KIND_VALUES.map((k) => (
                               <option key={k} value={k}>
@@ -1789,7 +1789,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs text-gray-400 dark:text-gray-500">
+                          <label className="mb-1 block text-xs text-[var(--deck-text-low)]">
                             {t('shape')}
                           </label>
                           <select
@@ -1801,7 +1801,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 }),
                               )
                             }
-                            className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                            className="w-full rounded-lg border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                           >
                             {ELEMENT_SHAPES.map((s) => (
                               <option key={s} value={s}>
@@ -1813,7 +1813,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                       </div>
 
                       {!isSelected && (
-                        <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                        <p className="text-[10px] text-[var(--deck-text-low)]">
                           {t('clickToEditHint')}
                         </p>
                       )}
@@ -1824,7 +1824,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             {(['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const).map(
                               (field) => (
                                 <div key={field}>
-                                  <label className="flex items-center gap-0.5 text-[9px] text-gray-400 dark:text-gray-500">
+                                  <label className="flex items-center gap-0.5 text-[9px] text-[var(--deck-text-low)]">
                                     {field === 'rotation' && <RotateCw className="h-2.5 w-2.5" />}{' '}
                                     {t(`field.${field}`)}
                                   </label>
@@ -1855,7 +1855,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                             : parseFloat(e.target.value) || 0,
                                       })
                                     }
-                                    className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   />
                                 </div>
                               ),
@@ -1863,14 +1863,14 @@ export function ThemesSection(props: ThemesSectionProps) {
                           </div>
 
                           {/* Content */}
-                          <div className="rounded bg-gray-50 p-2 dark:bg-gray-800/60">
+                          <div className="rounded bg-[var(--deck-glass-fill-strong)] p-2">
                             {el.kind === 'TEXT' && (() => {
                               const isAssetMode =
                                 textAssetModeIds.has(el.id) ||
                                 (el.content.assetId !== null && el.content.assetId !== undefined);
                               return (
                               <div className="space-y-1.5">
-                                <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5 text-[10px] dark:bg-gray-900">
+                                <div className="flex gap-1 rounded-lg bg-[var(--deck-glass-fill-strong)] p-0.5 text-[10px]">
                                   {(['typed', 'asset'] as const).map((mode) => (
                                     <button
                                       key={mode}
@@ -1888,8 +1888,8 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }}
                                       className={`flex-1 rounded-md py-1 font-medium transition-colors ${
                                         (mode === 'asset') === isAssetMode
-                                          ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100'
-                                          : 'text-gray-500 dark:text-gray-400'
+                                          ? 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-hi)] shadow-sm'
+                                          : 'text-[var(--deck-text-mid)]'
                                       }`}
                                     >
                                       {mode === 'typed' ? t('textSourceTyped') : t('textSourceAsset')}
@@ -1910,7 +1910,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                           }
                                         />
                                         {textAsset && (
-                                          <p className="truncate text-[10px] text-gray-400 dark:text-gray-500">
+                                          <p className="truncate text-[10px] text-[var(--deck-text-low)]">
                                             {textAsset.textTickerEnabled
                                               ? t('textAssetRotating')
                                               : t('textAssetStanding')}
@@ -1924,7 +1924,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 ) : (
                                   <>
                                     <div>
-                                      <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                      <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                         {t('text')}
                                       </label>
                                       <input
@@ -1934,11 +1934,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                                         onChange={(e) =>
                                           updateElementContent(el.id, { text: e.target.value })
                                         }
-                                        className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                        className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
                                       />
                                     </div>
                                     <div>
-                                      <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                      <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                         {t('translationAr')}
                                       </label>
                                       <input
@@ -1954,7 +1954,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                             },
                                           })
                                         }
-                                        className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                        className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
                                       />
                                     </div>
                                   </>
@@ -1964,7 +1964,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             })()}
                             {el.kind === 'IMAGE' && (
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('image')}
                                 </label>
                                 <ImagePicker
@@ -1996,7 +1996,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             )}
                             {el.kind === 'VIDEO' && (
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('video')}
                                 </label>
                                 <VideoPicker
@@ -2023,7 +2023,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             {el.kind === 'DOCUMENT' && (
                               <div className="space-y-2">
                                 <div>
-                                  <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                     {t('document')}
                                   </label>
                                   <AssetPicker
@@ -2036,7 +2036,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                   />
                                 </div>
                                 <div>
-                                  <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                     {t('secondsPerPage')}
                                   </label>
                                   <input
@@ -2050,14 +2050,14 @@ export function ThemesSection(props: ThemesSectionProps) {
                                         secondsPerPage: Math.max(1, parseInt(e.target.value, 10) || 1),
                                       })
                                     }
-                                    className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
                                   />
                                 </div>
                               </div>
                             )}
                             {el.kind === 'PLAYLIST' && (
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('playlistContent')}
                                 </label>
                                 <select
@@ -2069,7 +2069,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
                                 >
                                   <option value="">{t('noPlaylist')}</option>
                                   {playlists.map((p) => (
@@ -2081,13 +2081,13 @@ export function ThemesSection(props: ThemesSectionProps) {
                               </div>
                             )}
                             {el.kind === 'SHAPE' && (
-                              <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                              <p className="text-[10px] text-[var(--deck-text-low)]">
                                 {t('shapeHint')}
                               </p>
                             )}
                             {el.kind === 'BRUSH' && el.content.raster && (
                               <div className="space-y-1.5">
-                                <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                <p className="text-[10px] text-[var(--deck-text-low)]">
                                   {t('paintLayerHint')}
                                 </p>
                                 <button
@@ -2097,7 +2097,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                     setBrushRedrawId(null);
                                     setBrushArmed(true);
                                   }}
-                                  className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                  className="flex items-center gap-1 rounded border border-[var(--deck-glass-border)] px-2 py-1 text-[10px] font-medium text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
                                 >
                                   <Brush className="h-3 w-3" /> {t('paintToolbar.tools.brush')}
                                 </button>
@@ -2105,7 +2105,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             )}
                             {el.kind === 'BRUSH' && !el.content.raster && (
                               <div className="space-y-1.5">
-                                <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                <p className="text-[10px] text-[var(--deck-text-low)]">
                                   {t('brushHint')}
                                 </p>
                                 <button
@@ -2117,7 +2117,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                     setBrushSize(el.style.strokeWidthPx ?? 4);
                                     setBrushArmed(true);
                                   }}
-                                  className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                  className="flex items-center gap-1 rounded border border-[var(--deck-glass-border)] px-2 py-1 text-[10px] font-medium text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
                                 >
                                   <Brush className="h-3 w-3" /> {t('brushRedraw')}
                                 </button>
@@ -2126,7 +2126,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                             {el.kind === 'WIDGET' && (
                               <div className="space-y-1.5">
                                 <div>
-                                  <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                     {t('widgetType')}
                                   </label>
                                   <select
@@ -2139,7 +2139,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                         }),
                                       )
                                     }
-                                    className="w-full rounded border border-gray-200 px-2 py-1 text-xs focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="w-full rounded border border-[var(--deck-glass-border)] px-2 py-1 text-xs focus:outline-none"
                                   >
                                     {WIDGET_TYPE_VALUES.map((w) => (
                                       <option key={w} value={w}>
@@ -2164,13 +2164,13 @@ export function ThemesSection(props: ThemesSectionProps) {
                             )}
                             {el.kind === 'ICON' && (
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('icon')}
                                 </label>
                                 <button
                                   type="button"
                                   onClick={() => setPickingIconElementId(el.id)}
-                                  className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-gray-300 px-2 py-1.5 text-[11px] text-gray-600 hover:border-indigo-400 hover:text-indigo-600 dark:border-gray-700 dark:text-gray-300"
+                                  className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-[var(--deck-glass-border)] px-2 py-1.5 text-[11px] text-[var(--deck-text-mid)] hover:border-[var(--deck-accent)] hover:text-[var(--deck-accent)]"
                                 >
                                   {el.content.svg ? (
                                     <span
@@ -2200,7 +2200,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 onChange={(v) => updateElementStyle(el.id, { color: v })}
                               />
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('fontFamily')}
                                 </label>
                                 <select
@@ -2220,7 +2220,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="mb-1 w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="mb-1 w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   <option value="heading">{t('fontFamilyHeadingOption')}</option>
                                   <option value="body">{t('fontFamilyBodyOption')}</option>
@@ -2237,7 +2237,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                   )}
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('fontSizePx')}
                                 </label>
                                 <input
@@ -2252,11 +2252,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       fontSizePx: parseInt(e.target.value, 10) || undefined,
                                     })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('fontWeight')}
                                 </label>
                                 <select
@@ -2268,7 +2268,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   {[400, 500, 600, 700, 800, 900].map((w) => (
                                     <option key={w} value={w}>
@@ -2278,7 +2278,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 </select>
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('textAlign')}
                                 </label>
                                 <select
@@ -2290,7 +2290,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   <option value="left">{t('align.left')}</option>
                                   <option value="center">{t('align.center')}</option>
@@ -2298,7 +2298,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 </select>
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('direction')}
                                 </label>
                                 <select
@@ -2310,7 +2310,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   <option value="auto">{t('direction_.auto')}</option>
                                   <option value="ltr">{t('direction_.ltr')}</option>
@@ -2329,7 +2329,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 onChange={(v) => updateElementStyle(el.id, { color: v })}
                               />
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('opacity')}
                                 </label>
                                 <input
@@ -2343,7 +2343,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                   onChange={(e) =>
                                     updateElementStyle(el.id, { opacity: parseFloat(e.target.value) })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                             </div>
@@ -2351,7 +2351,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                           {(el.kind === 'IMAGE' || el.kind === 'VIDEO' || el.kind === 'DOCUMENT') && (
                             <div className="grid grid-cols-3 gap-2">
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('objectFit')}
                                 </label>
                                 <select
@@ -2363,7 +2363,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   <option value="contain">{t('fit.contain')}</option>
                                   <option value="cover">{t('fit.cover')}</option>
@@ -2371,7 +2371,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 </select>
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('borderRadius')}
                                 </label>
                                 <input
@@ -2386,11 +2386,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       borderRadius: parseInt(e.target.value, 10) || 0,
                                     })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('opacity')}
                                 </label>
                                 <input
@@ -2406,7 +2406,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       opacity: parseFloat(e.target.value),
                                     })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                             </div>
@@ -2415,14 +2415,14 @@ export function ThemesSection(props: ThemesSectionProps) {
                             <div className="flex gap-1.5">
                               <button
                                 onClick={() => setCroppingElementId(el.id)}
-                                className="flex flex-1 items-center justify-center gap-1.5 rounded border border-gray-200 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded border border-[var(--deck-glass-border)] py-1 text-[10px] font-medium text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
                               >
                                 <Crop className="h-3 w-3" /> {tCrop('editCrop')}
                               </button>
                               {el.kind === 'IMAGE' && (
                                 <button
                                   onClick={() => setAdjustingElementId(el.id)}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-gray-200 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-[var(--deck-glass-border)] py-1 text-[10px] font-medium text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]"
                                 >
                                   <SlidersHorizontal className="h-3 w-3" /> {t('editAdjustments')}
                                 </button>
@@ -2431,7 +2431,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                           )}
                           {el.kind === 'PLAYLIST' && (
                             <div className="w-1/3">
-                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                              <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                 {t('borderRadius')}
                               </label>
                               <input
@@ -2446,14 +2446,14 @@ export function ThemesSection(props: ThemesSectionProps) {
                                     borderRadius: parseInt(e.target.value, 10) || 0,
                                   })
                                 }
-                                className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                               />
                             </div>
                           )}
                           {el.kind === 'SHAPE' && (
                             <div className="space-y-2">
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('fillStyle')}
                                 </label>
                                 <select
@@ -2465,7 +2465,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded-lg border border-[var(--deck-glass-border)] px-2 py-1.5 text-xs focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                                 >
                                   <option value="solid">{t('fillStyleSolid')}</option>
                                   <option value="outline">{t('fillStyleOutline')}</option>
@@ -2491,7 +2491,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                               )}
                               {el.style.shapeFill === 'outline' ? (
                                 <div>
-                                  <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                     {t('strokeWidth')}
                                   </label>
                                   <input
@@ -2506,12 +2506,12 @@ export function ThemesSection(props: ThemesSectionProps) {
                                         strokeWidthPx: parseInt(e.target.value, 10) || 1,
                                       })
                                     }
-                                    className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   />
                                 </div>
                               ) : (
                                 <div>
-                                  <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                  <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                     {t('borderRadius')}
                                   </label>
                                   <input
@@ -2526,12 +2526,12 @@ export function ThemesSection(props: ThemesSectionProps) {
                                         borderRadius: parseInt(e.target.value, 10) || 0,
                                       })
                                     }
-                                    className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   />
                                 </div>
                               )}
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('opacity')}
                                 </label>
                                 <input
@@ -2547,7 +2547,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       opacity: parseFloat(e.target.value),
                                     })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                               </div>
@@ -2563,7 +2563,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                 onChange={(v) => updateElementStyle(el.id, { backgroundColor: v })}
                               />
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('strokeWidth')}
                                 </label>
                                 <input
@@ -2578,11 +2578,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       strokeWidthPx: parseInt(e.target.value, 10) || 1,
                                     })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('opacity')}
                                 </label>
                                 <input
@@ -2598,34 +2598,34 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       opacity: parseFloat(e.target.value),
                                     })
                                   }
-                                  className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 />
                               </div>
                             </div>
                           )}
-                          <div className="space-y-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                          <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-2">
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                              <span className="text-[10px] font-medium text-[var(--deck-text-mid)]">
                                 {t('animation.title')}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => replayAnimation(el.id)}
-                                className="flex items-center gap-1 text-[10px] font-medium text-indigo-600 hover:text-indigo-700 dark:text-indigo-400"
+                                className="flex items-center gap-1 text-[10px] font-medium text-[var(--deck-accent)] hover:text-[var(--deck-accent)]"
                               >
                                 <Play className="h-3 w-3" /> {t('animation.preview')}
                               </button>
                             </div>
 
                             <div>
-                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                              <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                 {t('animation.entrance')}
                               </label>
                               <div className="grid grid-cols-3 gap-1.5">
                                 <select
                                   value={el.animation?.entrance?.preset ?? 'none'}
                                   onChange={(e) => commit(() => updateEntrance(el.id, { preset: e.target.value as ThemeEntranceExitPreset }))}
-                                  className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   {ENTRANCE_EXIT_PRESETS.map((p) => (
                                     <option key={p} value={p}>{t(`animation.presets.${p}`)}</option>
@@ -2635,7 +2635,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                   <select
                                     value={el.animation.entrance.direction}
                                     onChange={(e) => commit(() => updateEntrance(el.id, { direction: e.target.value as ThemeSlideDirection }))}
-                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   >
                                     {SLIDE_DIRECTIONS.map((d) => (
                                       <option key={d} value={d}>{t(`animation.directions.${d}`)}</option>
@@ -2646,7 +2646,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                   <select
                                     value={el.animation.entrance.easing}
                                     onChange={(e) => commit(() => updateEntrance(el.id, { easing: e.target.value as ThemeAnimationEasing }))}
-                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   >
                                     {ANIMATION_EASINGS.map((ea) => (
                                       <option key={ea} value={ea}>{ea}</option>
@@ -2657,7 +2657,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                               {!!el.animation?.entrance && el.animation.entrance.preset !== 'none' && (
                                 <div className="mt-1 grid grid-cols-2 gap-1.5">
                                   <div>
-                                    <label className="text-[9px] text-gray-400 dark:text-gray-500">{t('animation.durationMs')}</label>
+                                    <label className="text-[9px] text-[var(--deck-text-low)]">{t('animation.durationMs')}</label>
                                     <input
                                       type="number"
                                       min={100}
@@ -2667,11 +2667,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       onFocus={captureForHistory}
                                       onBlur={commitCaptured}
                                       onChange={(e) => updateEntrance(el.id, { durationMs: parseInt(e.target.value, 10) || 1 })}
-                                      className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                      className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                     />
                                   </div>
                                   <div>
-                                    <label className="text-[9px] text-gray-400 dark:text-gray-500">{t('animation.delayMs')}</label>
+                                    <label className="text-[9px] text-[var(--deck-text-low)]">{t('animation.delayMs')}</label>
                                     <input
                                       type="number"
                                       min={0}
@@ -2681,7 +2681,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       onFocus={captureForHistory}
                                       onBlur={commitCaptured}
                                       onChange={(e) => updateEntrance(el.id, { delayMs: parseInt(e.target.value, 10) || 0 })}
-                                      className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                      className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                     />
                                   </div>
                                 </div>
@@ -2689,14 +2689,14 @@ export function ThemesSection(props: ThemesSectionProps) {
                             </div>
 
                             <div>
-                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                              <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                 {t('animation.emphasis')}
                               </label>
                               <div className="grid grid-cols-2 gap-1.5">
                                 <select
                                   value={el.animation?.emphasis?.preset ?? 'none'}
                                   onChange={(e) => commit(() => updateEmphasis(el.id, { preset: e.target.value as ThemeEmphasisPreset }))}
-                                  className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   {EMPHASIS_PRESETS.map((p) => (
                                     <option key={p} value={p}>{t(`animation.emphasisPresets.${p}`)}</option>
@@ -2713,21 +2713,21 @@ export function ThemesSection(props: ThemesSectionProps) {
                                     onFocus={captureForHistory}
                                     onBlur={commitCaptured}
                                     onChange={(e) => updateEmphasis(el.id, { intervalMs: parseInt(e.target.value, 10) || 1 })}
-                                    className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   />
                                 )}
                               </div>
                             </div>
 
                             <div>
-                              <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                              <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                 {t('animation.exit')}
                               </label>
                               <div className="grid grid-cols-2 gap-1.5">
                                 <select
                                   value={el.animation?.exit?.preset ?? 'none'}
                                   onChange={(e) => commit(() => updateExit(el.id, { preset: e.target.value as ThemeEntranceExitPreset }))}
-                                  className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                  className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                 >
                                   {ENTRANCE_EXIT_PRESETS.map((p) => (
                                     <option key={p} value={p}>{t(`animation.presets.${p}`)}</option>
@@ -2737,7 +2737,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                   <select
                                     value={el.animation.exit.direction}
                                     onChange={(e) => commit(() => updateExit(el.id, { direction: e.target.value as ThemeSlideDirection }))}
-                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   >
                                     {SLIDE_DIRECTIONS.map((d) => (
                                       <option key={d} value={d}>{t(`animation.directions.${d}`)}</option>
@@ -2749,14 +2749,14 @@ export function ThemesSection(props: ThemesSectionProps) {
 
                             {el.kind === 'TEXT' && (
                               <div>
-                                <label className="mb-0.5 block text-[10px] text-gray-400 dark:text-gray-500">
+                                <label className="mb-0.5 block text-[10px] text-[var(--deck-text-low)]">
                                   {t('animation.textReveal')}
                                 </label>
                                 <div className="grid grid-cols-2 gap-1.5">
                                   <select
                                     value={el.animation?.textReveal?.preset ?? 'none'}
                                     onChange={(e) => commit(() => updateTextReveal(el.id, { preset: e.target.value as ThemeTextRevealPreset }))}
-                                    className="rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                    className="rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                   >
                                     {TEXT_REVEAL_PRESETS.map((p) => (
                                       <option key={p} value={p}>{t(`animation.textRevealPresets.${p}`)}</option>
@@ -2773,7 +2773,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                                       onFocus={captureForHistory}
                                       onBlur={commitCaptured}
                                       onChange={(e) => updateTextReveal(el.id, { speedMsPerUnit: parseInt(e.target.value, 10) || 1 })}
-                                      className="w-full rounded border border-gray-200 px-1 py-1 text-[10px] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                                      className="w-full rounded border border-[var(--deck-glass-border)] px-1 py-1 text-[10px] focus:outline-none"
                                     />
                                   )}
                                 </div>
@@ -3042,13 +3042,13 @@ export function ThemesSection(props: ThemesSectionProps) {
 
       {editing && pickingIconElementId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl dark:bg-gray-900">
+          <div className="glass-popup w-full max-w-md rounded-lg p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('changeIcon')}</h3>
+              <h3 className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('changeIcon')}</h3>
               <button
                 type="button"
                 onClick={() => setPickingIconElementId(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -3105,27 +3105,27 @@ export function ThemesSection(props: ThemesSectionProps) {
       <>
       {!editing && themes.length > 0 && (
         <div className="relative mb-5 max-w-sm">
-          <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--deck-text-low)]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={tc('search')}
-            className="w-full rounded-lg border border-gray-200 py-2 ps-8 pe-3 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="w-full rounded-lg border border-[var(--deck-glass-border)] py-2 ps-8 pe-3 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
           />
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-gray-400">{t('loading')}</p>}
+      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
       {!isLoading && themes.length === 0 && !editing && (
-        <div className="py-16 text-center text-gray-400">
+        <div className="py-16 text-center text-[var(--deck-text-low)]">
           <Palette className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
       {!isLoading && !editing && themes.length > 0 && filteredPresets.length === 0 && filteredOwnThemes.length === 0 && (
-        <div className="py-16 text-center text-gray-400">
+        <div className="py-16 text-center text-[var(--deck-text-low)]">
           <Search className="mx-auto mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">{tc('noMatches')}</p>
         </div>
@@ -3133,20 +3133,20 @@ export function ThemesSection(props: ThemesSectionProps) {
 
       {!editing && filteredPresets.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300">
-            <Sparkles className="h-4 w-4 text-indigo-500" /> {t('presetsSection')}
+          <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-[var(--deck-text-hi)]">
+            <Sparkles className="h-4 w-4 text-[var(--deck-accent)]" /> {t('presetsSection')}
           </h2>
           <div className="grid gap-5 sm:grid-cols-2">
             {filteredPresets.map((theme) => (
               <div
                 key={theme.id}
-                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+                className="rounded-xl border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-4"
               >
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <span className="truncate text-sm font-medium text-[var(--deck-text-hi)]">
                     {theme.name}
                   </span>
-                  <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                  <span className="shrink-0 rounded bg-[var(--deck-accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--deck-accent)]">
                     {t(`categories.${theme.category}`)}
                   </span>
                 </div>
@@ -3167,7 +3167,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                     onClick={() => router.push(`/${locale}/designer?type=theme&id=new&preset=${theme.id}`)}
                     disabled={duplicateMut.isPending}
                     title={t('customizeHint')}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-50 py-1.5 text-xs text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--deck-accent-soft)] py-1.5 text-xs text-[var(--deck-accent)] hover:bg-[var(--deck-accent-soft)] disabled:opacity-50"
                   >
                     <Pencil className="h-3.5 w-3.5" /> {t('customize')}
                   </button>
@@ -3180,14 +3180,14 @@ export function ThemesSection(props: ThemesSectionProps) {
 
       {!editing && filteredOwnThemes.length > 0 && (
         <div>
-          <h2 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <h2 className="mb-3 text-sm font-semibold text-[var(--deck-text-hi)]">
             {t('yourThemes')}
           </h2>
           <div className="grid gap-5 sm:grid-cols-2">
             {filteredOwnThemes.map((theme) => (
               <div
                 key={theme.id}
-                className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+                className="rounded-xl border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] p-4"
               >
                 <div className="mb-3 flex items-center justify-between gap-2">
                   {renamingId === theme.id ? (
@@ -3201,13 +3201,13 @@ export function ThemesSection(props: ThemesSectionProps) {
                         if (e.key === 'Escape') setRenamingId(null);
                       }}
                       disabled={renameMut.isPending}
-                      className="-mx-1 min-w-0 rounded border border-indigo-300 px-1 text-sm font-medium text-gray-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-indigo-700 dark:bg-gray-800 dark:text-gray-100"
+                      className="-mx-1 min-w-0 rounded border border-[var(--deck-accent)] px-1 text-sm font-medium text-[var(--deck-text-hi)] focus:ring-1 focus:ring-[var(--deck-accent)] focus:outline-none"
                     />
                   ) : (
                     <span
                       onClick={() => startRename(theme)}
                       title={canEditContent ? tc('clickToRename') : undefined}
-                      className={`truncate text-sm font-medium text-gray-900 dark:text-gray-100 ${canEditContent ? 'cursor-text hover:text-indigo-600 dark:hover:text-indigo-400' : ''}`}
+                      className={`truncate text-sm font-medium text-[var(--deck-text-hi)] ${canEditContent ? 'cursor-text hover:text-[var(--deck-accent)]' : ''}`}
                     >
                       {theme.name}
                     </span>
@@ -3218,7 +3218,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                         onClick={() => duplicateMut.mutate(theme)}
                         disabled={duplicateMut.isPending}
                         title={t('duplicate')}
-                        className="p-1 text-gray-400 hover:text-indigo-600 disabled:opacity-50 dark:text-gray-500"
+                        className="p-1 text-[var(--deck-text-low)] hover:text-[var(--deck-accent)] disabled:opacity-50"
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </button>
@@ -3226,7 +3226,7 @@ export function ThemesSection(props: ThemesSectionProps) {
                         onClick={() => {
                           if (confirmDelete(t('deleteConfirm'))) removeMut.mutate(theme);
                         }}
-                        className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500"
+                        className="p-1 text-[var(--deck-text-low)] hover:text-red-500"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -3260,11 +3260,11 @@ export function ThemesSection(props: ThemesSectionProps) {
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                  <span className="rounded bg-[var(--deck-accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--deck-accent)]">
                     {t(`categories.${theme.category}`)}
                   </span>
                   {theme._count && theme._count.playlistItems > 0 && (
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                    <span className="text-xs text-[var(--deck-text-low)]">
                       {t('playlistItemCount', { count: theme._count.playlistItems })}
                     </span>
                   )}

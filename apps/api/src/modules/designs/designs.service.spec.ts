@@ -1,24 +1,26 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { buildBlankDesignDocument } from '@lumina/design-schema';
 import { DesignsService } from './designs.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
-// Phase 12 security hardening — regression coverage for a cross-tenant IDOR fixed this phase:
-// `PUT /design-drafts/:documentId` upserted on `{ documentId }` alone. `documentId` carries a
-// *global* unique constraint (not compound with organizationId — see DesignDraft's schema
-// comment), so any authenticated org member who supplied another org's documentId could silently
-// overwrite that org's autosave draft. designs.service.ts now checks ownership before the upsert.
+// P5a (docs/tenant_isolation_and_platform_admin_plan.md §2.4/§P5a task 2) — regression coverage
+// for a cross-tenant IDOR fixed this milestone: `PUT /design-drafts/:documentId` used to upsert
+// on `{ documentId }` alone, a *global* unique constraint (not compound with organizationId), so
+// any authenticated org member who supplied another org's documentId could silently overwrite
+// that org's autosave draft — designs.service.ts used to run a manual ownership check before the
+// upsert to compensate. DesignDraft's uniqueness is now scoped to (organizationId, documentId)
+// (see its schema comment), so the upsert's own where-clause can only ever resolve to the
+// caller's own row for that documentId — there is no other-org row it could reach, by
+// construction, and the manual check is gone because it's no longer needed.
 describe('DesignsService — cross-tenant draft ownership', () => {
   const MY_ORG = 'org_mine';
-  const OTHER_ORG = 'org_theirs';
   const DOCUMENT_ID = 'doc_123';
   const blankDoc = buildBlankDesignDocument('Test Design');
 
   function makeService(prismaOverrides: Record<string, unknown> = {}) {
     const prisma = {
       designDraft: {
-        findUnique: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({ documentId: DOCUMENT_ID }),
         findFirst: jest.fn(),
         deleteMany: jest.fn(),
@@ -33,44 +35,13 @@ describe('DesignsService — cross-tenant draft ownership', () => {
     return { service: new DesignsService(prisma, orgScoped), prisma };
   }
 
-  it('putDraft rejects overwriting a draft owned by another org, without writing', async () => {
-    const { service, prisma } = makeService({
-      designDraft: {
-        findUnique: jest.fn().mockResolvedValue({ organizationId: OTHER_ORG }),
-        upsert: jest.fn(),
-        findFirst: jest.fn(),
-        deleteMany: jest.fn(),
-      },
-    });
-
-    await expect(
-      service.putDraft(MY_ORG, 'user_1', DOCUMENT_ID, blankDoc),
-    ).rejects.toThrow(NotFoundException);
-
-    expect(prisma.designDraft.upsert).not.toHaveBeenCalled();
-  });
-
-  it('putDraft succeeds creating a brand-new draft (no existing row for this documentId)', async () => {
+  it('putDraft always scopes its upsert to (organizationId, documentId), never documentId alone', async () => {
     const { service, prisma } = makeService();
 
     await expect(service.putDraft(MY_ORG, 'user_1', DOCUMENT_ID, blankDoc)).resolves.toBeDefined();
     expect(prisma.designDraft.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { documentId: DOCUMENT_ID } }),
+      expect.objectContaining({ where: { organizationId_documentId: { organizationId: MY_ORG, documentId: DOCUMENT_ID } } }),
     );
-  });
-
-  it('putDraft succeeds updating a draft the caller already owns', async () => {
-    const { service, prisma } = makeService({
-      designDraft: {
-        findUnique: jest.fn().mockResolvedValue({ organizationId: MY_ORG }),
-        upsert: jest.fn().mockResolvedValue({ documentId: DOCUMENT_ID }),
-        findFirst: jest.fn(),
-        deleteMany: jest.fn(),
-      },
-    });
-
-    await expect(service.putDraft(MY_ORG, 'user_1', DOCUMENT_ID, blankDoc)).resolves.toBeDefined();
-    expect(prisma.designDraft.upsert).toHaveBeenCalled();
   });
 
   it('putDraft rejects an invalid designJson before ever touching the DB', async () => {
@@ -79,7 +50,7 @@ describe('DesignsService — cross-tenant draft ownership', () => {
     await expect(
       service.putDraft(MY_ORG, 'user_1', DOCUMENT_ID, { not: 'a valid design' }),
     ).rejects.toThrow(BadRequestException);
-    expect(prisma.designDraft.findUnique).not.toHaveBeenCalled();
+    expect(prisma.designDraft.upsert).not.toHaveBeenCalled();
   });
 });
 

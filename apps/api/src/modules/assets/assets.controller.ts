@@ -39,7 +39,8 @@ import { AssetsService } from './assets.service';
 import { AppsService } from '../apps/apps.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
+import { RequireSuperAdmin } from '../../common/decorators/require-super-admin.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -212,30 +213,37 @@ export class AssetsController {
   }
 
   // The three routes below manage the shared library itself (organizationId: null) rather than
-  // any tenant's own assets — restricted to LIBRARY_MANAGER, not the default "anyone but VIEWER"
-  // policy every other route in this controller falls under (see RolesGuard).
+  // any tenant's own assets. Shared-library authority is platform authority, not a tenant role
+  // (docs/tenant_isolation_and_platform_admin_plan.md §P3 task 2/§2.6) — SuperAdminGuard
+  // live-checks User.isSuperAdmin on every request rather than trusting a tenant-scoped role, so a
+  // removed/demoted Super Admin loses write access immediately instead of waiting for their JWT
+  // to expire. Runs alongside the class-level JwtAuthGuard/RolesGuard, which still applies to
+  // every other route on this controller.
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('library')
-  @Roles('LIBRARY_MANAGER')
+  @UseGuards(SuperAdminGuard)
+  @RequireSuperAdmin()
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } }))
-  uploadLibraryAsset(@UploadedFile() file: Express.Multer.File, @Body() dto: LibraryUploadMetaDto) {
+  uploadLibraryAsset(@CurrentUser() user: JwtUser, @UploadedFile() file: Express.Multer.File, @Body() dto: LibraryUploadMetaDto) {
     const tags = dto.tags ? dto.tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : undefined;
-    return this.assets.uploadToLibrary(file, dto.category, tags, async (assetId, key, type, mimeType) => {
+    return this.assets.uploadToLibrary(user.sub, file, dto.category, tags, async (assetId, key, type, mimeType) => {
       await this.mediaQueue.add('generate-thumbnail', { assetId, key, type, mimeType });
     });
   }
 
   @Put('library/:id')
-  @Roles('LIBRARY_MANAGER')
-  updateLibraryAsset(@Param('id') id: string, @Body() dto: UpdateLibraryAssetDto) {
-    return this.assets.updateLibraryAsset(id, dto);
+  @UseGuards(SuperAdminGuard)
+  @RequireSuperAdmin()
+  updateLibraryAsset(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: UpdateLibraryAssetDto) {
+    return this.assets.updateLibraryAsset(user.sub, id, dto);
   }
 
   @Delete('library/:id')
-  @Roles('LIBRARY_MANAGER')
-  removeLibraryAsset(@Param('id') id: string) {
-    return this.assets.removeFromLibrary(id);
+  @UseGuards(SuperAdminGuard)
+  @RequireSuperAdmin()
+  removeLibraryAsset(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.assets.removeFromLibrary(user.sub, id);
   }
 
   @Get('stock/search')

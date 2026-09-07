@@ -37,8 +37,8 @@ function SceneThumbnail({ scene, thumbnailUrl }: { scene: DesignScene; thumbnail
   }
   const Icon = scene.background.type === 'video' ? Video : ImageIcon;
   return (
-    <div className="flex h-10 w-16 items-center justify-center rounded bg-gray-200 dark:bg-gray-800">
-      <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+    <div className="flex h-10 w-16 items-center justify-center rounded bg-[var(--deck-glass-fill-strong)]">
+      <Icon className="h-4 w-4 text-[var(--deck-text-low)]" />
     </div>
   );
 }
@@ -72,15 +72,15 @@ function SceneTile({
       onContextMenu={onContextMenu}
       className={`flex w-20 shrink-0 flex-col items-center gap-1 rounded-lg border p-1.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''} ${
         active
-          ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-600 dark:bg-indigo-950/40'
-          : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
+          ? 'border-[var(--deck-accent)] bg-[var(--deck-accent-soft)] shadow-[0_0_0_1px_var(--deck-accent-soft)]'
+          : 'border-transparent hover:bg-[var(--deck-glass-fill-strong)]'
       }`}
     >
       <button
         type="button"
         {...attributes}
         {...listeners}
-        className="cursor-grab touch-none text-gray-300 active:cursor-grabbing dark:text-gray-600"
+        className="cursor-grab touch-none text-[var(--deck-text-low)] active:cursor-grabbing"
         aria-label="Drag to reorder"
       >
         <GripHorizontal className="h-3 w-3" />
@@ -93,7 +93,7 @@ function SceneTile({
           autoFocus
           type="text"
           defaultValue={scene.name}
-          className="w-full rounded border border-indigo-300 bg-white px-1 text-center text-[11px] text-gray-900 focus:outline-none dark:bg-gray-900 dark:text-gray-100"
+          className="w-full rounded border border-[var(--deck-accent)] bg-[var(--deck-glass-fill-strong)] px-1 text-center text-[11px] text-[var(--deck-text-hi)] focus:outline-none"
           onClick={(e) => e.stopPropagation()}
           onBlur={(e) => {
             onRename(e.target.value.trim() || scene.name);
@@ -110,7 +110,7 @@ function SceneTile({
             e.stopPropagation();
             setRenaming(true);
           }}
-          className="w-full truncate text-center text-[11px] font-medium text-gray-700 dark:text-gray-300"
+          className="w-full truncate text-center text-[11px] font-medium text-[var(--deck-text-hi)]"
           title={scene.name}
         >
           {scene.name}
@@ -124,7 +124,7 @@ function SceneTile({
           min={0.1}
           step={0.5}
           defaultValue={scene.durationMs / 1000}
-          className="w-full rounded border border-indigo-300 bg-white px-1 text-center text-[10px] text-gray-900 focus:outline-none dark:bg-gray-900 dark:text-gray-100"
+          className="w-full rounded border border-[var(--deck-accent)] bg-[var(--deck-glass-fill-strong)] px-1 text-center text-[10px] text-[var(--deck-text-hi)] focus:outline-none"
           onClick={(e) => e.stopPropagation()}
           onBlur={(e) => {
             const seconds = Number(e.target.value);
@@ -142,7 +142,7 @@ function SceneTile({
             e.stopPropagation();
             setEditingDuration(true);
           }}
-          className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500"
+          className="text-[10px] tabular-nums text-[var(--deck-text-low)]"
         >
           {(scene.durationMs / 1000).toFixed(1)}s
         </span>
@@ -257,12 +257,12 @@ export function SceneStrip({ commit, adapter }: SceneStripProps) {
         type="button"
         onClick={() => setCollapsed((v) => !v)}
         title={collapsed ? 'Show scenes' : 'Hide scenes'}
-        className="absolute bottom-full start-3 z-10 flex h-5 w-9 items-center justify-center rounded-t-md border border-b-0 border-gray-200 bg-white text-gray-400 shadow-sm hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500 dark:hover:text-gray-200"
+        className="absolute bottom-full start-3 z-10 flex h-5 w-9 items-center justify-center rounded-t-md border border-b-0 border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-low)] shadow-sm hover:text-[var(--deck-text-hi)]"
       >
         {collapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
       <div className={`overflow-hidden transition-[height] duration-200 ease-in-out ${collapsed ? 'h-0' : 'h-24'}`}>
-        <div className="flex h-24 items-center gap-2 overflow-x-auto border-t border-gray-200 px-3 dark:border-gray-800">
+        <div className="glass-panel flex h-24 items-center gap-2 overflow-x-auto rounded-2xl px-3">
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={orderedIds} strategy={horizontalListSortingStrategy}>
               {scenes.map((scene) => (
@@ -286,7 +286,7 @@ export function SceneStrip({ commit, adapter }: SceneStripProps) {
           <button
             type="button"
             onClick={() => commit(() => addScene(createScene(document)))}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600 dark:border-gray-700 dark:text-gray-600 dark:hover:border-gray-600 dark:hover:text-gray-400"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-[var(--deck-glass-border)] text-[var(--deck-text-low)] hover:border-[var(--deck-accent)] hover:text-[var(--deck-text-mid)]"
             aria-label="Add scene"
           >
             <Plus className="h-4 w-4" />

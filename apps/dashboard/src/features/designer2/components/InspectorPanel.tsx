@@ -59,15 +59,15 @@ export function InspectorPanel({
       <button
         onClick={() => onCollapsedChange(!collapsed)}
         title={collapsed ? 'Show panel' : 'Hide panel'}
-        className="absolute end-0 top-3 z-10 flex h-9 w-6 items-center justify-center rounded-s-md border border-e-0 border-gray-200 bg-white text-gray-400 shadow-sm hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500 dark:hover:text-gray-200"
+        className="absolute end-0 top-3 z-10 flex h-9 w-6 items-center justify-center rounded-s-md border border-e-0 border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-low)] shadow-sm hover:text-[var(--deck-text-hi)]"
       >
         {collapsed ? <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" /> : <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />}
       </button>
       <div
         className={`h-full overflow-hidden transition-[width] duration-200 ease-in-out ${collapsed ? 'w-0' : 'w-80'}`}
       >
-        <div className="flex h-full w-80 flex-col border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex shrink-0 items-stretch border-b border-gray-200 dark:border-gray-800">
+        <div className="glass-panel flex h-full w-80 flex-col rounded-2xl">
+          <div className="flex shrink-0 items-stretch border-b border-[var(--deck-glass-border)]">
             {TAB_DEFS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -75,8 +75,8 @@ export function InspectorPanel({
                 aria-pressed={activeTab === id}
                 className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium border-b-2 ${
                   activeTab === id
-                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                    ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]'
+                    : 'border-transparent text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -91,7 +91,7 @@ export function InspectorPanel({
             <button
               onClick={() => onCollapsedChange(true)}
               title="Close panel"
-              className="me-7 flex shrink-0 items-center border-s border-gray-200 px-2 text-gray-300 hover:bg-gray-100 hover:text-gray-600 dark:border-gray-800 dark:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="me-7 flex shrink-0 items-center border-s border-[var(--deck-glass-border)] px-2 text-[var(--deck-text-low)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-mid)]"
             >
               <X className="h-3.5 w-3.5" />
             </button>

@@ -13,8 +13,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtUser } from '../../common/types/jwt-user';
 
 // docs/modules/ai_wayfinding_module_plan.md §7.1 — same guard stack and default RolesGuard
-// policy (VIEWER/LIBRARY_MANAGER read-only, everyone else full access) already used for ordinary
-// Wayfinding configuration (buildings.controller.ts) — no new role level introduced.
+// policy (VIEWER read-only, everyone else full access) already used for ordinary Wayfinding
+// configuration (buildings.controller.ts) — no new role level introduced.
 @ApiTags('wayfinding-ai')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard, EntitlementGuard)

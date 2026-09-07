@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { EntitlementsService, type ModuleAssignmentInput } from './entitlements.service';
 import { ModuleCatalogService } from './module-catalog.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { AuditService } from '../audit/audit.service';
+import type { PlatformAuditService } from '../platform-audit/platform-audit.service';
 
 const NOW = new Date('2026-09-04T12:00:00.000Z');
 
@@ -23,7 +23,7 @@ function makeService(overrides: { org?: Record<string, unknown>; tenantModule?: 
 
   const clock = { now: () => NOW };
   const catalog = new ModuleCatalogService();
-  const audit = { log: jest.fn() } as unknown as AuditService;
+  const audit = { log: jest.fn() } as unknown as PlatformAuditService;
 
   return { service: new EntitlementsService(prisma, catalog, clock, audit), prisma, audit };
 }
@@ -143,7 +143,7 @@ describe('EntitlementsService.assertModule', () => {
 describe('EntitlementsService.validateDependencies', () => {
   const catalog = new ModuleCatalogService();
   const clock = { now: () => NOW };
-  const service = new EntitlementsService({} as PrismaService, catalog, clock, {} as AuditService);
+  const service = new EntitlementsService({} as PrismaService, catalog, clock, {} as PlatformAuditService);
 
   it('rejects activating WAYFINDING_AI without WAYFINDING in the same assignment set', () => {
     const assignments: ModuleAssignmentInput[] = [{ key: 'WAYFINDING_AI', status: 'ACTIVE' }];

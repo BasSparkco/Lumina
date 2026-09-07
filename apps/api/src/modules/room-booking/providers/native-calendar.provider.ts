@@ -39,6 +39,7 @@ export class NativeCalendarProvider implements RoomCalendarProvider {
     try {
       const row = await this.prisma.roomReservation.create({
         data: {
+          organizationId: input.room.organizationId,
           roomId: input.room.id,
           startsAt: input.startsAt,
           endsAt: input.endsAt,

@@ -22,12 +22,16 @@ enum OrganizationStatus {
 }
 
 model Organization {
-  id        String             @id @default(cuid())
-  name      String
-  slug      String             @unique
-  status    OrganizationStatus @default(ACTIVE)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id               String             @id @default(cuid())
+  name             String
+  slug             String             @unique
+  status           OrganizationStatus @default(ACTIVE)
+  // P6a (docs/tenant_isolation_and_platform_admin_plan.md §P6a "Safe administrative actions") —
+  // required whenever a Super Admin suspends a tenant (PlatformTenantsService.updateStatus),
+  // cleared on reactivation. Null only for a tenant that has never been suspended.
+  suspensionReason String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   // When true, screen setting changes (playlist, layout, volume, prayer, emergency, stop) push
   // to the screen the moment they're saved. When false, they're saved but not pushed until
@@ -56,6 +60,10 @@ model Organization {
   designTemplateAccess DesignTemplateTenant[]
   tenantModules        TenantModule[]
 
+  // P5a — platform actions (Super Admin, another org's actor) that targeted this tenant. See
+  // PlatformAuditLog.targetOrganizationId.
+  platformAuditLogsAsTarget PlatformAuditLog[]
+
   // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6.3) — operational cost/usage
   // history, kept even if the module is later disabled (see WayfindingAiUsageLog).
   wayfindingAiUsageLogs WayfindingAiUsageLog[]
@@ -63,8 +71,8 @@ model Organization {
   // Room Booking (docs/modules/room_booking_module_plan.md §7) — native rooms and, once a
   // connector milestone is implemented, external calendar connections. All preserved across
   // ROOM_BOOKING disable/re-enable.
-  bookableRooms            BookableRoom[]
-  roomCalendarConnections  RoomCalendarConnection[]
+  bookableRooms           BookableRoom[]
+  roomCalendarConnections RoomCalendarConnection[]
 }
 
 // Per-tenant paid-module entitlement. `moduleKey` is a plain String constrained by
@@ -106,6 +114,12 @@ model User {
   // organization, isSuperAdmin grants access across every organization (e.g. Template
   // management). Not a UserRole value because RolesGuard's per-org rank semantics don't apply.
   isSuperAdmin Boolean  @default(false)
+  // Compared against the JWT's own `authVersion` claim on every authenticated request/WebSocket
+  // connection (see JwtStrategy, ScreenGateway) — incremented whenever an already-issued JWT
+  // must stop working immediately (role change today; password reset/email change/ownership
+  // transfer/"revoke sessions" once P6a adds those flows), rather than waiting up to 7 days for
+  // natural expiry. docs/adr/tenant-isolation-and-shared-content.md §Session revocation.
+  authVersion  Int      @default(1)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -113,6 +127,11 @@ model User {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   auditLogs AuditLog[]
+
+  // P3 (docs/tenant_isolation_and_platform_admin_plan.md) — the Super Admin who performed a
+  // platform-scoped action with no target tenant (e.g. shared-library mutations). Distinct from
+  // AuditLog above, which always belongs to some Organization; see PlatformAuditLog.
+  platformAuditLogs PlatformAuditLog[]
 
   // Room Booking (docs/modules/room_booking_module_plan.md §7.3) — the dashboard user who
   // created a native reservation; SetNull on user deletion since the reservation itself must
@@ -127,7 +146,6 @@ enum UserRole {
   ADMIN
   EDITOR
   VIEWER
-  LIBRARY_MANAGER
 }
 
 model OrgInvite {
@@ -164,75 +182,151 @@ model AuditLog {
   @@index([organizationId, createdAt])
 }
 
+// P3 (docs/tenant_isolation_and_platform_admin_plan.md §P3 task 9) — a platform action with no
+// target tenant, e.g. shared-library create/update/delete. Deliberately separate from AuditLog:
+// AuditLog.organizationId is required, so there is no tenant to attach a library mutation to
+// without either inventing one or smearing it into whichever tenant the acting Super Admin
+// happens to belong to (both wrong — see plan §2.10 on the existing cross-org actor defect this
+// is avoiding repeating). actorUserId is nullable + SetNull, matching AuditLog.userId, since the
+// actor's account may later be deleted without invalidating the historical record.
+//
+// P5a (§2.10 / schema task 6) — targetOrganizationId added to also carry platform actions that
+// *do* target one tenant (tenant create/status/module/owner-invite, today still misattributed as
+// AuditLog rows owned by the target tenant but authored by a Super Admin from a different org).
+// Nullable because a library mutation (P3) has no target tenant at all — do not assume every row
+// here has one. SetNull on the target org's deletion, not Cascade: a historical platform-action
+// record must survive the tenant it targeted being removed, the same way actorUserId already
+// survives the actor's own account being removed.
+model PlatformAuditLog {
+  id           String   @id @default(cuid())
+  action       String
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  // P6a (docs/tenant_isolation_and_platform_admin_plan.md §P6a "Platform audit") — the four
+  // fields that section's spec named and this model didn't yet carry. `result` defaults to
+  // 'success' rather than being nullable so every historical row (all success-path writes before
+  // this column existed) reads correctly without a backfill; PlatformAuditService.log now also
+  // writes a 'failure' row when the wrapped action throws, instead of silently swallowing it.
+  // `reason` is the human-entered justification (e.g. a suspend reason) or ticket reference,
+  // optional since most actions (module toggle, invite reissue) don't carry one.
+  reason    String?
+  result    String  @default("success")
+  ipAddress String?
+  userAgent String?
+
+  actorUserId String?
+  actor       User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  targetOrganizationId String?
+  targetOrganization   Organization? @relation(fields: [targetOrganizationId], references: [id], onDelete: SetNull)
+
+  @@index([resourceType, createdAt])
+  @@index([targetOrganizationId, createdAt])
+}
+
 // ─── Screens ─────────────────────────────────────────────────────────────────
 
+// P5a (docs/tenant_isolation_and_platform_admin_plan.md schema task 4) — `POST /player/init`'s
+// only durable side effect for a device that hasn't been claimed by a tenant yet. Replaces the
+// old design of creating a real, tenant-nullable `Screen` row at init time (P4 hardened that
+// mechanism with rate limits/TTL/cleanup, but the plan defers the actual redesign to P5a). Never
+// exposed to any tenant-scoped query or relation — it has no organizationId because it isn't
+// tenant data at all, just a claim ticket. `id` is reused as the real `Screen.id` the moment
+// ScreensService.confirmPairing claims it (see there), so every identity a still-pairing player
+// already knows about (the `screenId` it polls `/player/check` with, the `sub` its eventual JWT
+// carries) resolves to the same value before and after claiming — no separate mapping needed, and
+// no client-visible API/field-name change for either the web or Flutter player.
+model PairingSession {
+  id          String   @id @default(cuid())
+  pairingCode String   @unique
+  createdAt   DateTime @default(now())
+
+  // Reaped by apps/worker's pairing-cleanup cron once older than the shared pairing TTL constant
+  // (kept as independent copies across api/worker — see ScreensService's PAIRING_CODE_TTL_MS
+  // comment). No index needed beyond the PK scan: fleet-scale row counts here are small (P4's own
+  // MAX_OUTSTANDING_PAIRING_CODES ceiling bounds it to 500) and short-lived by construction.
+}
+
 model Screen {
-  id                  String        @id @default(cuid())
-  name                String
-  pairingCode         String?       @unique
-  paired              Boolean       @default(false)
-  playerToken         String?       @unique
-  lastSeenAt          DateTime?
-  status              ScreenStatus  @default(OFFLINE)
-  timezone            String        @default("UTC")
-  timezoneEnabled     Boolean       @default(false)
-  latitude            Float?
-  longitude           Float?
-  prayerMethod        String        @default("UmmAlQura")
-  athanEnabled        Boolean       @default(false)
-  emergencyActive     Boolean       @default(false)
-  stopped             Boolean       @default(false)
-  showClock           Boolean       @default(false)
+  id                   String        @id @default(cuid())
+  name                 String
+  pairingCode          String?       @unique
+  paired               Boolean       @default(false)
+  playerToken          String?       @unique
+  lastSeenAt           DateTime?
+  status               ScreenStatus  @default(OFFLINE)
+  timezone             String        @default("UTC")
+  timezoneEnabled      Boolean       @default(false)
+  latitude             Float?
+  longitude            Float?
+  prayerMethod         String        @default("UmmAlQura")
+  athanEnabled         Boolean       @default(false)
+  emergencyActive      Boolean       @default(false)
+  stopped              Boolean       @default(false)
+  showClock            Boolean       @default(false)
   // Item 10 (volume control) — 0-100, null = inherit the screen's group's volume, or 100 if
   // there's no group or the group's own volume is unset.
-  volume              Int?
+  volume               Int?
   // Display rotation in degrees clockwise (0/90/180/270), dashboard-controlled and pushed to the
   // player like every other live setting below — screens mounted sideways/upside-down get this
   // set once from here rather than requiring someone at the physical device.
-  orientation         Int           @default(0)
+  orientation          Int           @default(0)
   // Intended display aspect ratio ("16:9" | "9:16" | "stretch"), same "W:H" string convention as
   // Theme.aspectRatio, plus "stretch" to force content to fill the screen regardless of fit —
   // dashboard-controlled, used to guide which content is a fit for this screen. Distinct from
   // `orientation`: a screen can be physically rotated *and* logically portrait/landscape
   // independently. The dashboard auto-suggests "16:9"/"9:16" from `orientation` but "stretch" is
   // always a deliberate, orientation-agnostic user choice.
-  aspectRatio         String        @default("16:9")
+  aspectRatio          String        @default("16:9")
   // Item 5 (awaiting-content badge) — reported by the player on each heartbeat, since it's the
   // one that actually knows whether *right now* resolves to real content (schedule gaps,
   // locally-resolved layout zones, etc.), not just "is a playlist assigned." Defaults to false
   // (unconfirmed) rather than true, so a freshly paired screen reads as "awaiting content" until
   // its first heartbeat says otherwise, instead of silently looking fine.
-  hasContent          Boolean       @default(false)
+  hasContent           Boolean       @default(false)
   // Phase 12 (update_payer.md) sync telemetry — reported by the player on each heartbeat
   // alongside hasContent above. syncState defaults to UNKNOWN (not READY) so a freshly paired
   // screen that hasn't sent one yet doesn't silently read as healthy; assets* default to 0.
-  syncState            SyncState @default(UNKNOWN)
-  assetsTotal          Int       @default(0)
-  assetsReady          Int       @default(0)
-  assetsDownloading    Int       @default(0)
-  assetsFailed         Int       @default(0)
-  cacheBytes           BigInt    @default(0)
+  syncState            SyncState     @default(UNKNOWN)
+  assetsTotal          Int           @default(0)
+  assetsReady          Int           @default(0)
+  assetsDownloading    Int           @default(0)
+  assetsFailed         Int           @default(0)
+  cacheBytes           BigInt        @default(0)
   freeStorageBytes     BigInt?
-  storagePersistent    Boolean   @default(false)
+  storagePersistent    Boolean       @default(false)
   lastSuccessfulSyncAt DateTime?
   // Live-preview screenshot: stored at a deterministic storage key (see StorageService screenshot
   // helpers), overwritten in place on every upload — this is a single "latest" preview, not a
   // history, so no key/id needs to live in the DB, just whether/when one has ever landed.
-  screenshotUpdatedAt DateTime?
+  screenshotUpdatedAt  DateTime?
   // Which of assetId/playlistId is actually live — explicit rather than inferred from "whichever
   // field is non-null," so switching types and back restores your last choice in the other one
   // instead of it getting silently cleared (see ScreensService.setStreamingType). WAYFINDING is a
   // third, unrelated mode (kiosk map/directory, driven by KioskLocation, not by either FK below).
-  streamingType       StreamingType @default(PLAYLIST)
+  streamingType        StreamingType @default(PLAYLIST)
   // Manual drag-and-drop ordering on the dashboard's Screens page (same pattern as
   // Playlist.sortOrder) — customers want their more important screens pinned near the top of
   // the fleet grid rather than stuck wherever createdAt puts them.
-  sortOrder           Int           @default(0)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  sortOrder            Int           @default(0)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  // P5a (docs/tenant_isolation_and_platform_admin_plan.md schema task 4) — when `pairingCode` is
+  // a re-pair code issued on an already tenant-owned row (ScreensService.unpair), this is when
+  // *that code* was minted. Distinct from `createdAt`, which is the row's original creation time
+  // and stays fixed across every future unpair/re-pair cycle — confirmPairing's TTL check must
+  // use this field for the re-pair path, or every code on a screen older than the TTL would read
+  // as expired the instant it's issued. Null whenever pairingCode is null (no code outstanding).
+  pairingCodeIssuedAt  DateTime?
 
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // P5a (docs/tenant_isolation_and_platform_admin_plan.md schema task 4) — NOT NULL. A Screen row
+  // is now only ever created already tenant-owned, at claim time (ScreensService.confirmPairing),
+  // from a PairingSession — never durably persisted while unclaimed. See PairingSession.
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   assetId String?
   asset   Asset?  @relation("ScreenAsset", fields: [assetId], references: [id], onDelete: SetNull)
@@ -464,6 +558,18 @@ model Asset {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  // P3 (docs/tenant_isolation_and_platform_admin_plan.md §P3 task 6/7) — set only on a tenant's
+  // own copy of a library asset (AssetsService.copyFromLibrary), pointing back at the library
+  // original (organizationId: null) it was copied from. A copy shares its storageKey/thumbnailKey
+  // with that original (and every other org's copy) but never owns the underlying object, so
+  // AssetsService.remove() uses this column — not a storageKey-match count re-derived at delete
+  // time, which can race a concurrent copy/delete of the same key — to decide it must never
+  // physically delete shared storage; only removeFromLibrary (the library original's own delete
+  // path) may do that, once no row still references it through this column.
+  sourceLibraryAssetId String?
+  sourceLibraryAsset   Asset?  @relation("LibraryCopies", fields: [sourceLibraryAssetId], references: [id], onDelete: SetNull)
+  libraryCopies        Asset[] @relation("LibraryCopies")
+
   playlistItems              PlaylistItem[]
   proofOfPlays               ProofOfPlayLog[]
   screens                    Screen[]         @relation("ScreenAsset")
@@ -475,6 +581,7 @@ model Asset {
   binaries                   AssetBinary[]
 
   @@index([organizationId, category])
+  @@index([sourceLibraryAssetId])
 }
 
 // Immutable metadata for every object the player can persist locally. Asset.sizeBytes remains
@@ -615,37 +722,42 @@ enum PlaylistItemKind {
 }
 
 model PlaylistItem {
-  id            String   @id @default(cuid())
-  position      Int
+  id                   String           @id @default(cuid())
+  position             Int
   // How long this item stays on screen before the playlist advances. For ASSET items this is
   // overridden by playFullVideo (video) or paged internally (document) — see below; THEME/LAYOUT
   // items always use this as a plain dwell timer.
-  durationSecs  Int      @default(10)
+  durationSecs         Int              @default(10)
   // ASSET-only fields below — meaningless (and left at their defaults, ignored by the API) for
   // THEME/LAYOUT items, which have no crop/mute/full-video concept of their own.
-  muted         Boolean  @default(true)
+  muted                Boolean          @default(true)
   // Video items: when true, the player ignores durationSecs and advances on the video's own
   // "ended" event (i.e. plays the full clip). When false, durationSecs clips it short. Has no
   // effect on non-video items.
-  playFullVideo Boolean  @default(true)
+  playFullVideo        Boolean          @default(true)
   // Per-placement image/video framing (like cropping a profile picture into a frame) — null
   // means "show the whole asset" (today's default fill/contain behavior). Lives here rather
   // than on Asset since the same asset can be placed in multiple items with different framing.
   // cropZoom 1–4 (1 = default cover-fit, no pan room); offsets are a % shift from center.
-  cropZoom      Float?
-  cropOffsetX   Float?
-  cropOffsetY   Float?
+  cropZoom             Float?
+  cropOffsetX          Float?
+  cropOffsetY          Float?
   // Per-item transition override. Null means "inherit the playlist's transitionStyle" —
   // this is the DB-level expression of the dropdown's "Default (Use Playlist Transition)"
   // option. transitionDurationMs is null unless the item overrides the style; when it does
   // and leaves duration unset, the player falls back to the playlist's transitionDurationMs.
   transitionStyle      TransitionStyle?
   transitionDurationMs Int?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   playlistId String
   playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  // P5a schema task 1/2 — backfilled from playlist.organizationId (Playlist is always
+  // tenant-owned, never shared). Lets check_playlistitem_tenant_refs verify whichever of
+  // assetId/themeId/layoutId/designAssetId is populated resolves to this same tenant.
+  organizationId String
 
   // Which of assetId/themeId/layoutId/designAssetId is populated — exactly one, matching kind
   // (enforced by a migration-only CHECK constraint, since Prisma's schema can't express
@@ -667,6 +779,7 @@ model PlaylistItem {
   designAsset   DesignAsset? @relation(fields: [designAssetId], references: [id])
 
   @@unique([playlistId, position])
+  @@index([organizationId])
 }
 
 // ─── Layouts & Zones ─────────────────────────────────────────────────────────
@@ -745,6 +858,12 @@ model Zone {
   layoutId String
   layout   Layout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 (docs/tenant_isolation_and_platform_admin_plan.md) — backfilled from
+  // layout.organizationId (Layout is always tenant-owned, never shared). Lets
+  // check_zone_tenant_refs (see the composite-tenant-FK migration) verify playlistId/assetId
+  // resolve to this same tenant without a join through layoutId on every check.
+  organizationId String
+
   // Mutually exclusive with playlistId (enforced in LayoutsService, not here — see its zone
   // validation) — a MEDIA zone plays either a playlist or a single asset, never both.
   playlistId String?
@@ -757,6 +876,7 @@ model Zone {
   // PlaylistsService.remove's in-use check (prisma.zone.count({ where: { playlistId } })).
   @@index([layoutId])
   @@index([playlistId])
+  @@index([organizationId])
 }
 
 // ─── Themes ──────────────────────────────────────────────────────────────────
@@ -843,6 +963,14 @@ model DesignTemplate {
   thumbnailAssetId String?
   thumbnailAsset   Asset?  @relation(fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
 
+  // P7 (docs/tenant_isolation_and_platform_admin_plan.md) — the customer-visible pointer.
+  // customerList/customerGet/createDesign resolve this, never the live designJson above, so an
+  // admin edit made after publish is no longer instantly customer-visible (superseding the old
+  // comment on adminPublish) and an already-cloned tenant design can never be affected by a later
+  // template edit/unpublish/archive. Set atomically with `status`/`versionNumber` in adminPublish.
+  publishedVersionId String?                @unique
+  publishedVersion   DesignTemplateVersion? @relation("PublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+
   tenantAccess DesignTemplateTenant[]
   versions     DesignTemplateVersion[]
   designAssets DesignAsset[]
@@ -861,6 +989,9 @@ model DesignTemplateVersion {
 
   templateId String
   template   DesignTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Opposite side of DesignTemplate.publishedVersion — at most one template ever points here.
+  publishedFor DesignTemplate? @relation("PublishedVersion")
 
   @@unique([templateId, versionNumber])
 }
@@ -948,16 +1079,26 @@ model DesignAssetVersion {
 // can still autosave a recoverable draft. Never promoted into DesignAsset.designJson/version
 // history directly — only a real Manual Save does that; this is purely crash-recovery state,
 // deleted once a manual save makes it redundant.
+//
+// P5a (docs/tenant_isolation_and_platform_admin_plan.md §2.4/§P5a task 2) — documentId used to
+// be globally @unique even though it's a client-generated id: two different tenants' browsers
+// minting the same value could never both get a draft row, and DesignsService.putDraft needed a
+// manual post-lookup organizationId check to keep one tenant from being able to touch another's
+// row by supplying its documentId. Scoping uniqueness to (organizationId, documentId) instead
+// makes the client-supplied id only ever resolve within its own caller's tenant scope, so that
+// check is now structurally guaranteed by the upsert's own where-clause rather than app logic —
+// see putDraft. A pre-migration audit (audit-p5a-tenant-relations.ts) found zero existing rows
+// that would collide under this narrower scope.
 model DesignDraft {
-  id             String   @id @default(cuid())
-  documentId     String   @unique
+  id             String       @id @default(cuid())
+  documentId     String
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
   draftJson      Json
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime     @updatedAt
 
-  @@index([organizationId, documentId])
+  @@unique([organizationId, documentId])
 }
 
 // ─── Wayfinding (Phase 7) ──────────────────────────────────────────────────────
@@ -991,6 +1132,11 @@ model Floor {
   buildingId String
   building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 — backfilled from building.organizationId (Building is always
+  // tenant-owned, never shared). Lets check_floor_tenant_refs verify floorPlanAssetId resolves
+  // to this same tenant, and lets Poi/RouteNode backfill their own copy from here in turn.
+  organizationId String
+
   floorPlanAssetId String?
   floorPlanAsset   Asset?  @relation("FloorPlanAsset", fields: [floorPlanAssetId], references: [id], onDelete: SetNull)
 
@@ -1003,6 +1149,7 @@ model Floor {
 
   @@unique([buildingId, level])
   @@index([buildingId])
+  @@index([organizationId])
 }
 
 // organizationId null = a system default category (store/restroom/elevator/stairs/exit/food/ATM/
@@ -1048,6 +1195,12 @@ model Poi {
   floorId String
   floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 — backfilled from floor.organizationId (Floor is always tenant-owned,
+  // never shared). Lets check_poi_tenant_refs verify categoryId/iconAssetId resolve to this same
+  // tenant (or are a shared preset, for categoryId), and lets BookableRoom.wayfindingPoiId's own
+  // check resolve a Poi's tenant without a floor/building join.
+  organizationId String
+
   categoryId String
   category   PoiCategory @relation(fields: [categoryId], references: [id])
 
@@ -1068,6 +1221,7 @@ model Poi {
 
   @@index([floorId])
   @@index([categoryId])
+  @@index([organizationId])
 }
 
 // AI Wayfinding §6.2 — explicit aliases so a tenant can teach the deterministic destination
@@ -1103,6 +1257,11 @@ model KioskLocation {
   floorId String
   floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 — backfilled from screen.organizationId. check_kiosklocation_tenant_refs
+  // additionally requires floorId/attractPlaylistId/attractThemeId to resolve to this same
+  // tenant, structurally preventing a kiosk pin from being placed on another tenant's floor.
+  organizationId String
+
   // Idle/attract-loop content (Phase 7.2) — what the kiosk shows when untouched for a while.
   // Reuses Playlist/Theme rather than a new content model, same reasoning as every other
   // wayfinding piece. At most one of these is ever set — ScreensService.setKioskAttractPlaylist/
@@ -1117,6 +1276,7 @@ model KioskLocation {
   updatedAt DateTime @updatedAt
 
   @@index([floorId])
+  @@index([organizationId])
 }
 
 // ─── Wayfinding: route graph (Phase 7.3) ───────────────────────────────────────
@@ -1134,6 +1294,10 @@ model RouteNode {
   floorId String
   floor   Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 — backfilled from floor.organizationId. Lets check_routeedge_tenant_refs
+  // verify a RouteEdge's fromNode/toNode are both this same tenant's nodes without a floor join.
+  organizationId String
+
   edgesFrom RouteEdge[] @relation("RouteEdgeFrom")
   edgesTo   RouteEdge[] @relation("RouteEdgeTo")
 
@@ -1141,6 +1305,7 @@ model RouteNode {
   updatedAt DateTime @updatedAt
 
   @@index([floorId])
+  @@index([organizationId])
 }
 
 enum RouteEdgeType {
@@ -1160,11 +1325,17 @@ model RouteEdge {
   toNodeId   String
   toNode     RouteNode @relation("RouteEdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 — backfilled from fromNode.organizationId. check_routeedge_tenant_refs
+  // requires toNode to resolve to this same value, structurally preventing an edge from ever
+  // linking two different tenants' route graphs.
+  organizationId String
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([fromNodeId])
   @@index([toNodeId])
+  @@index([organizationId])
 }
 
 // ─── AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §6) ─────────────
@@ -1291,7 +1462,13 @@ model RoomDisplayBinding {
   roomId String
   room   BookableRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
+  // P5a schema task 1/2 — backfilled from room.organizationId. check_roomdisplaybinding_tenant_refs
+  // additionally requires screenId to resolve to this same tenant, structurally preventing a
+  // room's display binding from ever pointing at another tenant's screen.
+  organizationId String
+
   @@index([roomId])
+  @@index([organizationId])
 }
 
 enum RoomReservationStatus {
@@ -1317,8 +1494,8 @@ model RoomReservation {
   // reservation instants in UTC") — required for tstzrange() below to be IMMUTABLE; casting a
   // naive timestamp to timestamptz depends on the session TimeZone setting and Postgres refuses
   // to build a gist index/exclusion-constraint on a non-immutable expression.
-  startsAt DateTime @db.Timestamptz
-  endsAt   DateTime @db.Timestamptz
+  startsAt             DateTime                @db.Timestamptz
+  endsAt               DateTime                @db.Timestamptz
   status               RoomReservationStatus   @default(CONFIRMED)
   providerKey          RoomCalendarProviderKey
   origin               RoomReservationOrigin
@@ -1327,18 +1504,24 @@ model RoomReservation {
   // only for externally-sourced rows — prevents duplicate provider projections. Deliberately not
   // the sole reconnect/reconciliation dedup key (it changes if the connection is replaced); see
   // externalICalUid below and the provider integration's own reconciliation logic.
-  providerExternalKey String? @unique
+  providerExternalKey  String?                 @unique
   // Provider-stable event identity that survives a RoomCalendarConnection reconnect (a new
   // connectionId) — reconciliation must key on this first, falling back to providerExternalKey
   // only when it's unavailable.
-  externalICalUid   String?
-  externalEtag      String?
-  providerUpdatedAt DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  externalICalUid      String?
+  externalEtag         String?
+  providerUpdatedAt    DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   roomId String
   room   BookableRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // P5a schema task 1/2 — backfilled from room.organizationId. No cross-reference of its own to
+  // validate against this (createdByUserId is deliberately unenforced historical metadata, same
+  // reasoning as resolvedPoiId elsewhere), but gives this table a direct tenant key for isolation
+  // queries and for RoomDisplayBinding/future relations to check against without a room join.
+  organizationId String
 
   createdByUserId String?
   createdByUser   User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -1346,6 +1529,7 @@ model RoomReservation {
   @@index([roomId, startsAt, endsAt])
   @@index([roomId, providerKey])
   @@index([externalICalUid])
+  @@index([organizationId])
 }
 
 // Created alongside the core (rather than deferred to the connector milestone) so the core

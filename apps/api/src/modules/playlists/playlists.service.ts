@@ -77,7 +77,7 @@ export class PlaylistsService {
   // the dashboard editor only needs enough to render a row, not the player's full hydration.
   private shapeItem<T extends {
     kind: string;
-    asset: { type: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; sizeBytes: bigint } | null;
+    asset: { id: string; type: string; storageKey: string; thumbnailKey: string | null; pageCount: number | null; sizeBytes: bigint } | null;
   }>(item: T) {
     const asset = item.asset;
     if (item.kind !== 'ASSET' || !asset) return { ...item, asset: null };
@@ -86,20 +86,18 @@ export class PlaylistsService {
     // "url" built from it would 404, so leave it null and let the frontend/player render
     // asset.textContent instead.
     const isText = asset.type === 'TEXT';
+    // storageKey/thumbnailKey are internal object-storage paths (P4, docs/tenant_isolation_and_
+    // platform_admin_plan.md) — never returned to a client directly; url/thumbnailUrl/pageUrls
+    // below (signed, short-lived, resolved by MediaController) are the only fetchable references.
+    const { storageKey: _storageKey, thumbnailKey, ...rest } = asset;
     return {
       ...item,
       asset: {
-        ...asset,
+        ...rest,
         sizeBytes: Number(asset.sizeBytes),
-        url: isText ? null : this.storage.publicUrl(asset.storageKey),
-        thumbnailUrl: !isText && asset.thumbnailKey
-          ? this.storage.publicUrl(asset.thumbnailKey)
-          : null,
-        pageUrls: asset.type === 'DOCUMENT'
-          ? Array.from({ length: asset.pageCount ?? 0 }, (_, i) =>
-              this.storage.publicUrl(asset.storageKey.replace(/(\.[^.]+)$/, `_p${i + 1}.webp`)),
-            )
-          : [],
+        url: isText ? null : this.storage.assetUrl(asset.id),
+        thumbnailUrl: !isText && thumbnailKey ? this.storage.assetThumbnailUrl(asset.id) : null,
+        pageUrls: asset.type === 'DOCUMENT' ? this.storage.assetPageUrls(asset.id, asset.pageCount) : [],
       },
     };
   }
@@ -214,7 +212,7 @@ export class PlaylistsService {
         'Theme not found',
       );
       const created = await this.prisma.playlistItem.create({
-        data: { playlistId, position, durationSecs, kind: 'THEME', themeId: refs.themeId },
+        data: { organizationId: orgId, playlistId, position, durationSecs, kind: 'THEME', themeId: refs.themeId },
         include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
       });
       return this.shapeItem(created);
@@ -227,7 +225,7 @@ export class PlaylistsService {
         'Layout not found',
       );
       const created = await this.prisma.playlistItem.create({
-        data: { playlistId, position, durationSecs, kind: 'LAYOUT', layoutId: refs.layoutId },
+        data: { organizationId: orgId, playlistId, position, durationSecs, kind: 'LAYOUT', layoutId: refs.layoutId },
         include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
       });
       return this.shapeItem(created);
@@ -242,7 +240,7 @@ export class PlaylistsService {
         'Design not found',
       );
       const created = await this.prisma.playlistItem.create({
-        data: { playlistId, position, durationSecs, kind: 'DESIGN', designAssetId: refs.designAssetId },
+        data: { organizationId: orgId, playlistId, position, durationSecs, kind: 'DESIGN', designAssetId: refs.designAssetId },
         include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
       });
       return this.shapeItem(created);
@@ -264,7 +262,7 @@ export class PlaylistsService {
     const initialMuted = muted ?? (asset.type === 'VIDEO' ? (asset.hasAudioTrack ? !asset.audioEnabled : true) : !asset.audioEnabled);
     const created = await this.prisma.playlistItem.create({
       data: {
-        playlistId, position, durationSecs, kind: 'ASSET', assetId: refs.assetId,
+        organizationId: orgId, playlistId, position, durationSecs, kind: 'ASSET', assetId: refs.assetId,
         muted: initialMuted,
         ...(playFullVideo !== undefined && { playFullVideo }),
         ...(cropZoom !== undefined && { cropZoom, cropOffsetX, cropOffsetY }),

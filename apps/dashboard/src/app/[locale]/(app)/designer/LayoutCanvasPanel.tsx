@@ -742,13 +742,13 @@ export function LayoutCanvasPanel({
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <span className="text-xs text-gray-400 dark:text-gray-500">{t('preview')}</span>
-        <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500">
+        <span className="text-xs text-[var(--deck-text-low)]">{t('preview')}</span>
+        <div className="flex items-center gap-1 text-[var(--deck-text-low)]">
           <button
             type="button"
             title={tc('zoomOut')}
             onClick={() => setZoom((z) => clampZoom(z / ZOOM_STEP))}
-            className="rounded p-1 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            className="rounded p-1 hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-mid)]"
           >
             <ZoomOut className="h-3.5 w-3.5" />
           </button>
@@ -756,7 +756,7 @@ export function LayoutCanvasPanel({
             type="button"
             title={tc('zoomReset')}
             onClick={() => setZoom(1)}
-            className="w-10 rounded px-1 py-0.5 text-center text-[10px] tabular-nums hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            className="w-10 rounded px-1 py-0.5 text-center text-[10px] tabular-nums hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-mid)]"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -764,7 +764,7 @@ export function LayoutCanvasPanel({
             type="button"
             title={tc('zoomIn')}
             onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}
-            className="rounded p-1 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            className="rounded p-1 hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-mid)]"
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </button>

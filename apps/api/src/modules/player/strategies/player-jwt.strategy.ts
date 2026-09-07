@@ -2,16 +2,20 @@ import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/co
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import type { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type { ScreenJwtUser } from '../../../common/types/jwt-user';
+
+const extractToken = ExtractJwt.fromAuthHeaderAsBearerToken();
 
 @Injectable()
 export class PlayerJwtStrategy extends PassportStrategy(Strategy, 'player-jwt') {
   constructor(config: ConfigService, private readonly prisma: PrismaService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: extractToken,
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
+      passReqToCallback: true,
     });
   }
 
@@ -30,14 +34,20 @@ export class PlayerJwtStrategy extends PassportStrategy(Strategy, 'player-jwt') 
   // silently break that recovery for any device still running an older bundle (a kiosk tab that's
   // been open for weeks doesn't fetch new JS on its own) — it has no 401 handling at all, so it'd
   // just keep looping stale content forever instead of self-healing.
-  async validate(payload: ScreenJwtUser): Promise<ScreenJwtUser> {
+  async validate(req: Request, payload: ScreenJwtUser): Promise<ScreenJwtUser> {
     if (payload.type !== 'screen') throw new UnauthorizedException();
     const screen = await this.prisma.screen.findUnique({
       where: { id: payload.sub },
-      select: { paired: true },
+      select: { paired: true, playerToken: true },
     });
     if (!screen) throw new NotFoundException();
     if (!screen.paired) throw new UnauthorizedException();
+    // Identity check, not just "still paired": after an unpair-then-repair cycle, playerToken is
+    // rotated to a brand new value but `paired` goes back to `true` for the new device — without
+    // this, a still-signature-valid token from the *previous* pairing epoch would wrongly pass
+    // the check above once a fresh pairing lands. See ScreenGateway's WebSocket equivalent.
+    const presentedToken = extractToken(req);
+    if (!presentedToken || presentedToken !== screen.playerToken) throw new UnauthorizedException();
     return { sub: payload.sub, orgId: payload.orgId, type: 'screen' };
   }
 }

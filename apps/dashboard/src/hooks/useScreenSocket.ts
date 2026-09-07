@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
-import { getToken } from '@/lib/api';
+import { getToken, clearToken, loginPath } from '@/lib/api';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:4000';
 
@@ -53,6 +53,18 @@ export function useScreenSocket() {
     // showing the screen as still paired/connected until someone manually refreshes.
     socket.on('screen-unpaired', () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
+    });
+
+    // The server rejected/kicked this connection because the session behind it is no longer
+    // valid (removed member, role change, tenant suspended — see ScreenGateway.reject/
+    // disconnectUser/disconnectOrg). Unlike a REST 401, there's no ApiError/req() interceptor to
+    // catch this, so it's handled the same way here: drop the token, clear the cache, and send
+    // the user back to login rather than letting socket.io's default reconnection loop retry
+    // forever with a token the server will keep rejecting.
+    socket.on('auth-invalidated', () => {
+      clearToken();
+      qc.clear();
+      if (typeof window !== 'undefined') window.location.replace(loginPath());
     });
 
     // Navigating away makes the page bfcache-eligible: the browser freezes all JS and force-

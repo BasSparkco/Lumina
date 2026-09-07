@@ -1,7 +1,7 @@
 'use client';
 import { useTimeFormat } from '@/hooks/useTimeFormat';
 
-const selectClass = 'border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
+const selectClass = 'border border-[var(--deck-glass-border)] rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]';
 
 /** Value/onChange are always a "HH:MM" 24-hour string (or '' for unset) — only the
  * displayed controls switch between 24h and 12h based on the user's setting, since
@@ -26,7 +26,7 @@ export function TimeInput({ value, onChange }: { value: string; onChange: (v: st
           <option value="">--</option>
           {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h.toString().padStart(2, '0')}</option>)}
         </select>
-        <span className="self-center text-gray-400">:</span>
+        <span className="self-center text-[var(--deck-text-low)]">:</span>
         <select value={minute ?? ''} onChange={e => emit(hour24 ?? 0, e.target.value === '' ? null : Number(e.target.value))} className={selectClass}>
           <option value="">--</option>
           {Array.from({ length: 60 }, (_, m) => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}
@@ -51,7 +51,7 @@ export function TimeInput({ value, onChange }: { value: string; onChange: (v: st
         <option value="">--</option>
         {Array.from({ length: 12 }, (_, i) => i + 1).map(h => <option key={h} value={h}>{h}</option>)}
       </select>
-      <span className="self-center text-gray-400">:</span>
+      <span className="self-center text-[var(--deck-text-low)]">:</span>
       <select value={minute ?? ''} onChange={e => emit12(hour12 ?? 12, e.target.value === '' ? null : Number(e.target.value), period ?? 'AM')} className={selectClass}>
         <option value="">--</option>
         {Array.from({ length: 60 }, (_, m) => <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>)}

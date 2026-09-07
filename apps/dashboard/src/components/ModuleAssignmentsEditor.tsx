@@ -38,9 +38,9 @@ export function findDependencyErrors(drafts: ModuleAssignmentDraft[]): ModuleKey
 }
 
 const selectClass =
-  'rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:border-indigo-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+  'rounded-lg border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] px-2 py-1 text-xs text-[var(--deck-text-hi)] focus:border-[var(--deck-accent)] focus:outline-none';
 const dateInputClass =
-  'rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-900 focus:border-indigo-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+  'rounded-lg border border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] px-2 py-1 text-xs text-[var(--deck-text-hi)] focus:border-[var(--deck-accent)] focus:outline-none';
 
 export function ModuleAssignmentsEditor({
   value,
@@ -62,9 +62,9 @@ export function ModuleAssignmentsEditor({
         const dependency = MODULE_DEPENDENCIES[draft.key];
         const violated = violations.has(draft.key);
         return (
-          <div key={draft.key} className="rounded-lg border border-gray-200 p-2.5 dark:border-gray-700">
+          <div key={draft.key} className="rounded-lg border border-[var(--deck-glass-border)] p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{t(`moduleNames.${draft.key}`)}</span>
+              <span className="text-sm font-medium text-[var(--deck-text-hi)]">{t(`moduleNames.${draft.key}`)}</span>
               <div className="flex items-center gap-2">
                 {draft.status !== 'DISABLED' && (
                   <input
@@ -87,7 +87,7 @@ export function ModuleAssignmentsEditor({
               </div>
             </div>
             {dependency && (
-              <p className={`mt-1 text-[11px] ${violated ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
+              <p className={`mt-1 text-[11px] ${violated ? 'text-red-600 dark:text-red-400' : 'text-[var(--deck-text-low)]'}`}>
                 {violated ? t('dependencyError', { module: t(`moduleNames.${draft.key}`), dependency: t(`moduleNames.${dependency}`) }) : t('dependencyNote', { dependency: t(`moduleNames.${dependency}`) })}
               </p>
             )}

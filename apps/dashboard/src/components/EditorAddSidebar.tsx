@@ -51,10 +51,10 @@ function SectionList({
       {sections.map((section, idx) => (
         <div
           key={section.heading ?? idx}
-          className={`flex flex-col gap-1 ${idx > 0 ? 'border-t border-gray-100 pt-3 dark:border-gray-800' : ''}`}
+          className={`flex flex-col gap-1 ${idx > 0 ? 'border-t border-[var(--deck-glass-border-soft)] pt-3' : ''}`}
         >
           {section.heading && (
-            <div className="px-1.5 text-[10px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
+            <div className="px-1.5 text-[10px] font-semibold tracking-wide text-[var(--deck-text-low)] uppercase">
               {section.heading}
             </div>
           )}
@@ -72,7 +72,7 @@ function SectionList({
                       onItemClick?.();
                     }
                   }}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-indigo-600 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-indigo-400"
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-[var(--deck-text-mid)] transition-colors hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-accent)]"
                 >
                   <item.icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="flex-1 truncate">{item.label}</span>
@@ -83,7 +83,7 @@ function SectionList({
                   )}
                 </button>
                 {item.panel && isExpanded && (
-                  <div className="mt-1 rounded-md border border-gray-100 bg-gray-50 p-2 dark:border-gray-800 dark:bg-gray-800/60">
+                  <div className="mt-1 rounded-md border border-[var(--deck-glass-border-soft)] bg-[var(--deck-glass-fill-strong)] p-2">
                     {item.panel(() => {
                       setExpandedKey(null);
                       onItemClick?.();
@@ -123,8 +123,8 @@ export function EditorAddSidebar({
       {/* Persistent rail — only on wide-enough viewports that it fits in the natural gutter
           beside the centered editor panel without costing it any width. Not part of the editor's
           own flex layout. */}
-      <aside className="fixed inset-y-0 end-0 z-20 hidden w-64 flex-col border-s border-gray-200 bg-white/95 shadow-lg backdrop-blur-sm min-[1440px]:flex dark:border-gray-800 dark:bg-gray-900/95">
-        <div className="border-b border-gray-100 px-3 py-3 text-xs font-semibold text-gray-500 dark:border-gray-800 dark:text-gray-400">
+      <aside className="fixed inset-y-0 end-0 z-20 hidden w-64 flex-col border-s border-[var(--deck-glass-border)] bg-[var(--deck-glass-fill-strong)] shadow-lg backdrop-blur-sm min-[1440px]:flex">
+        <div className="border-b border-[var(--deck-glass-border-soft)] px-3 py-3 text-xs font-semibold text-[var(--deck-text-mid)]">
           {title}
         </div>
         <SectionList sections={sections} />
@@ -138,7 +138,7 @@ export function EditorAddSidebar({
         <button
           onClick={() => setMobileOpen(true)}
           title={openLabel}
-          className="fixed end-4 bottom-6 z-20 inline-flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-indigo-600 text-white shadow-lg min-[1440px]:hidden dark:border-gray-800"
+          className="fixed end-4 bottom-6 z-20 inline-flex h-12 w-12 items-center justify-center rounded-full border border-[var(--deck-glass-border)] bg-[var(--deck-accent)] text-white shadow-lg min-[1440px]:hidden"
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -152,16 +152,16 @@ export function EditorAddSidebar({
       )}
 
       <aside
-        className={`fixed inset-y-0 end-0 z-40 flex w-72 flex-col bg-white shadow-lg transition-transform duration-200 ease-in-out min-[1440px]:hidden dark:bg-gray-900 ${
+        className={`glass-popup fixed inset-y-0 end-0 z-40 flex w-72 flex-col transition-transform duration-200 ease-in-out min-[1440px]:hidden ${
           mobileOpen ? 'translate-x-0' : 'translate-x-full rtl:-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-3 dark:border-gray-800">
-          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">{title}</span>
+        <div className="flex items-center justify-between border-b border-[var(--deck-glass-border-soft)] px-3 py-3">
+          <span className="text-xs font-semibold text-[var(--deck-text-mid)]">{title}</span>
           <button
             onClick={() => setMobileOpen(false)}
             title={closeLabel}
-            className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+            className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"
           >
             <X className="h-4 w-4" />
           </button>

@@ -2,6 +2,7 @@ import { CanActivate, type ExecutionContext, Injectable, UnauthorizedException }
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthErrorCode } from '../auth-error-codes';
 import type { JwtUser, ScreenJwtUser } from '../types/jwt-user';
 
 /**
@@ -48,7 +49,10 @@ export class TenantStatusGuard implements CanActivate {
       select: { status: true },
     });
     if (org?.status === 'SUSPENDED') {
-      throw new UnauthorizedException('This organization has been suspended');
+      throw new UnauthorizedException({
+        message: 'This organization has been suspended',
+        code: AuthErrorCode.ORG_SUSPENDED,
+      });
     }
     return true;
   }

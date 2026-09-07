@@ -65,9 +65,9 @@ export class AdminTemplatesController {
   }
 }
 
-// designer.md §21 "Templates — Customer". No @Roles() override — RolesGuard's default (VIEWER/
-// LIBRARY_MANAGER read-only) already matches designer.md §25's intent that every editing role,
-// but not a pure viewer, may customize an authorized template into their own DesignAsset.
+// designer.md §21 "Templates — Customer". No @Roles() override — RolesGuard's default (VIEWER
+// read-only) already matches designer.md §25's intent that every editing role, but not a pure
+// viewer, may customize an authorized template into their own DesignAsset.
 @ApiTags('templates')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)

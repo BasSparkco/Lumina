@@ -6,6 +6,7 @@ import type { RoomCalendarProviderKey } from '@lumina/types';
 
 export interface ProviderRoomRef {
   id: string;
+  organizationId: string;
   externalResourceId: string | null;
   externalResourceEmail: string | null;
   calendarConnectionId: string | null;

@@ -264,7 +264,7 @@ export function DesignerShell({
   });
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="command-deck flex h-full w-full flex-col">
       <DesignerTopBar
         name={templateId ? `Template: ${templateName ?? document?.name ?? '…'}` : (document?.name ?? 'Untitled Design')}
         onRename={!templateId && document ? handleRename : undefined}
@@ -296,7 +296,7 @@ export function DesignerShell({
         previewing={previewing}
         onTogglePreview={previewing ? stopPreview : startPreview}
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-[14px] px-4 pb-[14px]">
         {!previewing && (
           <DesignerSidebar
             onShowTemplates={() => {
@@ -344,13 +344,13 @@ export function DesignerShell({
             // mid-loop — while the Stop bar nested inside it stays normally clickable.
             <div className="absolute inset-0 flex flex-col">
               <div className="flex-1" />
-              <div className="flex items-center justify-center gap-3 border-t border-gray-200 bg-white/90 py-2 text-xs text-gray-600 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90 dark:text-gray-300">
+              <div className="glass-popup flex items-center justify-center gap-3 border-x-0 border-b-0 py-2 text-xs text-[var(--deck-text-mid)]">
                 <span>
                   Previewing · Scene {(previewSceneIndex ?? 0) + 1}/{document?.scenes.length ?? 1}
                 </span>
                 <button
                   onClick={stopPreview}
-                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="inline-flex items-center gap-1 rounded-md border border-[var(--deck-glass-border)] px-2 py-1 text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]"
                 >
                   <Square className="h-3 w-3" /> Stop
                 </button>
@@ -373,7 +373,11 @@ export function DesignerShell({
           />
         )}
       </div>
-      {!previewing && <SceneStrip commit={commit} adapter={adapter} />}
+      {!previewing && (
+        <div className="mx-4 mb-[14px]">
+          <SceneStrip commit={commit} adapter={adapter} />
+        </div>
+      )}
       <VersionsPanel
         open={versionsPanelOpen && !previewing}
         onOpenChange={setVersionsPanelOpen}
