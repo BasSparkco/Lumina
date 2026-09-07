@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import NextImage from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -12,9 +12,8 @@ import {
 import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical, DoorOpen } from 'lucide-react';
-import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, roomBookingApi, QUICK_BOOKING_DURATIONS_MINUTES, type Screen, type StreamingType } from '@/lib/api';
+import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, roomBookingApi, screenGroupsApi, QUICK_BOOKING_DURATIONS_MINUTES, type Screen, type StreamingType, type ScreenGroup } from '@/lib/api';
 import { PoiMapEditor } from '@/components/PoiMapEditor';
-import { screenGroupsApi, type ScreenGroup } from '@/lib/mocks/screenGroups';
 import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket, type PlaybackProgress } from '@/hooks/useScreenSocket';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -623,7 +622,14 @@ export default function ScreensPage() {
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
-  const { data: groupAssignments = {} } = useQuery({ queryKey: ['screenGroupAssignments'], queryFn: screenGroupsApi.getAssignments });
+  // Screen.groupId is a real column already returned on every /screens row (see lib/api.ts's
+  // Screen type) — no separate assignments endpoint/query needed, unlike the old mock's
+  // dedicated getAssignments() call.
+  const groupAssignments = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of screens) if (s.groupId) map[s.id] = s.groupId;
+    return map;
+  }, [screens]);
   const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
   const autoPublish = orgSettings?.autoPublish ?? false;
   const { statuses: liveStatuses, playbackProgress } = useScreenSocket();
@@ -807,7 +813,7 @@ export default function ScreensPage() {
   });
 
   const renameGroupMut = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => screenGroupsApi.rename(id, name),
+    mutationFn: ({ id, name }: { id: string; name: string }) => screenGroupsApi.rename(id, name),
     onSuccess: (updated) => {
       qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) => old?.map(g => (g.id === updated.id ? updated : g)));
       void qc.invalidateQueries({ queryKey: ['screenGroups'] });
@@ -820,21 +826,19 @@ export default function ScreensPage() {
     onSuccess: (_data, group) => {
       qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) => old?.filter(g => g.id !== group.id));
       void qc.invalidateQueries({ queryKey: ['screenGroups'] });
-      void qc.invalidateQueries({ queryKey: ['screenGroupAssignments'] });
+      // Real backend: onDelete SetNull on Screen.groupId — every screen that was in this group
+      // now has groupId: null server-side, so the screens list itself needs refetching too, not
+      // just the groups list.
+      void qc.invalidateQueries({ queryKey: ['screens'] });
       setActiveGroupId(prev => (prev === group.id ? null : prev));
     },
   });
 
   const assignGroupMut = useMutation({
-    mutationFn: ({ screen, groupId }: { screen: Screen; groupId: string | null }) => screenGroupsApi.assign(screen.id, groupId),
-    onSuccess: (_data, { screen, groupId }) => {
-      qc.setQueryData<Record<string, string>>(['screenGroupAssignments'], (old) => {
-        const next = { ...old };
-        if (groupId) next[screen.id] = groupId;
-        else delete next[screen.id];
-        return next;
-      });
-      void qc.invalidateQueries({ queryKey: ['screenGroupAssignments'] });
+    mutationFn: ({ screen, groupId }: { screen: Screen; groupId: string | null }) => screensApi.setGroup(screen.id, groupId),
+    onSuccess: (updated) => {
+      qc.setQueryData<Screen[]>(['screens'], (old) => old?.map(s => (s.id === updated.id ? updated : s)));
+      void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
 
@@ -920,9 +924,9 @@ export default function ScreensPage() {
           <div key={group.id} className="group/chip relative">
             {renamingGroupId === group.id ? (
               <input autoFocus value={renameGroupValue} onChange={e => setRenameGroupValue(e.target.value)}
-                onBlur={() => { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed, previousName: group.name }); else setRenamingGroupId(null); }}
+                onBlur={() => { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed }); else setRenamingGroupId(null); }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed, previousName: group.name }); }
+                  if (e.key === 'Enter') { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed }); }
                   if (e.key === 'Escape') setRenamingGroupId(null);
                 }}
                 className="text-base px-4 py-2 rounded-full border border-[var(--deck-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />

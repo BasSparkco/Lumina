@@ -21,7 +21,7 @@ Order per the plan's §6 (Recommended Execution Order):
 - [~] **P6a** — Complete security-critical Super Admin controls (depends on P2, done) — first pass done and deployed 2026-09-06 (suspend-reason, cross-tenant member/invite management, session revocation, name edit, audit read endpoint); password reset, email-change-with-verification, slug change, and locale settings explicitly deferred — see below
 - [x] **P7** — Make published templates immutable and safe to distribute (implemented and tested 2026-09-07; not yet deployed to production — see below)
 - [x] **P6b** — Super Admin operational visibility (implemented and tested 2026-09-07; not yet deployed to production)
-- [~] **P8** — Remove or isolate remaining browser-global production mocks (parallelizable with P3–P5a) — Audit Log + proof of play/reports done 2026-09-07, four features remain mock-backed
+- [~] **P8** — Remove or isolate remaining browser-global production mocks (parallelizable with P3–P5a) — Audit Log, proof of play/reports, screen-group tagging done 2026-09-07, three features remain mock-backed
 - [ ] **P9** — Tenant-isolation verification suite and rollout
 - [ ] **P5b** — Optional PostgreSQL RLS and database-role separation (only if a compliance/threat-model decision requires it — see plan §7)
 
@@ -136,7 +136,7 @@ Deployed 2026-09-05 (`docker compose -f docker-compose.prod.yml up -d --build ap
 
 **Not yet done:** no live HTTP smoke test against a booted server this pass — an ad-hoc `ts-node` script bootstrapping the full Nest DI graph hit a pre-existing `tsconfig.json` `rootDir`/`include` conflict (`src/**/*` + `prisma/**/*` siblings) unrelated to this change, and starting a real `nest start` instance on this shared host risked colliding with other tenants' processes (see [[dev_environment_gotchas]]) without a straightforward way to obtain a Super-Admin JWT for a scripted curl check. Verification for this pass is unit tests (which exercise every aggregate code path against realistic mocked Prisma responses) plus a clean `tsc`/`nest build`/`next build`, not a live request against real data — same caveat as P7 above. Not deployed to production either.
 
-## P8 status — in progress (2026-09-07): Audit Log + proof of play/reports done, four features remain
+## P8 status — in progress (2026-09-07): Audit Log, proof of play, screen-group tagging done, three features remain
 
 **Goal:** eliminate account-to-account UI contamination — a dashboard page must never present one browser's `localStorage` as if it were shared, server-side tenant data.
 
@@ -161,7 +161,15 @@ Deployed 2026-09-05 (`docker compose -f docker-compose.prod.yml up -d --build ap
 - **Dashboard**: `reports/page.tsx`'s `ProofOfPlayTab` now reads `GET /proof-of-play` (paginated table) and `GET /proof-of-play/summary` (charts); CSV export fetches one larger unpaged batch (5,000 rows) rather than reusing the table's own page. The `playlist` column/field is gone — the real `ProofOfPlayLog` never tracked which playlist an item belonged to, only screen+asset, so showing one would mean fabricating data the mock happened to have. `PreviewFeatureNotice` removed; `lib/mocks/proofOfPlay.ts` deleted.
 - Full stack verified: API suite 267/267 passing, `nest build`/`tsc`/`next build`/player `tsc`+`vite build` all clean. No live device/browser smoke test this pass (would need a real paired screen actually playing content) — same caveat class as prior phases' live-boot gaps.
 
-**Not done this pass:** priorities 3-6 (screen-group tagging/assignment, approvals, uptime, billing) are untouched — still backed by `lib/mocks/{screenGroups,approvals,uptime,billing}.ts`, still showing `PreviewFeatureNotice`. Task 3's fallback (hide behind an explicit demo/development flag rather than presenting mock data as live) has not been applied to any of them either — a scope decision for the next pass rather than something assumed here. Task 4 (classify device-local preferences) and task 7 (verify Billing's direct-routing exposure) not started. Not deployed to production.
+**Task 2, priority 3 (screen-group tagging/assignment) — done, and needed zero new backend work.** `ScreenGroupsController`/`ScreenGroupsService` (`/screen-groups` — create/list/rename/remove/bulk-publish/set-volume) and `ScreensController`'s `PUT /screens/:id/group` were already fully real and deployed — just used by the Power Schedule page's group-volume picker only. The Screens page's own group chips/screen-assignment UI was calling a completely separate `lib/mocks/screenGroups.ts` localStorage mock the whole time, meaning a group created on one page was invisible on the other — two disconnected "screen group" concepts coexisting in production. This migration fixes that as a side effect, not just removes a mock:
+
+- `lib/api.ts`'s `realScreenGroupsApi` (previously used only by Power Schedule) renamed to `screenGroupsApi` and extended with `rename`/`remove`/`bulkPublish` to cover everything the mock did; `screensApi.setGroup` added for the assignment half (`PUT /screens/:id/group`).
+- `Screen.groupId` — already a plain returned field on every `/screens` row (Prisma includes every scalar column by default) — added to the dashboard's `Screen` type. The mock's separate `getAssignments()` call/query is gone; the Screens page now derives its group-assignment map directly from the already-fetched screens list instead of a second endpoint.
+- Power Schedule page's query key renamed `['realScreenGroups']` → `['screenGroups']` so both pages share one cache — a group created on either page now shows up on the other immediately.
+- Deliberately **not** changed: the Screens page's "publish to group" button still calls `screensApi.publish` per screen client-side (respecting the active search filter) rather than the new server-side `POST /screen-groups/:id/publish` (which would publish the *entire* group, ignoring an active search filter) — same behavior as before, not a regression.
+- `lib/mocks/screenGroups.ts` deleted. `tsc`/`eslint`/`next build` clean; no dashboard unit test runner exists to add tests to (same as the proof-of-play dashboard changes).
+
+**Not done this pass:** priorities 4-6 (approvals, uptime, billing) are untouched — still backed by `lib/mocks/{approvals,uptime,billing}.ts`, still showing `PreviewFeatureNotice`. Task 3's fallback (hide behind an explicit demo/development flag rather than presenting mock data as live) has not been applied to any of them either — a scope decision for the next pass rather than something assumed here. Task 4 (classify device-local preferences) and task 7 (verify Billing's direct-routing exposure) not started. Not deployed to production.
 
 ## Open production decisions (plan §7)
 

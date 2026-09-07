@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { PowerCircle, Plus, Trash2, Pencil, Check, X, Volume2, Search } from 'lucide-react';
-import { powerSchedulesApi, realScreenGroupsApi, screensApi, type PowerScheduleEntry, type CreatePowerScheduleInput } from '@/lib/api';
+import { powerSchedulesApi, screenGroupsApi, screensApi, type PowerScheduleEntry, type CreatePowerScheduleInput, type ScreenGroup } from '@/lib/api';
 import { PowerPreviewChip } from './PowerPreviewChip';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTimeFormat, formatTime } from '@/hooks/useTimeFormat';
@@ -35,7 +35,7 @@ function toPayload(f: FormState): CreatePowerScheduleInput {
   };
 }
 
-function GroupVolumeControl({ group }: { group: { id: string; name: string; volume: number | null } }) {
+function GroupVolumeControl({ group }: { group: ScreenGroup }) {
   const qc = useQueryClient();
   const t = useTranslations('powerSchedule');
   // Local draft so the slider tracks the pointer smoothly; the mutation only fires once the
@@ -43,9 +43,9 @@ function GroupVolumeControl({ group }: { group: { id: string; name: string; volu
   const [draft, setDraft] = useState(group.volume ?? 100);
 
   const volumeMut = useMutation({
-    mutationFn: (volume: number) => realScreenGroupsApi.setVolume(group.id, volume),
+    mutationFn: (volume: number) => screenGroupsApi.setVolume(group.id, volume),
     onSuccess: (updated) => {
-      qc.setQueryData<{ id: string; name: string; volume: number | null }[]>(['realScreenGroups'], (old) =>
+      qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) =>
         old?.map(g => (g.id === updated.id ? updated : g)));
     },
   });
@@ -75,7 +75,7 @@ export default function PowerSchedulePage() {
   const tc = useTranslations('common');
   const { data: rules = [], isLoading } = useQuery({ queryKey: ['powerSchedules'], queryFn: () => powerSchedulesApi.list({}) });
   const { data: screens = [] } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
-  const { data: groups = [] } = useQuery({ queryKey: ['realScreenGroups'], queryFn: realScreenGroupsApi.list });
+  const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
 
   const [editing, setEditing] = useState<PowerScheduleEntry | 'new' | null>(null);
   const [form, setForm] = useState<FormState>(empty());
@@ -85,9 +85,9 @@ export default function PowerSchedulePage() {
   const [search, setSearch] = useState('');
 
   const createGroupMut = useMutation({
-    mutationFn: () => realScreenGroupsApi.create(newGroupName.trim()),
+    mutationFn: () => screenGroupsApi.create(newGroupName.trim()),
     onSuccess: (created) => {
-      qc.setQueryData<{ id: string; name: string; volume: number | null }[]>(['realScreenGroups'], (old) => (old ? [...old, created] : [created]));
+      qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) => (old ? [...old, created] : [created]));
       setForm(f => ({ ...f, groupId: created.id }));
       setNewGroupName('');
       setCreatingGroup(false);

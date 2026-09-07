@@ -393,6 +393,10 @@ export const screensApi = {
     req<Screen>(`/screens/${id}/kiosk-attract-playlist`, { method: 'PUT', body: JSON.stringify({ playlistId }) }),
   setKioskAttractTheme: (id: string, themeId: string | null) =>
     req<Screen>(`/screens/${id}/kiosk-attract-theme`, { method: 'PUT', body: JSON.stringify({ themeId }) }),
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — screen-to-group assignment; see
+  // screenGroupsApi below for group CRUD itself.
+  setGroup: (id: string, groupId: string | null) =>
+    req<Screen>(`/screens/${id}/group`, { method: 'PUT', body: JSON.stringify({ groupId }) }),
 };
 
 // ── Wayfinding ──────────────────────────────────────────────────────────────
@@ -871,15 +875,25 @@ export const powerSchedulesApi = {
     req<{ poweredOn: boolean }>(`/power-schedules/preview?screenId=${screenId}`),
 };
 
-// Real backend-side screen groups (/screen-groups) — distinct from lib/mocks/screenGroups.ts,
-// which the Screens page still uses for its own group chips/assignment pending its own
-// migration off localStorage. This client only needs a target list + the ability to create one
-// for the power-schedule picker below; it doesn't touch screen-to-group assignment.
-export const realScreenGroupsApi = {
-  list: () => req<{ id: string; name: string; volume: number | null }[]>('/screen-groups'),
-  create: (name: string) => req<{ id: string; name: string; volume: number | null }>('/screen-groups', { method: 'POST', body: JSON.stringify({ name }) }),
+// Screen groups (/screen-groups, P8 docs/tenant_isolation_and_platform_admin_plan.md) — used by
+// both the Screens page (group chips, screen assignment via screensApi.setGroup above) and the
+// power-schedule picker below. Previously two disconnected concepts: this real client (power
+// schedules only) and a separate per-browser localStorage mock (lib/mocks/screenGroups.ts, now
+// deleted) the Screens page used for its own group chips — meaning a group created on one page
+// was invisible on the other. Now unified on this one real client everywhere.
+export interface ScreenGroup {
+  id: string;
+  name: string;
+  volume: number | null;
+}
+export const screenGroupsApi = {
+  list: () => req<ScreenGroup[]>('/screen-groups'),
+  create: (name: string) => req<ScreenGroup>('/screen-groups', { method: 'POST', body: JSON.stringify({ name }) }),
+  rename: (id: string, name: string) => req<ScreenGroup>(`/screen-groups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+  remove: (id: string) => req<void>(`/screen-groups/${id}`, { method: 'DELETE' }),
   setVolume: (id: string, volume: number | null) =>
-    req<{ id: string; name: string; volume: number | null }>(`/screen-groups/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
+    req<ScreenGroup>(`/screen-groups/${id}/volume`, { method: 'PUT', body: JSON.stringify({ volume }) }),
+  bulkPublish: (id: string) => req<{ ok: boolean; screenCount: number }>(`/screen-groups/${id}/publish`, { method: 'POST' }),
 };
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -935,6 +949,7 @@ export interface Screen {
   screenshotUrl: string | null; screenshotUpdatedAt: string | null;
   hasContent: boolean; volume: number | null; orientation: 0 | 90 | 180 | 270;
   aspectRatio: '16:9' | '9:16' | 'stretch';
+  groupId: string | null;
   kioskLocation: {
     id: string; floorId: string; x: number; y: number;
     floor?: { id: string; label: string; building: { id: string; name: string } };
