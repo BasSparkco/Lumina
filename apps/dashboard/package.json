@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "test:module-capabilities": "tsc --ignoreConfig --target ES2022 --module ES2022 --moduleResolution bundler --lib ES2022,DOM,DOM.Iterable --skipLibCheck --rootDir src/lib --outDir tsc-out/module-capabilities-test src/lib/moduleCapabilities.ts && cp test/esm-package.json tsc-out/module-capabilities-test/package.json && node test/module-capabilities.test.mjs"
   },
   "dependencies": {
@@ -80,15 +81,22 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^24.13.3",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.11",
+    "jsdom": "^30.0.1",
     "postcss": "^8.5.22",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "vitest": "^5.0.0"
   }
 }
