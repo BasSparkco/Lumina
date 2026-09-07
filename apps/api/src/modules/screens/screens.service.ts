@@ -605,7 +605,7 @@ export class ScreensService {
 
   private async claimExistingScreen(orgId: string, code: string) {
     const screen = await this.prisma.screen.findUnique({ where: { pairingCode: code } });
-    if (!screen || !screen.pairingCodeIssuedAt || Date.now() - screen.pairingCodeIssuedAt.getTime() > PAIRING_CODE_TTL_MS) {
+    if (!screen?.pairingCodeIssuedAt || Date.now() - screen.pairingCodeIssuedAt.getTime() > PAIRING_CODE_TTL_MS) {
       throw new BadRequestException('Invalid or expired pairing code');
     }
     if (screen.paired) throw new BadRequestException('Screen already paired');

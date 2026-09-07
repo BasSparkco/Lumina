@@ -75,5 +75,13 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # P9 (docs/tenant_isolation_and_platform_admin_plan.md) — the tenant-isolation IDOR matrix,
+      # run over real HTTP against the real Nest app and this job's own Postgres/Redis services
+      # (already migrated above), not a mocked Prisma delegate. Only apps/api has an e2e suite
+      # today, so this calls it directly rather than through `turbo run test:e2e` (no other
+      # workspace defines that task).
+      - name: Test (e2e — tenant isolation)
+        run: pnpm --filter api test:e2e
+
       - name: Build
         run: pnpm build

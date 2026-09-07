@@ -596,6 +596,8 @@ Tasks:
 
 ### P9 — Tenant-isolation verification suite and rollout
 
+**Status: started (2026-09-07) — the two-tenant fixture and a first HTTP e2e IDOR slice are done and wired into CI; the other 8 required-suite categories and the entire 11-step production rollout sequence have not been started.** See `docs/tenant-isolation/README.md` for the full writeup. This is a deliberately bounded first slice given the baseline note directly below — not an attempt at the complete matrix in one pass.
+
 **Goal:** Turn isolation into a release gate instead of a convention.
 
 **Baseline:** Treat this as a new systematic security suite. At the reviewed commit there are 17 API spec files and targeted cross-tenant/IDOR assertions in only about four areas; do not estimate P9 as a small extension of mature coverage.

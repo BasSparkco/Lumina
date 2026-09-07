@@ -80,7 +80,7 @@ describe('ScreensService.confirmPairing — claiming a new device (PairingSessio
   });
 
   it('reports the same generic error when two confirms race on the same session', async () => {
-    const { service, prisma } = makeService({
+    const { service } = makeService({
       pairingSession: { findUnique: jest.fn().mockResolvedValue({ id: SESSION_ID, pairingCode: CODE, createdAt: new Date() }) },
       screen: { create: jest.fn().mockRejectedValue(Object.assign(new Error('conflict'), { code: 'P2002' })) },
     });

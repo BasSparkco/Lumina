@@ -1,0 +1,12 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testRegex": ".*\\.e2e-spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": ["ts-jest", { "isolatedModules": true, "tsconfig": { "rootDir": ".", "types": ["jest", "node"] } }]
+  },
+  "testEnvironment": "node",
+  "testTimeout": 30000,
+  "setupFiles": ["<rootDir>/test/utils/setup-env.ts"],
+  "moduleNameMapper": { "^isomorphic-dompurify$": "<rootDir>/test/utils/mocks/isomorphic-dompurify.ts" }
+}

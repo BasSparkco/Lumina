@@ -1,0 +1,18 @@
+// P9 (docs/tenant_isolation_and_platform_admin_plan.md) — exists so typescript-eslint's
+// `projectService` (see ../eslint.config.mjs) can find a project covering test/**/*, which the
+// root tsconfig.json deliberately excludes (see its own `exclude`). Not wired into `pnpm
+// typecheck` (a standalone `tsc -p test/tsconfig.json` run hits a rootDir-inference conflict once
+// test files import from ../src — TS insists on a single root under test/, not the apps/api
+// common ancestor, and widening `include` to ../src/**/* doesn't change that) — ESLint's
+// type-aware rules already run the real type checker over these files via projectService, and
+// ts-jest's own transform (test/jest-e2e.json) catches genuine runtime type errors when the
+// suite actually runs. If a future contributor wants a real standalone `tsc -p` pass here, that
+// rootDir fight is the thing to solve, not a reason this file is wrong as-is.
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": ["./**/*"],
+  "exclude": ["node_modules"]
+}
