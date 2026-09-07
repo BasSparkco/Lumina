@@ -12,6 +12,7 @@ import DesignRenderer from './DesignRenderer';
 import AppPlayer from './AppPlayer';
 import ZoneRenderer from './ZoneRenderer';
 import { onAudioUnlock } from '../lib/audioUnlock';
+import { recordPlay } from '../lib/proofOfPlay';
 
 interface Props {
   playlist: Playlist;
@@ -180,6 +181,12 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
   // autoplay effect below for why this can't just live in the `item` object itself.
   const pausedRef = useRef(false);
   const lastPlayedItemIdRef = useRef<string | null>(null);
+  // Proof-of-play (aboutlumina-player.md Phase 12) — when the outgoing item started, so its
+  // actual elapsed on-screen time (not just its scheduled durationSecs) can be logged the moment
+  // it's replaced. Wall-clock rather than scheduled duration on purpose: a video's onEnded firing
+  // early/late, or a republish interrupting an item mid-play, should be reflected honestly in
+  // what gets billed/audited, not padded out to the nominal duration.
+  const itemStartedAtRef = useRef<number>(Date.now());
   const videoMountedAtRef = useRef(Date.now());
   const videoLastProgressAtRef = useRef(Date.now());
   const videoLastCurrentTimeRef = useRef(0);
@@ -214,7 +221,13 @@ function ZonePlayer({ playlist, state, onAssetChange, volume = 100, forceMuted =
       } else {
         setPrevLayer(null);
       }
+      recordPlay(
+        item.kind === 'ASSET' && item.asset ? item.asset.id : undefined,
+        new Date(itemStartedAtRef.current),
+        Date.now() - itemStartedAtRef.current,
+      );
     }
+    itemStartedAtRef.current = Date.now();
 
     setItem(current);
     onAssetChange?.(current.kind === 'ASSET' && current.asset ? current.asset.id : current.id);

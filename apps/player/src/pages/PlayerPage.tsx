@@ -17,6 +17,7 @@ import { isModuleLeaseValid } from '../lib/moduleLease';
 import { usePlayerStore } from '../store/playerStore';
 import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 import { isAudioUnlocked, onAudioUnlock } from '../lib/audioUnlock';
+import { flushProofOfPlay } from '../lib/proofOfPlay';
 import { tryInstallPwa } from '../lib/pwaInstall';
 import {
   reportNetworkFailure,
@@ -302,6 +303,10 @@ export default function PlayerPage() {
         const telemetry = await gatherTelemetry();
         await api.heartbeat(currentAssetRef.current, hasContentRef.current, telemetry);
         reportNetworkSuccess();
+        // Piggyback on the same 30s cadence as the heartbeat itself — aboutlumina-player.md's
+        // own suggested design. Never awaited/blocking: a slow or failed flush must not delay or
+        // fail the heartbeat it's riding on (see flushProofOfPlay's own internal error handling).
+        void flushProofOfPlay();
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           await handleRevoked();

@@ -3,15 +3,24 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { BarChart3, ChevronLeft, ChevronRight, Download, Users2 } from 'lucide-react';
-import { screensApi, assetsApi, playlistsApi, kioskAnalyticsApi, type Screen } from '@/lib/api';
-import { proofOfPlayApi, type ProofOfPlayEntry } from '@/lib/mocks/proofOfPlay';
+import { screensApi, kioskAnalyticsApi, proofOfPlayApi, type Screen } from '@/lib/api';
 import { downloadCsv } from '@/lib/csv';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
-import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 25;
 const CHART_HEIGHT_PX = 100;
+// exportCsv fetches one large unpaged batch rather than reusing the table's own paginated page —
+// same cap order of magnitude as the backend's own summary()/exportCsv sampling.
+const EXPORT_PAGE_SIZE = 5000;
 
+// P8 (docs/tenant_isolation_and_platform_admin_plan.md) — this used to read a per-browser
+// localStorage mock that fabricated a plausible-looking history on first load (see the removed
+// lib/mocks/proofOfPlay.ts), since nothing anywhere ever emitted a real play event. It now reads
+// apps/api's real GET /proof-of-play (table, server-paginated) and GET /proof-of-play/summary
+// (day/screen aggregates, since the table itself no longer holds the full filtered set to
+// aggregate over) — populated by apps/player's new buffering/flush pipeline
+// (apps/player/src/lib/proofOfPlay.ts), which now actually calls the ingest endpoint that
+// existed, unused, all along.
 function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
   const t = useTranslations('reports');
   const { format: dateFormat } = useDateFormat();
@@ -21,60 +30,37 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
   const [untilDate, setUntilDate] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data: assets = [], isLoading: assetsLoading } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
-  const { data: playlists = [], isLoading: playlistsLoading } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
+  const filterParams = { screenId: screenId === 'ALL' ? undefined : screenId, from: fromDate || undefined, to: untilDate || undefined };
 
-  const { data: entries = [], isLoading } = useQuery({
-    queryKey: ['proofOfPlay'],
-    queryFn: () => proofOfPlayApi.list(screens, assets, playlists),
-    // Wait for screens/assets/playlists to actually finish loading (not just for screens to be
-    // non-empty) before generating the mock seed — otherwise this can fire while assets/playlists
-    // are still at their query-default `[]`, permanently caching an empty history in localStorage.
-    enabled: screens.length > 0 && !assetsLoading && !playlistsLoading,
+  const { data, isLoading } = useQuery({
+    queryKey: ['proofOfPlay', filterParams, page],
+    queryFn: () => proofOfPlayApi.list({ ...filterParams, page, pageSize: PAGE_SIZE }),
+    placeholderData: (prev) => prev,
   });
+  const entries = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const filtered = useMemo(() => entries.filter((e: ProofOfPlayEntry) => {
-    if (screenId !== 'ALL' && e.screenId !== screenId) return false;
-    const day = e.playedAt.substring(0, 10);
-    if (fromDate && day < fromDate) return false;
-    if (untilDate && day > untilDate) return false;
-    return true;
-  }), [entries, screenId, fromDate, untilDate]);
+  const { data: summary } = useQuery({
+    queryKey: ['proofOfPlaySummary', filterParams],
+    queryFn: () => proofOfPlayApi.summary(filterParams),
+  });
+  const playsPerDay = summary?.byDay ?? [];
+  const playsPerScreen = summary?.byScreen ?? [];
+  const maxPerDay = Math.max(1, ...playsPerDay.map((d) => d.count));
+  const maxPerScreen = Math.max(1, ...playsPerScreen.map((s) => s.count));
 
-  const playsPerDay = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const e of filtered) {
-      const day = e.playedAt.substring(0, 10);
-      map.set(day, (map.get(day) ?? 0) + 1);
-    }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
-
-  const playsPerScreen = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const e of filtered) map.set(e.screenName, (map.get(e.screenName) ?? 0) + 1);
-    return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [filtered]);
-
-  const maxPerDay = Math.max(1, ...playsPerDay.map(([, c]) => c));
-  const maxPerScreen = Math.max(1, ...playsPerScreen.map(([, c]) => c));
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  function exportCsv() {
+  async function exportCsv() {
+    const batch = await proofOfPlayApi.list({ ...filterParams, page: 1, pageSize: EXPORT_PAGE_SIZE });
     downloadCsv(
       `proof-of-play-${new Date().toISOString().slice(0, 10)}.csv`,
-      [t('time'), t('screenColumn'), t('asset'), t('playlist'), t('duration')],
-      filtered.map(e => [formatDateTime(e.playedAt, dateFormat), e.screenName, e.assetName, e.playlistName, e.durationSecs]),
+      [t('time'), t('screenColumn'), t('asset'), t('duration')],
+      batch.items.map(e => [formatDateTime(e.playedAt, dateFormat), e.screen.name, e.asset?.name ?? '—', Math.round(e.durationMs / 1000)]),
     );
   }
 
   return (
     <div>
-      <PreviewFeatureNotice />
-
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
           <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('screen')}</label>
@@ -94,19 +80,19 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
           <input type="date" value={untilDate} onChange={e => { setUntilDate(e.target.value); setPage(1); }}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
-        <span className="text-xs text-[var(--deck-text-low)] pb-2">{t('resultCount', { count: filtered.length })}</span>
-        <button onClick={exportCsv} disabled={filtered.length === 0}
+        <span className="text-xs text-[var(--deck-text-low)] pb-2">{t('resultCount', { count: total })}</span>
+        <button onClick={() => void exportCsv()} disabled={total === 0}
           className="ms-auto flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium  disabled:opacity-50">
           <Download className="w-4 h-4" /> {t('exportCsv')}
         </button>
       </div>
 
-      {!isLoading && filtered.length > 0 && (
+      {playsPerDay.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 mb-6">
           <div className="glass-panel rounded-2xl p-4">
             <p className="text-xs font-medium text-[var(--deck-text-mid)] mb-3">{t('playsPerDay')}</p>
             <div className="flex items-end gap-1" style={{ height: CHART_HEIGHT_PX + 20 }}>
-              {playsPerDay.map(([day, count]) => (
+              {playsPerDay.map(({ day, count }) => (
                 <div key={day} className="flex-1 flex flex-col items-center justify-end gap-1 h-full" title={`${day}: ${count}`}>
                   <div className="w-full bg-[var(--deck-accent)] rounded-t" style={{ height: `${Math.max(4, (count / maxPerDay) * CHART_HEIGHT_PX)}px` }} />
                   <span className="text-[9px] text-[var(--deck-text-low)]">{day.slice(5)}</span>
@@ -117,8 +103,8 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
           <div className="glass-panel rounded-2xl p-4">
             <p className="text-xs font-medium text-[var(--deck-text-mid)] mb-3">{t('playsPerScreen')}</p>
             <div className="space-y-2">
-              {playsPerScreen.map(([name, count]) => (
-                <div key={name} className="flex items-center gap-2 text-xs">
+              {playsPerScreen.map(({ screenId: sId, name, count }) => (
+                <div key={sId} className="flex items-center gap-2 text-xs">
                   <span className="w-28 truncate text-[var(--deck-text-mid)] shrink-0">{name}</span>
                   <div className="flex-1 bg-[var(--deck-glass-fill-strong)] rounded h-3 overflow-hidden">
                     <div className="h-full bg-[var(--deck-accent)]" style={{ width: `${(count / maxPerScreen) * 100}%` }} />
@@ -128,19 +114,24 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
               ))}
             </div>
           </div>
+          {summary?.truncated && (
+            <p className="sm:col-span-2 text-[11px] text-amber-700 dark:text-amber-400">
+              {t('summaryTruncated', { count: summary.sampledCount })}
+            </p>
+          )}
         </div>
       )}
 
-      {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
+      {isLoading && !data && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
-      {!isLoading && filtered.length === 0 && (
+      {!isLoading && entries.length === 0 && (
         <div className="text-center py-16 text-[var(--deck-text-low)]">
           <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
         </div>
       )}
 
-      {!isLoading && filtered.length > 0 && (
+      {entries.length > 0 && (
         <div className="glass-panel rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -148,33 +139,31 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
                 <th className="text-start font-medium px-4 py-2.5">{t('time')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('screenColumn')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('asset')}</th>
-                <th className="text-start font-medium px-4 py-2.5">{t('playlist')}</th>
                 <th className="text-start font-medium px-4 py-2.5">{t('duration')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--deck-glass-border-soft)]">
-              {pageItems.map(entry => (
+              {entries.map(entry => (
                 <tr key={entry.id}>
                   <td className="px-4 py-2.5 text-[var(--deck-text-mid)] whitespace-nowrap">
                     {formatDateTime(entry.playedAt, dateFormat)}
                   </td>
-                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{entry.screenName}</td>
-                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{entry.assetName}</td>
-                  <td className="px-4 py-2.5 text-[var(--deck-text-mid)]">{entry.playlistName || '—'}</td>
-                  <td className="px-4 py-2.5 text-[var(--deck-text-mid)]">{t('durationSec', { seconds: entry.durationSecs })}</td>
+                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{entry.screen.name}</td>
+                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{entry.asset?.name ?? '—'}</td>
+                  <td className="px-4 py-2.5 text-[var(--deck-text-mid)]">{t('durationSec', { seconds: Math.round(entry.durationMs / 1000) })}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
           <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--deck-glass-border-soft)]">
-            <span className="text-xs text-[var(--deck-text-low)]">{t('pageInfo', { page: currentPage, total: totalPages })}</span>
+            <span className="text-xs text-[var(--deck-text-low)]">{t('pageInfo', { page, total: totalPages })}</span>
             <div className="flex items-center gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40">
                 <ChevronLeft className="w-3.5 h-3.5" /> {t('prev')}
               </button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40">
                 {t('next')} <ChevronRight className="w-3.5 h-3.5" />
               </button>

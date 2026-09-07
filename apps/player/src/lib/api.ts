@@ -452,6 +452,10 @@ export const api = {
   // wrapper callers actually use.
   logWayfindingEvents: (events: { type: 'SESSION_START' | 'SEARCH' | 'POI_VIEW'; query?: string; poiId?: string; poiName?: string }[]) =>
     request('/player/wayfinding-events', { method: 'POST', body: JSON.stringify({ events }) }),
+  // Proof-of-play (aboutlumina-player.md Phase 12) — batched flush of the durable local queue;
+  // see apps/player/src/lib/proofOfPlay.ts for the buffering/flush wrapper callers actually use.
+  ingestProofOfPlay: (events: { assetId?: string; playedAt: string; durationMs: number }[]) =>
+    request('/player/proof-of-play', { method: 'POST', body: JSON.stringify({ events }) }),
   // AI Wayfinding (docs/modules/ai_wayfinding_module_plan.md §7.2) — the server derives
   // screenId/organizationId/building/destination catalog from the authenticated screen token;
   // this body carries only what the visitor actually typed. `signal` lets the caller abort on

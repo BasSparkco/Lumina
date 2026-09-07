@@ -2,7 +2,13 @@ import { openDB, type IDBPDatabase } from 'idb';
 import type { Playlist, PlayerState } from './api';
 
 const DB_NAME = 'lumina-player';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
+
+export interface ProofOfPlayQueueEntry {
+  assetId?: string;
+  playedAt: string;
+  durationMs: number;
+}
 
 interface LuminaDB {
   playlist: { key: 'current'; value: Playlist };
@@ -12,6 +18,13 @@ interface LuminaDB {
   // zones at once (e.g. two weather widgets for different cities) — each gets its own key so a
   // reboot while offline can restore each zone's own last-known data instead of a shared blob.
   widgetCache: { key: string; value: unknown };
+  // aboutlumina-player.md Phase 12 — a durable, append-on-transition/drain-in-batches queue.
+  // Autoincrementing numeric keys (not the item id) so a repeated item across a loop, or an
+  // identical assetId played twice, still queues as two distinct rows rather than colliding.
+  // Durability matters here specifically (unlike kioskAnalytics' fire-and-forget POSTs) —
+  // proof-of-play exists for billing/compliance, so a dropped event on a flaky connection isn't
+  // acceptable the way a missed "popular search" tick is.
+  proofOfPlayQueue: { key: number; value: ProofOfPlayQueueEntry };
 }
 
 let db: IDBPDatabase<LuminaDB> | null = null;
@@ -29,6 +42,9 @@ async function getDb() {
       }
       if (oldVersion < 3) {
         database.createObjectStore('widgetCache');
+      }
+      if (oldVersion < 4) {
+        database.createObjectStore('proofOfPlayQueue', { autoIncrement: true });
       }
     },
   });
@@ -74,5 +90,20 @@ export const cache = {
     await database.clear('state');
     await database.clear('config');
     await database.clear('widgetCache');
+  },
+  async enqueueProofOfPlay(entry: ProofOfPlayQueueEntry) {
+    const database = await getDb();
+    await database.add('proofOfPlayQueue', entry);
+  },
+  async getProofOfPlayQueue(): Promise<{ key: number; entry: ProofOfPlayQueueEntry }[]> {
+    const database = await getDb();
+    const keys = await database.getAllKeys('proofOfPlayQueue');
+    const entries = (await database.getAll('proofOfPlayQueue')) as ProofOfPlayQueueEntry[];
+    return keys.map((key, i) => ({ key: key as number, entry: entries[i]! }));
+  },
+  async deleteProofOfPlayEntries(keys: number[]) {
+    const database = await getDb();
+    const tx = database.transaction('proofOfPlayQueue', 'readwrite');
+    await Promise.all([...keys.map((key) => tx.store.delete(key)), tx.done]);
   },
 };

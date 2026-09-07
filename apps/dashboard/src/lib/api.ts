@@ -474,6 +474,55 @@ export const kioskAnalyticsApi = {
   },
 };
 
+// ── Proof-of-play (P8, docs/tenant_isolation_and_platform_admin_plan.md) ────
+// Real, server-side, org-scoped playback history — apps/player now buffers a durable local
+// queue and flushes it here every heartbeat (see apps/player/src/lib/proofOfPlay.ts); this was
+// previously a per-browser localStorage mock with fabricated history, since nothing anywhere
+// ever emitted a real play event until this pass.
+export interface ProofOfPlayEntry {
+  id: string;
+  screenId: string;
+  assetId: string | null;
+  playedAt: string;
+  durationMs: number;
+  screen: { id: string; name: string };
+  asset: { id: string; name: string; type: AssetType } | null;
+}
+export interface ProofOfPlayListParams {
+  screenId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+export interface ProofOfPlayListResult {
+  items: ProofOfPlayEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+export interface ProofOfPlaySummary {
+  byDay: { day: string; count: number }[];
+  byScreen: { screenId: string; name: string; count: number }[];
+  sampledCount: number;
+  truncated: boolean;
+}
+function proofOfPlayQueryString(params: { screenId?: string; from?: string; to?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params.screenId) qs.set('screenId', params.screenId);
+  if (params.from) qs.set('from', params.from);
+  if (params.to) qs.set('to', params.to);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+export const proofOfPlayApi = {
+  list: (params: ProofOfPlayListParams = {}) => req<ProofOfPlayListResult>(`/proof-of-play${proofOfPlayQueryString(params)}`),
+  summary: (params: Pick<ProofOfPlayListParams, 'screenId' | 'from' | 'to'> = {}) =>
+    req<ProofOfPlaySummary>(`/proof-of-play/summary${proofOfPlayQueryString(params)}`),
+};
+
 // ── Assets ──────────────────────────────────────────────────────────────────
 export const assetsApi = {
   list: () => req<Asset[]>('/assets'),

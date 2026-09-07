@@ -32,6 +32,20 @@ export class ProofOfPlayController {
     });
   }
 
+  @Get('summary')
+  summary(
+    @CurrentUser() user: JwtUser,
+    @Query('screenId') screenId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.proofOfPlay.summary(user.orgId, {
+      screenId,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    });
+  }
+
   @Get('export')
   async export(
     @CurrentUser() user: JwtUser,
