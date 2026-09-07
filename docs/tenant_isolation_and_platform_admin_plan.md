@@ -596,7 +596,7 @@ Tasks:
 
 ### P9 — Tenant-isolation verification suite and rollout
 
-**Status: started (2026-09-07) — the two-tenant fixture and a first HTTP e2e IDOR slice are done and wired into CI; the other 8 required-suite categories and the entire 11-step production rollout sequence have not been started.** See `docs/tenant-isolation/README.md` for the full writeup. This is a deliberately bounded first slice given the baseline note directly below — not an attempt at the complete matrix in one pass.
+**Status: automated verification complete (2026-09-07); production rollout not started.** All ten required suites are addressed: 8 have real, CI-wired coverage (71 API e2e tests across 7 spec files + 8 dashboard tests + a 12-case ESLint-rule test + pre-existing unit/integration coverage), 1 (object-storage reconciliation) is blocked on a job that doesn't exist yet (P4 task 9, deferred), and 1 (RLS) is explicitly not applicable since P5b was never selected for this release. A concrete CI enforcement mechanism is live: a generated, diff-checked ownership inventory (`apps/api/scripts/generate-ownership-inventory.ts`) and a custom ESLint rule (`no-raw-tenant-prisma-delegate`) against raw tenant Prisma access. A full production rollout/rollback runbook is prepared (`docs/tenant-isolation/p9-production-rollout-runbook.md`) but **not executed** — no production deployment or data mutation has occurred under this phase. See `docs/tenant-isolation/README.md` for the full writeup and a requirement-by-requirement breakdown.
 
 **Goal:** Turn isolation into a release gate instead of a convention.
 
