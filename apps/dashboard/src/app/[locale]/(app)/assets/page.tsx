@@ -604,6 +604,15 @@ function AssetsPageInner() {
   const [renamingDesignId, setRenamingDesignId] = useState<string | null>(null);
   const [designRenameValue, setDesignRenameValue] = useState('');
 
+  const assetUrlById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of assets as Asset[]) {
+      const url = a.url ?? a.thumbnailUrl;
+      if (url) map[a.id] = url;
+    }
+    return map;
+  }, [assets]);
+
   // APP assets live on the Apps tab, not here (see appsroadmap.md Phase 7) — My Assets only
   // ever shows the rest.
   const nonAppAssets = assets.filter((a: Asset) => a.type !== 'APP');
@@ -1409,7 +1418,7 @@ function AssetsPageInner() {
               >
                 <div className="relative w-full aspect-video bg-[var(--deck-glass-fill-strong)] flex items-center justify-center text-[var(--deck-text-low)] overflow-hidden">
                   {design.designJson.scenes.length > 0
-                    ? <DesignPreview document={design.designJson} />
+                    ? <DesignPreview document={design.designJson} assetUrlById={assetUrlById} />
                     : <LayoutTemplate className="w-8 h-8" />}
                 </div>
                 <div className="p-3">

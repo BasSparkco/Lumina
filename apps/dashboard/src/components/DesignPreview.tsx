@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { DesignDocument, DesignElement } from '@lumina/design-schema';
+import { mediaCropStyle, buildImageFilterCss } from '@lumina/types';
 import { ImageIcon, Film, QrCode } from 'lucide-react';
 
 // Cheap, live scaled-down re-render of a design's first scene for grid-card previews — same
@@ -10,8 +11,9 @@ import { ImageIcon, Film, QrCode } from 'lucide-react';
 // text scale with however wide the card actually renders, with no JS measurement needed.
 //
 // Image/video elements only carry an `assetId` (no resolved URL ships with the list payload), so
-// they render as a generic placeholder rather than resolving N asset URLs per grid render.
-export function DesignPreview({ document }: { document: DesignDocument }) {
+// the caller passes down `assetUrlById` — built from the org's already-fetched assets list — to
+// resolve them; an id missing from that map (e.g. asset deleted) still falls back to a placeholder.
+export function DesignPreview({ document, assetUrlById }: { document: DesignDocument; assetUrlById?: Record<string, string> }) {
   const scene = document.scenes[0];
   if (!scene) return null;
   const { width: canvasW, height: canvasH, backgroundColor } = document.canvas;
@@ -23,13 +25,13 @@ export function DesignPreview({ document }: { document: DesignDocument }) {
         .filter((el) => el.visible !== false)
         .sort((a, b) => a.zIndex - b.zIndex)
         .map((el) => (
-          <PreviewElement key={el.id} el={el} canvasW={canvasW} canvasH={canvasH} />
+          <PreviewElement key={el.id} el={el} canvasW={canvasW} canvasH={canvasH} assetUrlById={assetUrlById} />
         ))}
     </div>
   );
 }
 
-function PreviewElement({ el, canvasW, canvasH }: { el: DesignElement; canvasW: number; canvasH: number }) {
+function PreviewElement({ el, canvasW, canvasH, assetUrlById }: { el: DesignElement; canvasW: number; canvasH: number; assetUrlById?: Record<string, string> }) {
   const box: CSSProperties = {
     position: 'absolute',
     left: `${(el.x / canvasW) * 100}%`,
@@ -77,6 +79,26 @@ function PreviewElement({ el, canvasW, canvasH }: { el: DesignElement; canvasW: 
   }
 
   if (el.type === 'image') {
+    const url = el.assetId ? assetUrlById?.[el.assetId] : undefined;
+    if (url) {
+      return (
+        <div style={box}>
+          <img
+            src={url}
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: el.fit,
+              borderRadius: el.borderRadius,
+              transform: el.flipX || el.flipY ? `scale(${el.flipX ? -1 : 1}, ${el.flipY ? -1 : 1})` : undefined,
+              filter: buildImageFilterCss(el.adjustments),
+              ...mediaCropStyle(el),
+            }}
+          />
+        </div>
+      );
+    }
     return (
       <div style={{ ...box, background: 'rgba(148,163,184,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <ImageIcon style={{ width: '35%', height: '35%', opacity: 0.6 }} />
