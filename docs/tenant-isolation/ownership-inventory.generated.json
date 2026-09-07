@@ -1,0 +1,2518 @@
+{
+  "generatedFrom": {
+    "schema": "apps/api/prisma/schema.prisma",
+    "controllers": "apps/api/src/modules/**/*.controller.ts",
+    "gateway": "apps/api/src/modules/ws/screen.gateway.ts",
+    "storage": "apps/api/src/modules/storage/storage.service.ts"
+  },
+  "models": [
+    {
+      "name": "Asset",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": true,
+      "class": "TP_OR_SHARED"
+    },
+    {
+      "name": "AssetBinary",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "INDIRECT",
+      "note": "Via assetId -> Asset.organizationId"
+    },
+    {
+      "name": "AuditLog",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "BookableRoom",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Building",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "CrashReport",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "DesignAsset",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "DesignAssetVersion",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "INDIRECT",
+      "note": "Via designAssetId -> DesignAsset.organizationId"
+    },
+    {
+      "name": "DesignDraft",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "DesignTemplate",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "PP",
+      "note": "Super-Admin-owned catalog, not tenant data"
+    },
+    {
+      "name": "DesignTemplateTenant",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "JOIN",
+      "note": "Composite-PK access-grant record between DesignTemplate (PP) and Organization"
+    },
+    {
+      "name": "DesignTemplateVersion",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "PP",
+      "note": "Via templateId -> DesignTemplate (PP)"
+    },
+    {
+      "name": "Floor",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "KioskEvent",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "KioskLocation",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Layout",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Organization",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "PP",
+      "note": "Tenant registry root itself; has no parent to be owned by"
+    },
+    {
+      "name": "OrgInvite",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "PairingSession",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "N/A",
+      "note": "Unclaimed player pairing ticket, not tenant data — becomes a Screen (TP) on claim"
+    },
+    {
+      "name": "PlatformAuditLog",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "PP",
+      "note": "Platform action audit trail; targetOrganizationId is nullable metadata, not ownership"
+    },
+    {
+      "name": "Playlist",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "PlaylistItem",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Poi",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "PoiAlias",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "INDIRECT",
+      "note": "Via poiId -> Poi -> Floor -> Building.organizationId"
+    },
+    {
+      "name": "PoiCategory",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": true,
+      "class": "TP_OR_SHARED"
+    },
+    {
+      "name": "PowerSchedule",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "ProofOfPlayLog",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "RoomCalendarConnection",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "RoomDisplayBinding",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "RoomReservation",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "RouteEdge",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "RouteNode",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Schedule",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Screen",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "ScreenAlert",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "ScreenGroup",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "TenantModule",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Theme",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": true,
+      "class": "TP_OR_SHARED"
+    },
+    {
+      "name": "User",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "WayfindingAiScreenConfig",
+      "hasDirectOrganizationId": false,
+      "organizationIdNullable": false,
+      "class": "INDIRECT",
+      "note": "Via screenId -> Screen.organizationId"
+    },
+    {
+      "name": "WayfindingAiUsageLog",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    },
+    {
+      "name": "Zone",
+      "hasDirectOrganizationId": true,
+      "organizationIdNullable": false,
+      "class": "TP"
+    }
+  ],
+  "routes": [
+    {
+      "file": "apps/api/src/modules/apps/apps.controller.ts",
+      "controllerPath": "apps",
+      "method": "GET",
+      "path": "providers",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/apps/apps.controller.ts",
+      "controllerPath": "apps",
+      "method": "POST",
+      "path": "resolve",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "PUT",
+      "path": ":id/audio",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": ":id/extract-audio",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": ":id/reprocess",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "PUT",
+      "path": ":id/text",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": ":id/touch",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "apps",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "apps/playlist",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": "icons/search",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": "icons/svg",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": "library",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "library",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "PUT",
+      "path": "library/:id",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "DELETE",
+      "path": "library/:id",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "library/:id/use",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "stock-videos/import",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": "stock-videos/search",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "stock/import",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "GET",
+      "path": "stock/search",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "text",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "upload",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/assets.controller.ts",
+      "controllerPath": "assets",
+      "method": "POST",
+      "path": "upload-audio",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": ":orgId/assets/:filename",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": ":orgId/screenshots/:filename",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": "assets/:assetId",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": "assets/:assetId/pages/:page",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": "assets/:assetId/thumbnail",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": "binaries/:binaryId",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/assets/media.controller.ts",
+      "controllerPath": "media",
+      "method": "GET",
+      "path": "screens/:screenId/screenshot",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/audit/audit.controller.ts",
+      "controllerPath": "org/audit-log",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/auth/auth.controller.ts",
+      "controllerPath": "auth",
+      "method": "POST",
+      "path": "login",
+      "guards": [
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/auth/auth.controller.ts",
+      "controllerPath": "auth",
+      "method": "GET",
+      "path": "me",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/auth/auth.controller.ts",
+      "controllerPath": "auth",
+      "method": "POST",
+      "path": "register",
+      "guards": [
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "GET",
+      "path": ":documentId",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "PUT",
+      "path": ":documentId",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "DELETE",
+      "path": ":documentId",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "PATCH",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "PUT",
+      "path": ":id/name",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "POST",
+      "path": ":id/restore/:versionId",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/designs/designs.controller.ts",
+      "controllerPath": "designs",
+      "method": "GET",
+      "path": ":id/versions",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/feeds/feeds.controller.ts",
+      "controllerPath": "feeds",
+      "method": "GET",
+      "path": "currency",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/feeds/feeds.controller.ts",
+      "controllerPath": "feeds",
+      "method": "GET",
+      "path": "ticker",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/feeds/feeds.controller.ts",
+      "controllerPath": "feeds",
+      "method": "GET",
+      "path": "weather",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/kiosk-analytics/kiosk-analytics.controller.ts",
+      "controllerPath": "kiosk-events",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/layouts/layouts.controller.ts",
+      "controllerPath": "layouts",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/layouts/layouts.controller.ts",
+      "controllerPath": "layouts",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/layouts/layouts.controller.ts",
+      "controllerPath": "layouts",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/layouts/layouts.controller.ts",
+      "controllerPath": "layouts",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/layouts/layouts.controller.ts",
+      "controllerPath": "layouts",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "GET",
+      "path": "all",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "GET",
+      "path": "capabilities",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "POST",
+      "path": "invite",
+      "guards": [
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "GET",
+      "path": "invite/:token",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "POST",
+      "path": "invite/accept",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "GET",
+      "path": "invites",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "DELETE",
+      "path": "invites/:id",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "GET",
+      "path": "members",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "DELETE",
+      "path": "members/:id",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "PUT",
+      "path": "members/:id/role",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "GET",
+      "path": "settings",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/org/org.controller.ts",
+      "controllerPath": "org",
+      "method": "PUT",
+      "path": "settings",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "POST",
+      "path": "",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "GET",
+      "path": ":tenantId",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "GET",
+      "path": ":tenantId/audit",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "GET",
+      "path": ":tenantId/invites",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "GET",
+      "path": ":tenantId/members",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "DELETE",
+      "path": ":tenantId/members/:memberId",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "POST",
+      "path": ":tenantId/members/:memberId/revoke-sessions",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "PUT",
+      "path": ":tenantId/members/:memberId/role",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "PUT",
+      "path": ":tenantId/modules",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "PUT",
+      "path": ":tenantId/name",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "POST",
+      "path": ":tenantId/owner-invite",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "DELETE",
+      "path": ":tenantId/owner-invite/:inviteId",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "POST",
+      "path": ":tenantId/revoke-sessions",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/platform-tenants/platform-tenants.controller.ts",
+      "controllerPath": "admin/tenants",
+      "method": "PUT",
+      "path": ":tenantId/status",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "GET",
+      "path": "check",
+      "guards": [
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "crash-report",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "heartbeat",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "init",
+      "guards": [
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "GET",
+      "path": "manifest",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "GET",
+      "path": "playlist",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "proof-of-play",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "screenshot",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "GET",
+      "path": "state",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "unpair",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/player/player.controller.ts",
+      "controllerPath": "player",
+      "method": "POST",
+      "path": "wayfinding-events",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "POST",
+      "path": ":id/approve",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "PUT",
+      "path": ":id/config",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "POST",
+      "path": ":id/items",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "PUT",
+      "path": ":id/items/:itemId",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "DELETE",
+      "path": ":id/items/:itemId",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "GET",
+      "path": ":id/preview",
+      "guards": [
+        "UseGuards",
+        "Roles",
+        "Public"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "POST",
+      "path": ":id/preview-token",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "POST",
+      "path": ":id/reject",
+      "guards": [
+        "UseGuards",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "PUT",
+      "path": ":id/reorder",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "POST",
+      "path": ":id/submit",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/playlists/playlists.controller.ts",
+      "controllerPath": "playlists",
+      "method": "PUT",
+      "path": "reorder",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/power-schedules/power-schedules.controller.ts",
+      "controllerPath": "power-schedules",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/power-schedules/power-schedules.controller.ts",
+      "controllerPath": "power-schedules",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/power-schedules/power-schedules.controller.ts",
+      "controllerPath": "power-schedules",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/power-schedules/power-schedules.controller.ts",
+      "controllerPath": "power-schedules",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/power-schedules/power-schedules.controller.ts",
+      "controllerPath": "power-schedules",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/power-schedules/power-schedules.controller.ts",
+      "controllerPath": "power-schedules",
+      "method": "GET",
+      "path": "preview",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/proof-of-play/proof-of-play.controller.ts",
+      "controllerPath": "proof-of-play",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/proof-of-play/proof-of-play.controller.ts",
+      "controllerPath": "proof-of-play",
+      "method": "GET",
+      "path": "export",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/proof-of-play/proof-of-play.controller.ts",
+      "controllerPath": "proof-of-play",
+      "method": "GET",
+      "path": "summary",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-connections.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "GET",
+      "path": "connections",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-connections.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "POST",
+      "path": "connections",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-connections.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "DELETE",
+      "path": "connections/:connectionId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-connections.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "GET",
+      "path": "connections/:connectionId/rooms",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-connections.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "POST",
+      "path": "rooms/:roomId/map",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-connections.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "POST",
+      "path": "rooms/:roomId/subscribe",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/integrations/microsoft365/microsoft365-webhook.controller.ts",
+      "controllerPath": "room-booking/integrations/microsoft365",
+      "method": "POST",
+      "path": "webhook",
+      "guards": []
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/reservations.controller.ts",
+      "controllerPath": "rooms/:roomId/reservations",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/reservations.controller.ts",
+      "controllerPath": "rooms/:roomId/reservations",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/reservations.controller.ts",
+      "controllerPath": "rooms/:roomId/reservations",
+      "method": "PUT",
+      "path": ":reservationId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/reservations.controller.ts",
+      "controllerPath": "rooms/:roomId/reservations",
+      "method": "DELETE",
+      "path": ":reservationId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/room-booking-player.controller.ts",
+      "controllerPath": "player/room-booking",
+      "method": "POST",
+      "path": "book-now",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/room-booking.controller.ts",
+      "controllerPath": "room-booking",
+      "method": "GET",
+      "path": "displays",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/room-booking.controller.ts",
+      "controllerPath": "room-booking",
+      "method": "PUT",
+      "path": "displays/:screenId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/room-booking.controller.ts",
+      "controllerPath": "room-booking",
+      "method": "DELETE",
+      "path": "displays/:screenId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/rooms.controller.ts",
+      "controllerPath": "rooms",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/rooms.controller.ts",
+      "controllerPath": "rooms",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/rooms.controller.ts",
+      "controllerPath": "rooms",
+      "method": "GET",
+      "path": ":roomId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/rooms.controller.ts",
+      "controllerPath": "rooms",
+      "method": "PUT",
+      "path": ":roomId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/rooms.controller.ts",
+      "controllerPath": "rooms",
+      "method": "DELETE",
+      "path": ":roomId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/room-booking/rooms.controller.ts",
+      "controllerPath": "rooms",
+      "method": "GET",
+      "path": ":roomId/availability",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/schedules/schedules.controller.ts",
+      "controllerPath": "schedules",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/schedules/schedules.controller.ts",
+      "controllerPath": "schedules",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/schedules/schedules.controller.ts",
+      "controllerPath": "schedules",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/schedules/schedules.controller.ts",
+      "controllerPath": "schedules",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/schedules/schedules.controller.ts",
+      "controllerPath": "schedules",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "POST",
+      "path": ":id/publish",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screen-groups/screen-groups.controller.ts",
+      "controllerPath": "screen-groups",
+      "method": "PUT",
+      "path": ":id/volume",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/aspect-ratio",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/asset",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/assign",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/capture-screenshot",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/clear-cache",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "GET",
+      "path": ":id/crash-reports",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/emergency",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/group",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/kiosk-attract-playlist",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/kiosk-attract-theme",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/kiosk-location",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "DELETE",
+      "path": ":id/kiosk-location",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/orientation",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/pause",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/prayer",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/publish",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/reload",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/resume",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/seek",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/show-clock",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/speed",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/stop",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/streaming-type",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": ":id/unpair",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": ":id/volume",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "GET",
+      "path": "fleet-status",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "POST",
+      "path": "pair",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/screens/screens.controller.ts",
+      "controllerPath": "screens",
+      "method": "PUT",
+      "path": "reorder",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin",
+        "Roles"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "POST",
+      "path": ":id/create-design",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "POST",
+      "path": ":id/publish",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "GET",
+      "path": ":id/tenant-access",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "PUT",
+      "path": ":id/tenant-access",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/templates/templates.controller.ts",
+      "controllerPath": "admin/templates",
+      "method": "POST",
+      "path": ":id/unpublish",
+      "guards": [
+        "UseGuards",
+        "RequireSuperAdmin"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/themes/themes.controller.ts",
+      "controllerPath": "themes",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/themes/themes.controller.ts",
+      "controllerPath": "themes",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/themes/themes.controller.ts",
+      "controllerPath": "themes",
+      "method": "GET",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/themes/themes.controller.ts",
+      "controllerPath": "themes",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/themes/themes.controller.ts",
+      "controllerPath": "themes",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/themes/themes.controller.ts",
+      "controllerPath": "themes",
+      "method": "POST",
+      "path": ":id/duplicate",
+      "guards": [
+        "UseGuards"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai-player.controller.ts",
+      "controllerPath": "player/wayfinding-ai",
+      "method": "POST",
+      "path": "resolve",
+      "guards": [
+        "UseGuards",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "DELETE",
+      "path": "aliases/:aliasId",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "GET",
+      "path": "buildings/:buildingId/pois",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "POST",
+      "path": "pois/:poiId/aliases",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "GET",
+      "path": "screens",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "GET",
+      "path": "screens/:screenId/config",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "PUT",
+      "path": "screens/:screenId/config",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "POST",
+      "path": "test-resolve",
+      "guards": [
+        "UseGuards",
+        "RequireModule",
+        "Throttle"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding-ai/wayfinding-ai.controller.ts",
+      "controllerPath": "wayfinding-ai",
+      "method": "GET",
+      "path": "usage",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "buildings",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "GET",
+      "path": "buildings",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "buildings/:buildingId/floors",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "GET",
+      "path": "buildings/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "PUT",
+      "path": "buildings/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "DELETE",
+      "path": "buildings/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "PUT",
+      "path": "buildings/:id/evacuation",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "buildings/:id/sync-screen-group",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "PUT",
+      "path": "floors/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/buildings.controller.ts",
+      "controllerPath": "",
+      "method": "DELETE",
+      "path": "floors/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/poi-categories.controller.ts",
+      "controllerPath": "poi-categories",
+      "method": "GET",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/poi-categories.controller.ts",
+      "controllerPath": "poi-categories",
+      "method": "POST",
+      "path": "",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/poi-categories.controller.ts",
+      "controllerPath": "poi-categories",
+      "method": "PUT",
+      "path": ":id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/poi-categories.controller.ts",
+      "controllerPath": "poi-categories",
+      "method": "DELETE",
+      "path": ":id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/pois.controller.ts",
+      "controllerPath": "",
+      "method": "GET",
+      "path": "floors/:floorId/pois",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/pois.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "floors/:floorId/pois",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/pois.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "floors/:floorId/pois/import",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/pois.controller.ts",
+      "controllerPath": "",
+      "method": "PUT",
+      "path": "pois/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/pois.controller.ts",
+      "controllerPath": "",
+      "method": "DELETE",
+      "path": "pois/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "buildings/:buildingId/route-edges",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "GET",
+      "path": "buildings/:buildingId/route-graph",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "POST",
+      "path": "floors/:floorId/route-nodes",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "PUT",
+      "path": "route-edges/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "DELETE",
+      "path": "route-edges/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "PUT",
+      "path": "route-nodes/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    },
+    {
+      "file": "apps/api/src/modules/wayfinding/routes.controller.ts",
+      "controllerPath": "",
+      "method": "DELETE",
+      "path": "route-nodes/:id",
+      "guards": [
+        "UseGuards",
+        "RequireModule"
+      ]
+    }
+  ],
+  "webSocket": {
+    "rooms": [
+      "screen:${payload.sub}",
+      "org:${user.organizationId}",
+      "org:${orgId}",
+      "screen:${screenId}",
+      "org:${client.data.orgId}"
+    ],
+    "events": [
+      "ack",
+      "playback-progress",
+      "auth-invalidated",
+      "command",
+      "screen-status",
+      "screen-unpaired"
+    ]
+  },
+  "storagePrefixes": [
+    "${orgId}/screenshots/${screenId}.jpg",
+    "${this.cdnBase}/${path}?${params.toString()}",
+    "_p${n}.webp",
+    "_p${page}.webp",
+    "assets/${assetId}",
+    "assets/${assetId}/pages/${page}",
+    "assets/${assetId}/thumbnail",
+    "binaries/${binaryId}",
+    "screens/${screenId}/screenshot"
+  ]
+}

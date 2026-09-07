@@ -79,6 +79,10 @@ export class WayfindingAiUsageService {
   // cron/worker task once AI_WAYFINDING_USAGE_LOG_RETENTION_DAYS's production value is set.
   async purgeOlderThan(retentionDays: number): Promise<number> {
     const cutoff = new Date(Date.now() - retentionDays * DAY_MS);
+    // Deliberately global, not org-scoped — a platform-wide retention policy applied uniformly
+    // across every tenant, not a request handler acting on behalf of one. See this method's own
+    // doc comment above (§11.3).
+    // eslint-disable-next-line tenant-isolation/no-raw-tenant-prisma-delegate
     const { count } = await this.prisma.wayfindingAiUsageLog.deleteMany({
       where: { createdAt: { lt: cutoff } },
     });

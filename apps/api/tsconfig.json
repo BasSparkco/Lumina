@@ -15,7 +15,7 @@
     // pass, which is what `pnpm run typecheck` actually runs.
     "types": ["jest", "node"]
   },
-  "include": ["src/**/*", "prisma/**/*"],
+  "include": ["src/**/*", "prisma/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist", "test"],
   "ts-node": {
     "files": true

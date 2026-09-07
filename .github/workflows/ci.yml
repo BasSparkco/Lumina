@@ -69,6 +69,16 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # P9 (docs/tenant_isolation_and_platform_admin_plan.md §P9 task 9) — regenerates the
+      # ownership inventory (docs/tenant-isolation/ownership-inventory.generated.json) from the
+      # live Prisma schema/controllers/gateway/storage-service source, then fails if that produces
+      # a diff from what's checked in (a model/route/event/prefix changed without the inventory
+      # being regenerated and reviewed) or if the generator itself reports an unclassified model.
+      - name: Ownership inventory (generate + diff check)
+        run: |
+          pnpm --filter api run generate:ownership-inventory
+          git diff --exit-code -- docs/tenant-isolation/ownership-inventory.generated.json
+
       - name: Typecheck
         run: pnpm typecheck
 

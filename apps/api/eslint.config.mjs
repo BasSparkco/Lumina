@@ -1,4 +1,5 @@
 import { baseConfig } from '../../eslint.config.mjs';
+import tenantIsolationPlugin from './eslint-rules/no-raw-tenant-prisma-delegate.cjs';
 
 export default [
   ...baseConfig,
@@ -8,6 +9,28 @@ export default [
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    // P9 (docs/tenant_isolation_and_platform_admin_plan.md §P9 task 9) — flags a raw
+    // `this.prisma.<tenantModel>.<method>()` call whose where-clause isn't organizationId-scoped.
+    // Scoped off (rather than the rule special-casing these files itself) for the codebase's
+    // known-legitimate cross-tenant access points: OrgScopedService is the trusted implementation
+    // every other service's ownership check delegates to; PlatformTenantsService/the admin
+    // controllers and services are genuine Super Admin cross-tenant operations
+    // (SuperAdminGuard-gated); prisma/**scripts are operator-run audits/seeds/migrations, not
+    // request-handling code; test/** fixtures deliberately set up and assert against both
+    // tenants' data in the same process; player.service.ts backs player.controller.ts's
+    // device-private routes (PlayerJwtGuard) where every screenId argument is the caller's own
+    // verified identity (@CurrentUser() from the player JWT's `sub`, never a client-supplied
+    // param naming a *different* screen) — the device-private (DP) self-access class from
+    // docs/tenant-isolation/ownership-matrix.md §3, structurally distinct from a tenant-private
+    // (TP) lookup that needs an organizationId check because the caller could name any resource.
+    files: ['src/**/*.ts'],
+    ignores: ['src/common/org-scoped.service.ts', 'src/modules/platform-tenants/**', 'src/modules/player/player.service.ts'],
+    plugins: { 'tenant-isolation': tenantIsolationPlugin },
+    rules: {
+      'tenant-isolation/no-raw-tenant-prisma-delegate': 'error',
     },
   },
   {

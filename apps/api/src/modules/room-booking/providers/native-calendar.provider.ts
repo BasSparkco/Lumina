@@ -57,8 +57,15 @@ export class NativeCalendarProvider implements RoomCalendarProvider {
   }
 
   async cancelReservation(input: ProviderCancelInput): Promise<void> {
+    // P9 finding: this where clause omitted organizationId (createReservation, just above, already
+    // scopes its own write by input.room.organizationId — the same field was available here and
+    // simply unused). Not reachable via any live route today (RoomCalendarProviderRegistry has no
+    // current caller that dispatches cancelReservation through the provider interface —
+    // room-booking.service.ts's own cancelReservation cancels LUMINA-native reservations directly
+    // instead), so this closes a latent gap before that wiring exists rather than changing
+    // observed behavior.
     await this.prisma.roomReservation.updateMany({
-      where: { roomId: input.room.id, id: input.externalEventId, providerKey: 'LUMINA' },
+      where: { roomId: input.room.id, id: input.externalEventId, providerKey: 'LUMINA', organizationId: input.room.organizationId },
       data: { status: 'CANCELLED' },
     });
   }
