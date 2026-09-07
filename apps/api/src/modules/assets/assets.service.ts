@@ -814,9 +814,18 @@ export class AssetsService {
     });
   }
 
+  // P9 (docs/tenant_isolation_and_platform_admin_plan.md) — found missing its shared-library
+  // fallback while writing the e2e IDOR suite: every other asset-visibility check in this
+  // codebase (DesignsService.assertAssetsOwned, the media-resolution path) uses the
+  // tenant-owned-or-shared-library convention documented in designer.md ("batch-checked against
+  // tenant-owned-or-shared-library assets... this.organizationId: null shared-library
+  // convention") — this was the one outlier requiring exact tenant ownership, so any caller
+  // asking "can I see asset X" by id got a 404 on a shared asset regardless of who was asking.
+  // No current dashboard call site was affected (assetsApi.get() has zero consumers today), so
+  // this closes a real inconsistency rather than changing observed behavior for any live feature.
   async findOne(orgId: string, id: string) {
     const asset = await this.orgScoped.assertOwns(
-      () => this.prisma.asset.findFirst({ where: { id, organizationId: orgId } }),
+      () => this.prisma.asset.findFirst({ where: { id, OR: [{ organizationId: orgId }, { organizationId: null }] } }),
       'Asset not found',
     );
     if (asset.type === 'TEXT') return this.toDto(asset, null);

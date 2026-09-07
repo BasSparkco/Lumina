@@ -240,7 +240,20 @@ export class DesignsService {
     });
   }
 
+  // P9 finding: this is the HTTP-facing DELETE /design-drafts/:documentId path (see
+  // DesignDraftsController) — unlike putDraft/getDraft and the deleteMany-as-cleanup calls in
+  // create()/update() above (safe no-ops by design, not user-facing 404 surfaces), a
+  // caller-invoked delete of a foreign org's documentId is data-safe either way (the where-clause
+  // is already org-scoped, so it can never touch another org's row) but returning 200/{count:0}
+  // instead of 404 for a cross-tenant id contradicts both the plan's matrix ("A deletes B id →
+  // 404") and the assertOwns-first convention every other delete method in this codebase follows.
+  // Confirm the row belongs to this org before deleting so the status code matches that
+  // convention.
   async removeDraft(orgId: string, documentId: string) {
+    await this.orgScoped.assertOwns(
+      () => this.prisma.designDraft.findFirst({ where: { documentId, organizationId: orgId } }),
+      'Draft not found',
+    );
     await this.prisma.designDraft.deleteMany({ where: { documentId, organizationId: orgId } });
   }
 }

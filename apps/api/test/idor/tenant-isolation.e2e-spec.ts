@@ -83,11 +83,21 @@ describe('Tenant isolation — end-to-end IDOR matrix', () => {
       expect(res.status).toBe(404);
     });
 
-    // Not GET /assets/:id — AssetsService.findOne() deliberately (found while writing this
-    // suite) only matches { id, organizationId: orgId }, no organizationId: null fallback, so it
-    // 404s on a shared asset for every tenant. The real "any tenant can read shared content" path
-    // is the dedicated library list/copy endpoints below — worth knowing if a future caller ever
-    // expects findOne() to resolve a shared id directly, but not something this suite changes.
+    // Found while writing this suite: AssetsService.findOne() only matched
+    // { id, organizationId: orgId } — no organizationId: null fallback — the one asset-visibility
+    // check in the codebase inconsistent with the documented tenant-owned-or-shared-library
+    // convention every other one follows (DesignsService.assertAssetsOwned, media resolution; see
+    // designer.md's own "batch-checked against tenant-owned-or-shared-library assets" note).
+    // Fixed in assets.service.ts (see its own comment) rather than worked around here.
+    it('B can read a platform-shared asset directly by id: success', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/v1/assets/${fixture.platform.sharedAssetId}`)
+        .set(auth(fixture.tenantB.viewer.token));
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(fixture.platform.sharedAssetId);
+    });
+
     it('B can list the platform-shared library and see the shared asset: success', async () => {
       const res = await request(app.getHttpServer()).get('/v1/assets/library').set(auth(fixture.tenantB.viewer.token));
 

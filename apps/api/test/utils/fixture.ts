@@ -29,6 +29,17 @@ export interface TenantFixture {
   designAssetId: string;
   buildingId: string;
   roomId: string;
+  layoutId: string;
+  themeId: string;
+  scheduleId: string;
+  powerScheduleId: string;
+  screenGroupId: string;
+  poiCategoryId: string;
+  floorId: string;
+  poiId: string;
+  routeNodeId: string;
+  routeNodeId2: string;
+  routeEdgeId: string;
 }
 
 export interface PlatformFixture {
@@ -72,6 +83,14 @@ async function createUser(prisma: PrismaClient, jwt: JwtService, orgId: string, 
 async function buildTenant(prisma: PrismaClient, jwt: JwtService, label: string): Promise<TenantFixture> {
   const slug = `fixture-${label.toLowerCase()}-${uniqueSuffix()}`;
   const org = await prisma.organization.create({ data: { name: `Fixture ${label}`, slug } });
+
+  // Wayfinding/Room Booking routes are entitlement-gated (EntitlementGuard) on top of ownership —
+  // without this, every wayfinding/room IDOR test below would 403 on the module check before
+  // ever reaching the ownership check this suite exists to exercise.
+  await Promise.all([
+    prisma.tenantModule.create({ data: { organizationId: org.id, moduleKey: 'WAYFINDING', status: 'ACTIVE' } }),
+    prisma.tenantModule.create({ data: { organizationId: org.id, moduleKey: 'ROOM_BOOKING', status: 'ACTIVE' } }),
+  ]);
 
   const [owner, admin, editor, viewer] = await Promise.all([
     createUser(prisma, jwt, org.id, 'OWNER'),
@@ -120,6 +139,42 @@ async function buildTenant(prisma: PrismaClient, jwt: JwtService, label: string)
   const screenToken = jwt.sign({ sub: screen.id, orgId: org.id, type: 'screen' });
   await prisma.screen.update({ where: { id: screen.id }, data: { playerToken: screenToken } });
 
+  const layout = await prisma.layout.create({ data: { organizationId: org.id, name: `${label} Layout` } });
+
+  const theme = await prisma.theme.create({
+    data: { organizationId: org.id, name: `${label} Theme`, palette: {}, typography: {}, elements: [] },
+  });
+
+  const schedule = await prisma.schedule.create({
+    data: { organizationId: org.id, name: `${label} Schedule`, playlistId: playlist.id, screenId: screen.id, daysOfWeek: [] },
+  });
+
+  const screenGroup = await prisma.screenGroup.create({ data: { organizationId: org.id, name: `${label} Group` } });
+
+  const powerSchedule = await prisma.powerSchedule.create({
+    data: { organizationId: org.id, screenId: screen.id, startTime: '08:00', endTime: '18:00', daysOfWeek: [] },
+  });
+
+  const poiCategory = await prisma.poiCategory.create({
+    data: { organizationId: org.id, label: `${label} Category`, icon: 'pin', color: '#000000' },
+  });
+
+  const floor = await prisma.floor.create({
+    data: { buildingId: building.id, organizationId: org.id, level: 1, label: `${label} Floor 1` },
+  });
+
+  const poi = await prisma.poi.create({
+    data: { floorId: floor.id, organizationId: org.id, categoryId: poiCategory.id, name: `${label} POI`, x: 10, y: 10 },
+  });
+
+  const [routeNode1, routeNode2] = await Promise.all([
+    prisma.routeNode.create({ data: { floorId: floor.id, organizationId: org.id, x: 0, y: 0 } }),
+    prisma.routeNode.create({ data: { floorId: floor.id, organizationId: org.id, x: 50, y: 50 } }),
+  ]);
+  const routeEdge = await prisma.routeEdge.create({
+    data: { fromNodeId: routeNode1.id, toNodeId: routeNode2.id, organizationId: org.id, weight: 1 },
+  });
+
   return {
     orgId: org.id,
     slug,
@@ -134,6 +189,17 @@ async function buildTenant(prisma: PrismaClient, jwt: JwtService, label: string)
     designAssetId: designAsset.id,
     buildingId: building.id,
     roomId: room.id,
+    layoutId: layout.id,
+    themeId: theme.id,
+    scheduleId: schedule.id,
+    powerScheduleId: powerSchedule.id,
+    screenGroupId: screenGroup.id,
+    poiCategoryId: poiCategory.id,
+    floorId: floor.id,
+    poiId: poi.id,
+    routeNodeId: routeNode1.id,
+    routeNodeId2: routeNode2.id,
+    routeEdgeId: routeEdge.id,
   };
 }
 
