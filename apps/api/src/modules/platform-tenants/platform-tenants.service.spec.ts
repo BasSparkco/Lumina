@@ -11,17 +11,45 @@ function makeService(overrides: { prisma?: Record<string, unknown>; entitlements
     organization: {
       findUnique: jest.fn().mockResolvedValue(null),
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
       update: jest.fn(),
     },
     screen: {
       findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     user: {
       findUnique: jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    orgInvite: {
+      groupBy: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    asset: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    playlist: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    designAsset: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    bookableRoom: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    building: {
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
+    auditLog: {
+      groupBy: jest.fn().mockResolvedValue([]),
     },
     platformAuditLog: {
       findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
     },
     $transaction: jest.fn((fn: (tx: unknown) => unknown) =>
       fn({
@@ -463,25 +491,28 @@ describe('PlatformTenantsService.listAuditLog (P6a)', () => {
     );
   });
 
-  it('caps an oversized requested limit at 200', async () => {
+  it('caps an oversized requested pageSize at 100 (P6b)', async () => {
     const { service, prisma } = makeService({
       prisma: { organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org_1' }) } },
     });
 
-    await service.listAuditLog('org_1', 10_000);
+    await service.listAuditLog('org_1', { pageSize: 10_000 });
 
-    expect(prisma.platformAuditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 200 }));
+    expect(prisma.platformAuditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
   });
 });
 
 describe('PlatformTenantsService.detail — owner identity and suspension reason (P6a)', () => {
   it('includes the tenant\'s suspension reason and longest-standing OWNER in the response', async () => {
-    const { service, prisma } = makeService({
+    const { service } = makeService({
       prisma: {
         organization: {
           findUnique: jest.fn().mockResolvedValue({ id: 'org_1', name: 'Acme', slug: 'acme', status: 'SUSPENDED', suspensionReason: 'Non-payment', createdAt: new Date() }),
         },
-        user: { findFirst: jest.fn().mockResolvedValue({ id: 'user_1', email: 'owner@acme.com', name: 'Owner' }) },
+        user: {
+          findMany: jest.fn().mockResolvedValue([{ id: 'user_1', email: 'owner@acme.com', name: 'Owner', organizationId: 'org_1' }]),
+          groupBy: jest.fn().mockResolvedValue([]),
+        },
       },
     });
 
@@ -489,5 +520,143 @@ describe('PlatformTenantsService.detail — owner identity and suspension reason
 
     expect(result.suspensionReason).toBe('Non-payment');
     expect(result.owner).toEqual({ id: 'user_1', email: 'owner@acme.com', name: 'Owner' });
+  });
+});
+
+// P6b (docs/tenant_isolation_and_platform_admin_plan.md §"Tenant list") — pagination/search/
+// filter/sort plumbing, and the aggregate usage-summary math it's built on.
+describe('PlatformTenantsService.list — pagination, search, filters, sort (P6b)', () => {
+  it('defaults to page 1 / pageSize 25 / name ascending', async () => {
+    const { service, prisma } = makeService();
+
+    await service.list();
+
+    expect(prisma.organization.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: {}, orderBy: { name: 'asc' }, skip: 0, take: 25 }),
+    );
+    expect(prisma.organization.count).toHaveBeenCalledWith({ where: {} });
+  });
+
+  it('builds search/status/moduleKey filters and honors sort/page/pageSize', async () => {
+    const { service, prisma } = makeService();
+
+    await service.list({ search: 'acme', status: 'SUSPENDED', moduleKey: 'WAYFINDING', sortBy: 'createdAt', sortDir: 'desc', page: 3, pageSize: 10 });
+
+    expect(prisma.organization.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: 'SUSPENDED',
+          OR: [{ name: { contains: 'acme', mode: 'insensitive' } }, { slug: { contains: 'acme', mode: 'insensitive' } }],
+          tenantModules: { some: { moduleKey: 'WAYFINDING', status: { not: 'DISABLED' } } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: 20,
+        take: 10,
+      }),
+    );
+  });
+
+  it('clamps an oversized pageSize to 100', async () => {
+    const { service, prisma } = makeService();
+
+    await service.list({ pageSize: 10_000 });
+
+    expect(prisma.organization.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 100 }));
+  });
+
+  it('merges every grouped aggregate onto the correct tenant, never N+1 per-tenant queries', async () => {
+    const now = new Date();
+    const { service } = makeService({
+      prisma: {
+        organization: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'org_a', name: 'A', slug: 'a', status: 'ACTIVE', createdAt: now, tenantModules: [] },
+            { id: 'org_b', name: 'B', slug: 'b', status: 'ACTIVE', createdAt: now, tenantModules: [] },
+          ]),
+          count: jest.fn().mockResolvedValue(2),
+        },
+        screen: {
+          groupBy: jest.fn((args: { by: string[] }) =>
+            args.by.includes('status')
+              ? Promise.resolve([
+                  { organizationId: 'org_a', status: 'ONLINE', _count: 3 },
+                  { organizationId: 'org_a', status: 'OFFLINE', _count: 1 },
+                ])
+              : Promise.resolve([{ organizationId: 'org_a', _max: { lastSeenAt: now } }]),
+          ),
+        },
+        user: {
+          findMany: jest.fn().mockResolvedValue([]),
+          groupBy: jest.fn().mockResolvedValue([{ organizationId: 'org_a', _count: 5 }]),
+        },
+        orgInvite: {
+          groupBy: jest.fn().mockResolvedValue([{ organizationId: 'org_a', _count: 2 }]),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        asset: { groupBy: jest.fn().mockResolvedValue([{ organizationId: 'org_a', _count: 10, _sum: { sizeBytes: BigInt(2048) } }]) },
+      },
+    });
+
+    const result = await service.list();
+
+    const orgA = result.items.find((i) => i.id === 'org_a')!;
+    const orgB = result.items.find((i) => i.id === 'org_b')!;
+    expect(orgA.usage.screens).toEqual({ total: 4, online: 3, offline: 1 });
+    expect(orgA.usage.members).toEqual({ active: 5, pendingInvites: 2 });
+    expect(orgA.usage.storage).toEqual({ assetsCount: 10, bytes: 2048 });
+    expect(orgB.usage.screens).toEqual({ total: 0, online: 0, offline: 0 });
+    expect(orgB.usage.storage).toEqual({ assetsCount: 0, bytes: 0 });
+  });
+
+  it('flags SUSPENDED, NO_OWNER, MODULE_EXPIRING_SOON, and SCREENS_OFFLINE alerts', async () => {
+    const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days out, inside the 14-day warning window
+    const { service } = makeService({
+      prisma: {
+        organization: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'org_a',
+              name: 'A',
+              slug: 'a',
+              status: 'SUSPENDED',
+              createdAt: new Date(),
+              tenantModules: [{ moduleKey: 'WAYFINDING', status: 'TRIAL', expiresAt: soon }],
+            },
+          ]),
+          count: jest.fn().mockResolvedValue(1),
+        },
+        screen: {
+          groupBy: jest.fn((args: { by: string[] }) =>
+            args.by.includes('status')
+              ? Promise.resolve([{ organizationId: 'org_a', status: 'OFFLINE', _count: 2 }])
+              : Promise.resolve([]),
+          ),
+        },
+      },
+    });
+
+    const result = await service.list();
+
+    expect(result.items[0]!.alerts.sort()).toEqual(['MODULE_EXPIRING_SOON', 'NO_OWNER', 'SCREENS_OFFLINE', 'SUSPENDED'].sort());
+    expect(result.items[0]!.expiringModules).toEqual(['WAYFINDING']);
+  });
+
+  it('does not flag NO_OWNER when a pending owner invite exists', async () => {
+    const { service } = makeService({
+      prisma: {
+        organization: {
+          findMany: jest.fn().mockResolvedValue([{ id: 'org_a', name: 'A', slug: 'a', status: 'ACTIVE', createdAt: new Date(), tenantModules: [] }]),
+          count: jest.fn().mockResolvedValue(1),
+        },
+        orgInvite: {
+          groupBy: jest.fn().mockResolvedValue([]),
+          findMany: jest.fn().mockResolvedValue([{ organizationId: 'org_a' }]),
+        },
+      },
+    });
+
+    const result = await service.list();
+
+    expect(result.items[0]!.alerts).not.toContain('NO_OWNER');
   });
 });

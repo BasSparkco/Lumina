@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { OrganizationStatus } from '@lumina/types';
-import type { UserRole } from '@lumina/db';
+import type { Prisma, UserRole } from '@lumina/db';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PlatformAuditService } from '../platform-audit/platform-audit.service';
 import { EntitlementsService, type ModuleAssignmentInput } from '../entitlements/entitlements.service';
@@ -13,6 +13,37 @@ interface CreateTenantInput {
   slug: string;
   ownerEmail: string;
   modules: ModuleAssignmentInput[];
+}
+
+// P6b (docs/tenant_isolation_and_platform_admin_plan.md §"Tenant list") — server-side pagination,
+// search, sort, and filters, so the list scales past a handful of tenants without shipping every
+// row to the browser.
+export interface TenantListOptions {
+  search?: string;
+  status?: OrganizationStatus;
+  moduleKey?: string;
+  sortBy?: 'name' | 'createdAt' | 'status';
+  sortDir?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+// A module expiring within this window surfaces as an alert/warning on the tenant list and
+// detail page, giving the Super Admin advance notice before a TRIAL/licensed module silently
+// lapses (EntitlementsService itself only reacts once `expiresAt` has actually passed).
+const MODULE_EXPIRY_WARNING_DAYS = 14;
+
+interface TenantUsageSummary {
+  members: { active: number; pendingInvites: number };
+  owner: { id: string; name: string; email: string } | null;
+  pendingOwnerInvite: boolean;
+  screens: { total: number; online: number; offline: number };
+  storage: { assetsCount: number; bytes: number };
+  content: { playlists: number; designs: number; rooms: number; buildings: number };
+  lastUserActivityAt: Date | null;
+  lastScreenHeartbeatAt: Date | null;
 }
 
 // Every mutating method below takes this optional, purely-for-audit context — never used for
@@ -38,34 +69,210 @@ export class PlatformTenantsService {
     private readonly gateway: ScreenGateway,
   ) {}
 
-  async list() {
-    const orgs = await this.prisma.organization.findMany({
-      include: { tenantModules: true },
-      orderBy: { name: 'asc' },
+  // P6b (docs/tenant_isolation_and_platform_admin_plan.md §"Tenant list") — every usage metric
+  // below is computed with one grouped aggregate query across the given org ids, never a
+  // per-tenant loop, so the list scales with page size, not fleet size. Shared by `list` (one page
+  // of tenants) and `detail` (a single tenant, as a one-element id list) so both read the exact
+  // same definitions instead of two independently-drifting implementations.
+  private async computeUsageSummaries(orgIds: string[]): Promise<Map<string, TenantUsageSummary>> {
+    const summaries = new Map<string, TenantUsageSummary>();
+    if (orgIds.length === 0) return summaries;
+    const where = { organizationId: { in: orgIds } };
+
+    const [screensByStatus, screenHeartbeat, owners, pendingInvites, pendingOwnerInvites, assetAgg, playlistCounts, designCounts, roomCounts, buildingCounts, lastActivity] =
+      await Promise.all([
+        this.prisma.screen.groupBy({ by: ['organizationId', 'status'], where, _count: true }),
+        this.prisma.screen.groupBy({ by: ['organizationId'], where, _max: { lastSeenAt: true } }),
+        // `role: 'OWNER'` isn't unique (a transfer briefly leaves two, P6a) — ordered ascending so
+        // the first row seen per org below is the longest-standing owner, matching the single-
+        // tenant `detail()` lookup this replaces.
+        this.prisma.user.findMany({
+          where: { organizationId: { in: orgIds }, role: 'OWNER' },
+          select: { id: true, name: true, email: true, organizationId: true },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.orgInvite.groupBy({ by: ['organizationId'], where: { ...where, acceptedAt: null, expiresAt: { gt: new Date() } }, _count: true }),
+        this.prisma.orgInvite.findMany({
+          where: { organizationId: { in: orgIds }, role: 'OWNER', acceptedAt: null, expiresAt: { gt: new Date() } },
+          select: { organizationId: true },
+        }),
+        this.prisma.asset.groupBy({ by: ['organizationId'], where, _count: true, _sum: { sizeBytes: true } }),
+        this.prisma.playlist.groupBy({ by: ['organizationId'], where, _count: true }),
+        this.prisma.designAsset.groupBy({ by: ['organizationId'], where: { ...where, deletedAt: null }, _count: true }),
+        this.prisma.bookableRoom.groupBy({ by: ['organizationId'], where, _count: true }),
+        this.prisma.building.groupBy({ by: ['organizationId'], where, _count: true }),
+        this.prisma.auditLog.groupBy({ by: ['organizationId'], where, _max: { createdAt: true } }),
+      ]);
+
+    const ownerByOrg = new Map<string, { id: string; name: string; email: string }>();
+    for (const o of owners) if (!ownerByOrg.has(o.organizationId)) ownerByOrg.set(o.organizationId, { id: o.id, name: o.name, email: o.email });
+    const pendingOwnerOrgIds = new Set(pendingOwnerInvites.map((i) => i.organizationId));
+    const screensByOrg = new Map<string, { total: number; online: number; offline: number }>();
+    for (const row of screensByStatus) {
+      const cur = screensByOrg.get(row.organizationId) ?? { total: 0, online: 0, offline: 0 };
+      cur.total += row._count;
+      if (row.status === 'ONLINE') cur.online = row._count;
+      else cur.offline = row._count;
+      screensByOrg.set(row.organizationId, cur);
+    }
+    const heartbeatByOrg = new Map(screenHeartbeat.map((r) => [r.organizationId, r._max.lastSeenAt]));
+    const pendingInvitesByOrg = new Map(pendingInvites.map((r) => [r.organizationId, r._count]));
+    const assetByOrg = new Map(assetAgg.map((r) => [r.organizationId, { count: r._count, bytes: Number(r._sum.sizeBytes ?? 0) }]));
+    const playlistByOrg = new Map(playlistCounts.map((r) => [r.organizationId, r._count]));
+    const designByOrg = new Map(designCounts.map((r) => [r.organizationId, r._count]));
+    const roomByOrg = new Map(roomCounts.map((r) => [r.organizationId, r._count]));
+    const buildingByOrg = new Map(buildingCounts.map((r) => [r.organizationId, r._count]));
+    const lastActivityByOrg = new Map(lastActivity.map((r) => [r.organizationId, r._max.createdAt]));
+
+    for (const orgId of orgIds) {
+      summaries.set(orgId, {
+        members: { active: 0, pendingInvites: pendingInvitesByOrg.get(orgId) ?? 0 },
+        owner: ownerByOrg.get(orgId) ?? null,
+        pendingOwnerInvite: pendingOwnerOrgIds.has(orgId),
+        screens: screensByOrg.get(orgId) ?? { total: 0, online: 0, offline: 0 },
+        storage: { assetsCount: assetByOrg.get(orgId)?.count ?? 0, bytes: assetByOrg.get(orgId)?.bytes ?? 0 },
+        content: {
+          playlists: playlistByOrg.get(orgId) ?? 0,
+          designs: designByOrg.get(orgId) ?? 0,
+          rooms: roomByOrg.get(orgId) ?? 0,
+          buildings: buildingByOrg.get(orgId) ?? 0,
+        },
+        lastUserActivityAt: lastActivityByOrg.get(orgId) ?? null,
+        lastScreenHeartbeatAt: heartbeatByOrg.get(orgId) ?? null,
+      });
+    }
+
+    // Active-member counts come from a separate groupBy (not folded into Promise.all above)
+    // because it has no `where` filter in common with the others — every org in `orgIds` gets a
+    // count here, whereas the calls above only ever needed a WHERE org IN (...).
+    const memberCounts = await this.prisma.user.groupBy({ by: ['organizationId'], where, _count: true });
+    for (const row of memberCounts) {
+      const s = summaries.get(row.organizationId);
+      if (s) s.members.active = row._count;
+    }
+
+    return summaries;
+  }
+
+  private moduleExpiryWarnings(modules: { key: string; status: string; expiresAt: Date | string | null }[]): string[] {
+    const warnAfter = Date.now() + MODULE_EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000;
+    return modules
+      .filter((m) => {
+        if (m.status === 'DISABLED' || !m.expiresAt) return false;
+        const expiresAtMs = new Date(m.expiresAt).getTime();
+        return expiresAtMs <= warnAfter && expiresAtMs > Date.now();
+      })
+      .map((m) => m.key);
+  }
+
+  private tenantAlerts(status: OrganizationStatus, summary: TenantUsageSummary, expiringModules: string[]): string[] {
+    const alerts: string[] = [];
+    if (status === 'SUSPENDED') alerts.push('SUSPENDED');
+    if (!summary.owner && !summary.pendingOwnerInvite) alerts.push('NO_OWNER');
+    if (expiringModules.length > 0) alerts.push('MODULE_EXPIRING_SOON');
+    // Fleet fully dark, not just one offline screen among many — a single unplugged display isn't
+    // worth surfacing at the tenant-list level, an entirely unreachable fleet is.
+    if (summary.screens.total > 0 && summary.screens.online === 0) alerts.push('SCREENS_OFFLINE');
+    return alerts;
+  }
+
+  // P6b §"Tenant list" — server-side pagination/search/sort/filters plus the per-tenant summary
+  // columns the plan calls for, all computed via computeUsageSummaries above rather than N+1
+  // per-tenant queries.
+  async list(opts: TenantListOptions = {}) {
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, opts.pageSize ?? DEFAULT_PAGE_SIZE));
+    const where: Prisma.OrganizationWhereInput = {
+      ...(opts.status ? { status: opts.status } : {}),
+      ...(opts.search?.trim() ? { OR: [{ name: { contains: opts.search.trim(), mode: 'insensitive' } }, { slug: { contains: opts.search.trim(), mode: 'insensitive' } }] } : {}),
+      ...(opts.moduleKey ? { tenantModules: { some: { moduleKey: opts.moduleKey, status: { not: 'DISABLED' } } } } : {}),
+    };
+    const sortBy = opts.sortBy ?? 'name';
+    const sortDir = opts.sortDir ?? 'asc';
+
+    const [total, orgs] = await Promise.all([
+      this.prisma.organization.count({ where }),
+      this.prisma.organization.findMany({
+        where,
+        include: { tenantModules: true },
+        orderBy: { [sortBy]: sortDir },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const summaries = await this.computeUsageSummaries(orgs.map((o) => o.id));
+
+    const items = orgs.map((org) => {
+      const summary = summaries.get(org.id)!;
+      const modules = org.tenantModules.map((m) => ({ key: m.moduleKey, status: m.status, expiresAt: m.expiresAt }));
+      const expiringModules = this.moduleExpiryWarnings(modules);
+      return {
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        status: org.status,
+        createdAt: org.createdAt,
+        modules,
+        expiringModules,
+        usage: summary,
+        alerts: this.tenantAlerts(org.status, summary, expiringModules),
+      };
     });
 
-    return orgs.map((org) => ({
-      id: org.id,
-      name: org.name,
-      slug: org.slug,
-      status: org.status,
-      createdAt: org.createdAt,
-      modules: org.tenantModules.map((m) => ({ key: m.moduleKey, status: m.status, expiresAt: m.expiresAt })),
-    }));
+    return { items, total, page, pageSize };
   }
 
   async detail(tenantId: string) {
     const org = await this.assertExists(tenantId);
     const capabilities = await this.entitlements.getCapabilities(tenantId);
-    // P6a §"Minimum tenant detail" task 1 — owner identity. `role: 'OWNER'` isn't unique (P6a
-    // explicitly allows a transfer to briefly leave two), so this reports the longest-standing one
-    // (`createdAt asc`) as "the" owner shown on this page — a display convenience, not an
-    // authorization decision (every actual owner action already loads the specific member by id).
-    const owner = await this.prisma.user.findFirst({
-      where: { organizationId: tenantId, role: 'OWNER' },
-      select: { id: true, email: true, name: true },
-      orderBy: { createdAt: 'asc' },
+    const summaries = await this.computeUsageSummaries([tenantId]);
+    const usage = summaries.get(tenantId)!;
+    const expiringModules = this.moduleExpiryWarnings(capabilities.modules);
+
+    // P6b §"Operational tenant detail" #2 ("Screens") — full per-screen operational state, not
+    // just the aggregate counts `usage.screens` already carries.
+    const screens = await this.prisma.screen.findMany({
+      where: { organizationId: tenantId },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        lastSeenAt: true,
+        syncState: true,
+        assetsTotal: true,
+        assetsReady: true,
+        assetsFailed: true,
+        cacheBytes: true,
+        freeStorageBytes: true,
+        storagePersistent: true,
+        streamingType: true,
+        paired: true,
+      },
     });
+
+    // P6b §"Operational tenant detail" #3 ("Content & storage") — counts/bytes by asset type;
+    // `usage.storage`/`usage.content` above already carry the cross-type totals shared with the
+    // list view, this adds the per-type breakdown that's only worth computing for one tenant.
+    const assetsByType = await this.prisma.asset.groupBy({
+      by: ['type'],
+      where: { organizationId: tenantId },
+      _count: true,
+      _sum: { sizeBytes: true },
+    });
+
+    // P6b §"Operational tenant detail" #4 ("Modules: ... usage counters") — how many of this
+    // tenant's screens actually exercise each player-facing module today, alongside P6a's existing
+    // entitlement controls. Screen.streamingType/wayfindingAiConfig are the same fields
+    // PlatformTenantsService.setModules already reads to decide which screens to reload on an
+    // entitlement change (see above) — reused here rather than re-deriving "which screens use
+    // module X" a second way.
+    const [wayfindingScreens, wayfindingAiScreens, roomBookingScreens] = await Promise.all([
+      this.prisma.screen.count({ where: { organizationId: tenantId, streamingType: 'WAYFINDING' } }),
+      this.prisma.screen.count({ where: { organizationId: tenantId, streamingType: 'WAYFINDING', wayfindingAiConfig: { isNot: null } } }),
+      this.prisma.screen.count({ where: { organizationId: tenantId, streamingType: 'ROOM_BOOKING' } }),
+    ]);
 
     return {
       id: org.id,
@@ -74,8 +281,16 @@ export class PlatformTenantsService {
       status: org.status,
       suspensionReason: org.suspensionReason,
       createdAt: org.createdAt,
-      owner,
+      owner: usage.owner,
       capabilities,
+      usage,
+      expiringModules,
+      alerts: this.tenantAlerts(org.status, usage, expiringModules),
+      screens,
+      content: {
+        byAssetType: assetsByType.map((r) => ({ type: r.type, count: r._count, bytes: Number(r._sum.sizeBytes ?? 0) })),
+      },
+      moduleUsage: { WAYFINDING: wayfindingScreens, WAYFINDING_AI: wayfindingAiScreens, ROOM_BOOKING: roomBookingScreens },
     };
   }
 
@@ -378,14 +593,30 @@ export class PlatformTenantsService {
   // until now. Actor is included (name/email) so the dashboard doesn't need a second lookup per
   // row; deliberately not exposing the actor's own organizationId here (a platform actor's own
   // tenant membership is Super-Admin-internal, not this tenant's business).
-  async listAuditLog(tenantId: string, limit = 100) {
+  // P6b §"Operational tenant detail" #5 ("Audit and activity: filterable ... with server-side
+  // pagination") — page/pageSize replace the old flat `limit`; `action` narrows by a
+  // case-insensitive substring match against the dot-namespaced action string (e.g.
+  // "tenant.member" matches every member-related action) so the Super Admin can filter without
+  // needing to know the exact action name.
+  async listAuditLog(tenantId: string, opts: { page?: number; pageSize?: number; action?: string } = {}) {
     await this.assertExists(tenantId);
-    return this.prisma.platformAuditLog.findMany({
-      where: { targetOrganizationId: tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(limit, 200),
-      include: { actor: { select: { id: true, name: true, email: true } } },
-    });
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, opts.pageSize ?? DEFAULT_PAGE_SIZE));
+    const where: Prisma.PlatformAuditLogWhereInput = {
+      targetOrganizationId: tenantId,
+      ...(opts.action?.trim() ? { action: { contains: opts.action.trim(), mode: 'insensitive' } } : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.platformAuditLog.count({ where }),
+      this.prisma.platformAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { actor: { select: { id: true, name: true, email: true } } },
+      }),
+    ]);
+    return { items, total, page, pageSize };
   }
 
   private async assertExists(tenantId: string) {

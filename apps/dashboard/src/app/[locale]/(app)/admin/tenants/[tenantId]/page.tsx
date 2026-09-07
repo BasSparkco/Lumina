@@ -3,11 +3,12 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Link2, Pencil, ShieldOff, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Link2, Monitor, Pencil, ShieldOff, X } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
-import { platformTenantsApi, type UserRole } from '@/lib/api';
+import { platformTenantsApi, type TenantAlert, type UserRole } from '@/lib/api';
 import { ModuleAssignmentsEditor, defaultModuleAssignments, findDependencyErrors, type ModuleAssignmentDraft } from '@/components/ModuleAssignmentsEditor';
+import { formatBytes } from '@/lib/formatBytes';
 import type { OrganizationStatus } from '@lumina/types';
 
 const inputClass =
@@ -18,7 +19,41 @@ const STATUS_STYLES: Record<OrganizationStatus, string> = {
   SUSPENDED: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400',
 };
 
+const SCREEN_STATUS_STYLES: Record<'ONLINE' | 'OFFLINE', string> = {
+  ONLINE: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+  OFFLINE: 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]',
+};
+
 const ROLES: UserRole[] = ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER'];
+const AUDIT_PAGE_SIZE = 25;
+
+function StatTile({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-[var(--deck-glass-border)] p-3">
+      <div className="text-xs text-[var(--deck-text-mid)]">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-[var(--deck-text-hi)]">{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-[var(--deck-text-low)]">{sub}</div>}
+    </div>
+  );
+}
+
+function AlertBadges({ alerts }: { alerts: TenantAlert[] }) {
+  const t = useTranslations('adminTenants');
+  const visible = alerts.filter((a) => a !== 'SUSPENDED');
+  if (visible.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((a) => (
+        <span
+          key={a}
+          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-400"
+        >
+          <AlertTriangle className="h-3 w-3" /> {t(`alerts.${a}`)}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function AdminTenantDetailPage({ params }: { params: Promise<{ tenantId: string }> }) {
   const { tenantId } = use(params);
@@ -44,11 +79,16 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
     queryFn: () => platformTenantsApi.listInvites(tenantId),
     enabled: canRender,
   });
-  const { data: auditEntries } = useQuery({
-    queryKey: ['admin-tenants', tenantId, 'audit'],
-    queryFn: () => platformTenantsApi.listAuditLog(tenantId),
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditFilter, setAuditFilter] = useState('');
+  const { data: auditResult } = useQuery({
+    queryKey: ['admin-tenants', tenantId, 'audit', auditPage, auditFilter],
+    queryFn: () => platformTenantsApi.listAuditLog(tenantId, { page: auditPage, pageSize: AUDIT_PAGE_SIZE, action: auditFilter.trim() || undefined }),
     enabled: canRender,
+    placeholderData: (prev) => prev,
   });
+  const auditEntries = auditResult?.items ?? [];
+  const auditTotalPages = Math.max(1, Math.ceil((auditResult?.total ?? 0) / AUDIT_PAGE_SIZE));
 
   const [modules, setModules] = useState<ModuleAssignmentDraft[] | null>(null);
   const draft = modules ?? (tenant ? defaultModuleAssignments(tenant.capabilities.modules) : []);
@@ -152,7 +192,7 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
   if (!canRender) return null;
 
   return (
-    <div className="mx-auto max-w-3xl p-8">
+    <div className="mx-auto max-w-4xl p-8">
       <Link href={`/${locale}/admin/tenants`} className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]">
         <ArrowLeft className="h-3.5 w-3.5" /> {t('backToTenants')}
       </Link>
@@ -175,7 +215,10 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[tenant.status]}`}>{t(`tenantStatus.${tenant.status}`)}</span>
+              <div className="flex flex-col items-end gap-1">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[tenant.status]}`}>{t(`tenantStatus.${tenant.status}`)}</span>
+                <AlertBadges alerts={tenant.alerts} />
+              </div>
               <button
                 onClick={toggleStatus}
                 disabled={statusMut.isPending}
@@ -196,9 +239,92 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
           )}
           {tenant.status !== 'SUSPENDED' && <div className="mb-6" />}
 
+          {/* P6b (docs/tenant_isolation_and_platform_admin_plan.md §"Operational tenant detail") */}
+          <section className="mb-8 rounded-xl border border-[var(--deck-glass-border)] p-4">
+            <h2 className="mb-3 text-sm font-semibold text-[var(--deck-text-hi)]">{t('overviewSection')}</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatTile
+                label={t('overviewScreens')}
+                value={`${tenant.usage.screens.online}/${tenant.usage.screens.total}`}
+                sub={`${tenant.usage.screens.online} ${t('overviewOnline')} · ${tenant.usage.screens.offline} ${t('overviewOffline')}`}
+              />
+              <StatTile label={t('columnMembers')} value={tenant.usage.members.active} sub={tenant.usage.members.pendingInvites > 0 ? `+${tenant.usage.members.pendingInvites}` : undefined} />
+              <StatTile label={t('overviewAssets')} value={tenant.usage.storage.assetsCount} />
+              <StatTile label={t('overviewStorage')} value={formatBytes(tenant.usage.storage.bytes)} />
+              <StatTile label={t('overviewPlaylists')} value={tenant.usage.content.playlists} />
+              <StatTile label={t('overviewDesigns')} value={tenant.usage.content.designs} />
+              <StatTile label={t('overviewRooms')} value={tenant.usage.content.rooms} />
+              <StatTile label={t('overviewBuildings')} value={tenant.usage.content.buildings} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--deck-text-mid)]">
+              <span>
+                {t('lastUserActivity')}: {tenant.usage.lastUserActivityAt ? new Date(tenant.usage.lastUserActivityAt).toLocaleString(locale) : t('never')}
+              </span>
+              <span>
+                {t('lastScreenHeartbeat')}: {tenant.usage.lastScreenHeartbeatAt ? new Date(tenant.usage.lastScreenHeartbeatAt).toLocaleString(locale) : t('never')}
+              </span>
+            </div>
+          </section>
+
+          <section className="mb-8 rounded-xl border border-[var(--deck-glass-border)] p-4">
+            <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-[var(--deck-text-hi)]">
+              <Monitor className="h-3.5 w-3.5" /> {t('screensSection')}
+            </h2>
+            {tenant.screens.length === 0 ? (
+              <p className="text-xs text-[var(--deck-text-low)]">{t('noScreens')}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="mt-2 w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[var(--deck-text-low)]">
+                      <th className="pb-1 pe-2 font-medium">{t('screenName')}</th>
+                      <th className="pb-1 pe-2 font-medium">{t('screenStatus')}</th>
+                      <th className="pb-1 pe-2 font-medium">{t('screenLastSeen')}</th>
+                      <th className="pb-1 pe-2 font-medium">{t('screenSync')}</th>
+                      <th className="pb-1 font-medium">{t('screenStorage')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tenant.screens.map((s) => (
+                      <tr key={s.id} className="border-t border-[var(--deck-glass-border)]">
+                        <td className="py-2 pe-2 font-medium text-[var(--deck-text-hi)]">{s.name}</td>
+                        <td className="py-2 pe-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SCREEN_STATUS_STYLES[s.status]}`}>{s.status}</span>
+                        </td>
+                        <td className="py-2 pe-2 text-[var(--deck-text-mid)]">{s.lastSeenAt ? new Date(s.lastSeenAt).toLocaleString(locale) : t('never')}</td>
+                        <td className="py-2 pe-2 text-[var(--deck-text-mid)]">{s.syncState}</td>
+                        <td className="py-2 text-[var(--deck-text-mid)]">{formatBytes(Number(s.cacheBytes))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="mb-8 rounded-xl border border-[var(--deck-glass-border)] p-4">
+            <h2 className="mb-3 text-sm font-semibold text-[var(--deck-text-hi)]">{t('contentStorageSection')}</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {tenant.content.byAssetType.map((row) => (
+                <StatTile key={row.type} label={t(`assetType.${row.type}`)} value={row.count} sub={formatBytes(row.bytes)} />
+              ))}
+            </div>
+          </section>
+
           <section className="mb-8 rounded-xl border border-[var(--deck-glass-border)] p-4">
             <h2 className="mb-3 text-sm font-semibold text-[var(--deck-text-hi)]">{t('modules')}</h2>
             <ModuleAssignmentsEditor value={draft} onChange={setModules} />
+            {/* P6b — "usage counters" alongside P6a's entitlement controls: how many of this
+                tenant's screens actually exercise each player-facing module today. */}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--deck-text-low)]">
+              {(['WAYFINDING', 'WAYFINDING_AI', 'ROOM_BOOKING'] as const).map((key) =>
+                tenant.moduleUsage[key] > 0 ? (
+                  <span key={key}>
+                    {t(`moduleNames.${key}`)}: {t('moduleUsageHint', { count: tenant.moduleUsage[key] })}
+                  </span>
+                ) : null,
+              )}
+            </div>
             {modulesMut.error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{(modulesMut.error as Error).message}</p>}
             <div className="mt-3 flex justify-end gap-2">
               {modules && (
@@ -347,30 +473,62 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
           </section>
 
           <section className="rounded-xl border border-[var(--deck-glass-border)] p-4">
-            <h2 className="mb-1 text-sm font-semibold text-[var(--deck-text-hi)]">{t('auditSection')}</h2>
-            {!auditEntries?.length ? (
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-[var(--deck-text-hi)]">{t('auditSection')}</h2>
+              <input
+                value={auditFilter}
+                onChange={(e) => {
+                  setAuditFilter(e.target.value);
+                  setAuditPage(1);
+                }}
+                placeholder={t('auditFilterPlaceholder')}
+                className={`${inputClass} w-48 py-1`}
+              />
+            </div>
+            {!auditEntries.length ? (
               <p className="text-xs text-[var(--deck-text-low)]">{t('noAuditEntries')}</p>
             ) : (
-              <table className="mt-2 w-full text-left text-xs">
-                <thead>
-                  <tr className="text-[var(--deck-text-low)]">
-                    <th className="pb-1 font-medium">{t('auditWhen')}</th>
-                    <th className="pb-1 font-medium">{t('auditActor')}</th>
-                    <th className="pb-1 font-medium">{t('auditAction')}</th>
-                    <th className="pb-1 font-medium">{t('auditReason')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditEntries.map((entry) => (
-                    <tr key={entry.id} className="border-t border-[var(--deck-glass-border)]">
-                      <td className="py-2 pe-2 whitespace-nowrap text-[var(--deck-text-mid)]">{new Date(entry.createdAt).toLocaleString(locale)}</td>
-                      <td className="py-2 pe-2 text-[var(--deck-text-hi)]">{entry.actor?.name ?? t('platformSuperAdmin')}</td>
-                      <td className="py-2 pe-2 font-mono text-[var(--deck-text-hi)]">{entry.action}</td>
-                      <td className="py-2 text-[var(--deck-text-mid)]">{entry.reason ?? '—'}</td>
+              <>
+                <table className="mt-2 w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-[var(--deck-text-low)]">
+                      <th className="pb-1 font-medium">{t('auditWhen')}</th>
+                      <th className="pb-1 font-medium">{t('auditActor')}</th>
+                      <th className="pb-1 font-medium">{t('auditAction')}</th>
+                      <th className="pb-1 font-medium">{t('auditReason')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {auditEntries.map((entry) => (
+                      <tr key={entry.id} className="border-t border-[var(--deck-glass-border)]">
+                        <td className="py-2 pe-2 whitespace-nowrap text-[var(--deck-text-mid)]">{new Date(entry.createdAt).toLocaleString(locale)}</td>
+                        <td className="py-2 pe-2 text-[var(--deck-text-hi)]">{entry.actor?.name ?? t('platformSuperAdmin')}</td>
+                        <td className="py-2 pe-2 font-mono text-[var(--deck-text-hi)]">{entry.action}</td>
+                        <td className="py-2 text-[var(--deck-text-mid)]">{entry.reason ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {auditTotalPages > 1 && (
+                  <div className="mt-3 flex items-center justify-end gap-2 text-xs text-[var(--deck-text-mid)]">
+                    <button
+                      onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+                      disabled={auditPage <= 1}
+                      className="rounded-lg border border-[var(--deck-glass-border)] px-2.5 py-1 font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
+                    >
+                      {t('prevPage')}
+                    </button>
+                    <span>{t('pageOf', { page: auditPage, totalPages: auditTotalPages })}</span>
+                    <button
+                      onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
+                      disabled={auditPage >= auditTotalPages}
+                      className="rounded-lg border border-[var(--deck-glass-border)] px-2.5 py-1 font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
+                    >
+                      {t('nextPage')}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </>

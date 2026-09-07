@@ -3,11 +3,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, X, Check, Link2, ChevronRight } from 'lucide-react';
+import { Plus, X, Check, Link2, ChevronRight, AlertTriangle, Search } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
-import { platformTenantsApi, type CreateTenantInput, type TenantSummary } from '@/lib/api';
+import { platformTenantsApi, type CreateTenantInput, type TenantSummary, type TenantAlert, type TenantListParams } from '@/lib/api';
 import { ModuleAssignmentsEditor, defaultModuleAssignments, findDependencyErrors, type ModuleAssignmentDraft } from '@/components/ModuleAssignmentsEditor';
+import { formatBytes } from '@/lib/formatBytes';
+import { MODULE_KEYS, type ModuleKey } from '@lumina/types';
 import type { OrganizationStatus } from '@lumina/types';
 
 const inputClass =
@@ -179,6 +181,30 @@ function ModuleSummary({ modules }: { modules: TenantSummary['modules'] }) {
   );
 }
 
+// P6b — surfaces the server-computed alert codes (SUSPENDED/NO_OWNER/MODULE_EXPIRING_SOON/
+// SCREENS_OFFLINE) as small badges, so an operator scanning the list doesn't have to open every
+// tenant to notice one needs attention. SUSPENDED is covered by the status pill already, so it's
+// not duplicated here.
+function AlertBadges({ alerts }: { alerts: TenantAlert[] }) {
+  const t = useTranslations('adminTenants');
+  const visible = alerts.filter((a) => a !== 'SUSPENDED');
+  if (visible.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((a) => (
+        <span
+          key={a}
+          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-400"
+        >
+          <AlertTriangle className="h-3 w-3" /> {t(`alerts.${a}`)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const PAGE_SIZE = 25;
+
 export default function AdminTenantsPage() {
   const locale = useLocale();
   const t = useTranslations('adminTenants');
@@ -187,12 +213,47 @@ export default function AdminTenantsPage() {
   const canRender = useRouteGuard(isSuperAdmin);
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data: tenants = [], isLoading } = useQuery({ queryKey: ['admin-tenants'], queryFn: platformTenantsApi.list, enabled: canRender });
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<OrganizationStatus | ''>('');
+  const [moduleKey, setModuleKey] = useState<ModuleKey | ''>('');
+  const [sortBy, setSortBy] = useState<TenantListParams['sortBy']>('name');
+  const [sortDir, setSortDir] = useState<TenantListParams['sortDir']>('asc');
+  const [page, setPage] = useState(1);
+
+  const params: TenantListParams = {
+    search: search.trim() || undefined,
+    status: status || undefined,
+    moduleKey: moduleKey || undefined,
+    sortBy,
+    sortDir,
+    page,
+    pageSize: PAGE_SIZE,
+  };
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-tenants', params],
+    queryFn: () => platformTenantsApi.list(params),
+    enabled: canRender,
+    placeholderData: (prev) => prev,
+  });
+  const tenants = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  function resetToFirstPage<T>(setter: (v: T) => void) {
+    return (v: T) => {
+      setter(v);
+      setPage(1);
+    };
+  }
+  const onSearchChange = resetToFirstPage(setSearch);
+  const onStatusChange = resetToFirstPage(setStatus);
+  const onModuleChange = resetToFirstPage(setModuleKey);
 
   if (!canRender) return null;
 
   return (
-    <div className="mx-auto max-w-5xl p-8">
+    <div className="mx-auto max-w-6xl p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
@@ -206,34 +267,104 @@ export default function AdminTenantsPage() {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--deck-glass-border)]">
-        <table className="w-full text-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--deck-text-low)]" />
+          <input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={t('search')}
+            className={`${inputClass} w-56 ps-8`}
+          />
+        </div>
+        <select value={status} onChange={(e) => onStatusChange(e.target.value as OrganizationStatus | '')} className={inputClass}>
+          <option value="">{t('allStatuses')}</option>
+          <option value="ACTIVE">{t('tenantStatus.ACTIVE')}</option>
+          <option value="SUSPENDED">{t('tenantStatus.SUSPENDED')}</option>
+        </select>
+        <select value={moduleKey} onChange={(e) => onModuleChange(e.target.value as ModuleKey | '')} className={inputClass}>
+          <option value="">{t('allModules')}</option>
+          {MODULE_KEYS.map((k) => (
+            <option key={k} value={k}>
+              {t(`moduleNames.${k}`)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as TenantListParams['sortBy'])}
+          className={inputClass}
+        >
+          <option value="name">{t('sortName')}</option>
+          <option value="createdAt">{t('sortCreated')}</option>
+        </select>
+        <button
+          onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+          title={sortDir}
+          className="rounded-lg border border-[var(--deck-glass-border)] px-2.5 py-1.5 text-xs font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)]"
+        >
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-[var(--deck-glass-border)]">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-[var(--deck-glass-fill-strong)] text-left text-xs uppercase tracking-wide text-[var(--deck-text-mid)]">
             <tr>
               <th className="px-4 py-2">{tc('name')}</th>
-              <th className="px-4 py-2">{t('slug')}</th>
               <th className="px-4 py-2">{t('statusLabel')}</th>
-              <th className="px-4 py-2">{t('modules')}</th>
               <th className="px-4 py-2">{t('created')}</th>
+              <th className="px-4 py-2">{t('columnOwner')}</th>
+              <th className="px-4 py-2">{t('columnMembers')}</th>
+              <th className="px-4 py-2">{t('columnScreens')}</th>
+              <th className="px-4 py-2">{t('columnStorage')}</th>
+              <th className="px-4 py-2">{t('modules')}</th>
               <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--deck-glass-border-soft)]">
-            {isLoading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--deck-text-low)]">{tc('loading')}</td></tr>
+            {isLoading && !data && (
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-[var(--deck-text-low)]">{tc('loading')}</td></tr>
             )}
             {!isLoading && tenants.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--deck-text-low)]">{t('empty')}</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-[var(--deck-text-low)]">{t('empty')}</td></tr>
             )}
             {tenants.map((tenant) => (
-              <tr key={tenant.id} className="text-[var(--deck-text-hi)]">
-                <td className="px-4 py-2 font-medium">{tenant.name}</td>
-                <td className="px-4 py-2 text-xs text-[var(--deck-text-mid)]">{tenant.slug}</td>
+              <tr key={tenant.id} className="align-top text-[var(--deck-text-hi)]">
                 <td className="px-4 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[tenant.status]}`}>{t(`tenantStatus.${tenant.status}`)}</span>
+                  <div className="font-medium">{tenant.name}</div>
+                  <div className="text-xs text-[var(--deck-text-mid)]">{tenant.slug}</div>
                 </td>
-                <td className="px-4 py-2"><ModuleSummary modules={tenant.modules} /></td>
+                <td className="px-4 py-2">
+                  <div className="flex flex-col gap-1">
+                    <span className={`w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLES[tenant.status]}`}>
+                      {t(`tenantStatus.${tenant.status}`)}
+                    </span>
+                    <AlertBadges alerts={tenant.alerts} />
+                  </div>
+                </td>
                 <td className="px-4 py-2 text-xs text-[var(--deck-text-mid)]">{new Date(tenant.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-2 text-xs">
+                  {tenant.usage.owner ? (
+                    <div>
+                      <div className="text-[var(--deck-text-hi)]">{tenant.usage.owner.name}</div>
+                      <div className="text-[var(--deck-text-mid)]">{tenant.usage.owner.email}</div>
+                    </div>
+                  ) : tenant.usage.pendingOwnerInvite ? (
+                    <span className="text-[var(--deck-text-mid)]">{t('pendingOwner')}</span>
+                  ) : (
+                    <span className="text-amber-600 dark:text-amber-400">{t('noOwnerShort')}</span>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-xs text-[var(--deck-text-mid)]">
+                  {tenant.usage.members.active}
+                  {tenant.usage.members.pendingInvites > 0 && <span className="ms-1 text-[var(--deck-text-low)]">(+{tenant.usage.members.pendingInvites})</span>}
+                </td>
+                <td className="px-4 py-2 text-xs text-[var(--deck-text-mid)]">
+                  {t('screensOnline', { online: tenant.usage.screens.online, total: tenant.usage.screens.total })}
+                </td>
+                <td className="px-4 py-2 text-xs text-[var(--deck-text-mid)]">{formatBytes(tenant.usage.storage.bytes)}</td>
+                <td className="px-4 py-2"><ModuleSummary modules={tenant.modules} /></td>
                 <td className="px-4 py-2 text-end">
                   <Link
                     href={`/${locale}/admin/tenants/${tenant.id}`}
@@ -247,6 +378,29 @@ export default function AdminTenantsPage() {
           </tbody>
         </table>
       </div>
+
+      {total > 0 && (
+        <div className="mt-3 flex items-center justify-between text-xs text-[var(--deck-text-mid)]">
+          <span>{t('showingOf', { shown: tenants.length, total })}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-lg border border-[var(--deck-glass-border)] px-2.5 py-1 font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
+            >
+              {t('prevPage')}
+            </button>
+            <span>{t('pageOf', { page, totalPages })}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-lg border border-[var(--deck-glass-border)] px-2.5 py-1 font-medium text-[var(--deck-text-hi)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
+            >
+              {t('nextPage')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showCreate && <CreateTenantModal onClose={() => setShowCreate(false)} />}
     </div>

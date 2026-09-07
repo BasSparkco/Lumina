@@ -33,8 +33,24 @@ export class PlatformTenantsController {
   constructor(private readonly tenants: PlatformTenantsService) {}
 
   @Get()
-  list() {
-    return this.tenants.list();
+  list(
+    @Query('search') search?: string,
+    @Query('status') status?: 'ACTIVE' | 'SUSPENDED',
+    @Query('moduleKey') moduleKey?: string,
+    @Query('sortBy') sortBy?: 'name' | 'createdAt' | 'status',
+    @Query('sortDir') sortDir?: 'asc' | 'desc',
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.tenants.list({
+      search,
+      status,
+      moduleKey,
+      sortBy,
+      sortDir,
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+    });
   }
 
   @Get(':tenantId')
@@ -128,7 +144,16 @@ export class PlatformTenantsController {
   }
 
   @Get(':tenantId/audit')
-  listAuditLog(@Param('tenantId') tenantId: string, @Query('limit') limit?: string) {
-    return this.tenants.listAuditLog(tenantId, limit ? Number(limit) : undefined);
+  listAuditLog(
+    @Param('tenantId') tenantId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('action') action?: string,
+  ) {
+    return this.tenants.listAuditLog(tenantId, {
+      page: page ? Number(page) : undefined,
+      pageSize: pageSize ? Number(pageSize) : undefined,
+      action,
+    });
   }
 }

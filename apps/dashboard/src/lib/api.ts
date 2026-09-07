@@ -142,6 +142,21 @@ export interface TenantModuleAssignment {
   status: TenantModuleStatus;
   expiresAt: string | null;
 }
+// P6b (docs/tenant_isolation_and_platform_admin_plan.md §"Tenant list") — server-computed
+// per-tenant usage, shared by the list and detail responses so both surfaces read the same
+// numbers. `alerts`/`expiringModules` are string codes the UI maps to copy, not free text — see
+// adminTenants.alerts.* in the locale files.
+export interface TenantUsageSummary {
+  members: { active: number; pendingInvites: number };
+  owner: { id: string; name: string; email: string } | null;
+  pendingOwnerInvite: boolean;
+  screens: { total: number; online: number; offline: number };
+  storage: { assetsCount: number; bytes: number };
+  content: { playlists: number; designs: number; rooms: number; buildings: number };
+  lastUserActivityAt: string | null;
+  lastScreenHeartbeatAt: string | null;
+}
+export type TenantAlert = 'SUSPENDED' | 'NO_OWNER' | 'MODULE_EXPIRING_SOON' | 'SCREENS_OFFLINE';
 export interface TenantSummary {
   id: string;
   name: string;
@@ -149,6 +164,40 @@ export interface TenantSummary {
   status: OrganizationStatus;
   createdAt: string;
   modules: TenantModuleAssignment[];
+  expiringModules: string[];
+  usage: TenantUsageSummary;
+  alerts: TenantAlert[];
+}
+export interface TenantListResult {
+  items: TenantSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+export interface TenantListParams {
+  search?: string;
+  status?: OrganizationStatus;
+  moduleKey?: ModuleKey;
+  sortBy?: 'name' | 'createdAt' | 'status';
+  sortDir?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+export type ScreenSyncState = 'UNKNOWN' | 'SYNCING' | 'READY' | 'DEGRADED' | 'FAILED';
+export interface TenantOperationalScreen {
+  id: string;
+  name: string;
+  status: 'ONLINE' | 'OFFLINE';
+  lastSeenAt: string | null;
+  syncState: ScreenSyncState;
+  assetsTotal: number;
+  assetsReady: number;
+  assetsFailed: number;
+  cacheBytes: string; // BigInt, serialized as a decimal string — see apps/api/src/main.ts
+  freeStorageBytes: string | null;
+  storagePersistent: boolean;
+  streamingType: StreamingType;
+  paired: boolean;
 }
 export interface TenantDetail {
   id: string;
@@ -159,6 +208,18 @@ export interface TenantDetail {
   createdAt: string;
   owner: { id: string; email: string; name: string } | null;
   capabilities: TenantCapabilities;
+  usage: TenantUsageSummary;
+  expiringModules: string[];
+  alerts: TenantAlert[];
+  screens: TenantOperationalScreen[];
+  content: { byAssetType: { type: AssetType; count: number; bytes: number }[] };
+  moduleUsage: { WAYFINDING: number; WAYFINDING_AI: number; ROOM_BOOKING: number };
+}
+export interface TenantAuditLogResult {
+  items: PlatformAuditEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 export interface PlatformAuditEntry {
   id: string;
@@ -191,7 +252,18 @@ export interface CreateTenantResult {
 }
 
 export const platformTenantsApi = {
-  list: () => req<TenantSummary[]>('/admin/tenants'),
+  list: (params: TenantListParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.search) qs.set('search', params.search);
+    if (params.status) qs.set('status', params.status);
+    if (params.moduleKey) qs.set('moduleKey', params.moduleKey);
+    if (params.sortBy) qs.set('sortBy', params.sortBy);
+    if (params.sortDir) qs.set('sortDir', params.sortDir);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<TenantListResult>(`/admin/tenants${suffix}`);
+  },
   detail: (tenantId: string) => req<TenantDetail>(`/admin/tenants/${tenantId}`),
   create: (input: CreateTenantInput) => req<CreateTenantResult>('/admin/tenants', { method: 'POST', body: JSON.stringify(input) }),
   setModules: (tenantId: string, assignments: { key: ModuleKey; status: TenantModuleStatus; expiresAt?: string }[]) =>
@@ -217,7 +289,14 @@ export const platformTenantsApi = {
     req<{ id: string }>(`/admin/tenants/${tenantId}/members/${memberId}/revoke-sessions`, { method: 'POST' }),
   revokeAllSessions: (tenantId: string) =>
     req<{ revokedCount: number }>(`/admin/tenants/${tenantId}/revoke-sessions`, { method: 'POST' }),
-  listAuditLog: (tenantId: string) => req<PlatformAuditEntry[]>(`/admin/tenants/${tenantId}/audit`),
+  listAuditLog: (tenantId: string, params: { page?: number; pageSize?: number; action?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    if (params.action) qs.set('action', params.action);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<TenantAuditLogResult>(`/admin/tenants/${tenantId}/audit${suffix}`);
+  },
 };
 
 // ── Screens ─────────────────────────────────────────────────────────────────

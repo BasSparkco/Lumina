@@ -509,6 +509,8 @@ Do not depend on a tenant `AuditLog.userId` relation to represent cross-tenant p
 
 ### P6b — Add Super Admin operational visibility
 
+**Status: done (2026-09-07).** Server-side pagination/search/sort/filter on the tenant list, every usage metric computed via grouped aggregate queries (never N+1 per tenant), and the full operational tenant-detail breakdown (screens, content & storage, module usage counters, paginated/filterable audit) — see `docs/tenant-isolation/README.md`. Player-version tracking is out of scope — no such field or telemetry mechanism exists anywhere in this codebase yet (checked apps/player and the schema); adding one is a separate, larger change than this pass.
+
 **Goal:** Add scalable fleet, usage, content, and health visibility without blocking the security-critical P6a release.
 
 #### Tenant list
