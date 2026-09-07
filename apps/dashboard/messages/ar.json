@@ -175,8 +175,6 @@
     "refresh": "تحديث",
     "pairScreen": "إقران شاشة",
     "dragToReorder": "اسحب لإعادة الترتيب",
-    "limitReached": "تم بلوغ حد الشاشات ({limit})",
-    "limitReachedContactAdmin": "اطلب من أحد المسؤولين ترقية الخطة لإقران المزيد من الشاشات",
     "pairModalTitle": "إقران شاشة",
     "pairModalBody": "أدخل الرمز المكوّن من 6 أحرف الظاهر على الشاشة.",
     "pairing": "جارٍ الإقران…",

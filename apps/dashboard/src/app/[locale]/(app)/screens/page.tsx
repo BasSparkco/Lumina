@@ -2,9 +2,8 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import NextImage from 'next/image';
-import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import {
   DndContext, PointerSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
@@ -14,7 +13,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical, DoorOpen } from 'lucide-react';
 import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, roomBookingApi, screenGroupsApi, QUICK_BOOKING_DURATIONS_MINUTES, type Screen, type StreamingType, type ScreenGroup } from '@/lib/api';
 import { PoiMapEditor } from '@/components/PoiMapEditor';
-import { billingApi, planLimit } from '@/lib/mocks/billing';
 import { useScreenSocket, type PlaybackProgress } from '@/hooks/useScreenSocket';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useModuleAccess } from '@/hooks/useModuleAccess';
@@ -607,9 +605,7 @@ function SortableScreenCard({ id, disabled, children }: {
 
 export default function ScreensPage() {
   const qc = useQueryClient();
-  const router = useRouter();
-  const locale = useLocale();
-  const { canEditContent, canManageBilling } = usePermissions();
+  const { canEditContent } = usePermissions();
   const { allowed: hasWayfinding } = useModuleAccess('WAYFINDING');
   const { allowed: hasRoomBooking } = useModuleAccess('ROOM_BOOKING');
   const { confirmDelete } = useConfirmBeforeDelete();
@@ -618,7 +614,6 @@ export default function ScreensPage() {
   const t = useTranslations('screens');
   const tc = useTranslations('common');
   const { data: screens = [], isLoading, isFetching } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
-  const { data: currentPlan = 'STARTER' } = useQuery({ queryKey: ['billingPlan'], queryFn: billingApi.getCurrentPlan });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
@@ -861,8 +856,6 @@ export default function ScreensPage() {
   const unpairedScreens = screens.filter(s => !s.paired);
   const groupFilteredScreens = activeGroupId ? pairedScreens.filter(s => groupAssignments[s.id] === activeGroupId) : pairedScreens;
   const visibleScreens = groupFilteredScreens.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
-  const screenLimit = planLimit(currentPlan);
-  const atScreenLimit = screenLimit !== null && pairedScreens.length >= screenLimit;
   // Dragging reorders the *unfiltered* paired-screens list by array index, which doesn't map
   // cleanly onto a filtered/grouped subset — so only enable it with no group filter or search
   // active. Same reasoning as playlists/page.tsx's canDragPlaylists.
@@ -884,19 +877,10 @@ export default function ScreensPage() {
             <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
           </button>
           {canEditContent && (
-            atScreenLimit ? (
-              <button
-                onClick={() => canManageBilling && router.push(`/${locale}/billing`)}
-                title={canManageBilling ? undefined : t('limitReachedContactAdmin')}
-                className="flex items-center gap-2 bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-lg text-base font-medium hover:bg-amber-200 dark:hover:bg-amber-900">
-                <AlertTriangle className="w-4 h-4" /> {t('limitReached', { limit: screenLimit })}
-              </button>
-            ) : (
-              <button onClick={() => { setShowPair(true); setPairError(''); }}
-                className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-base font-medium ">
-                <Plus className="w-4 h-4" /> {t('pairScreen')}
-              </button>
-            )
+            <button onClick={() => { setShowPair(true); setPairError(''); }}
+              className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-base font-medium ">
+              <Plus className="w-4 h-4" /> {t('pairScreen')}
+            </button>
           )}
         </div>
       </div>

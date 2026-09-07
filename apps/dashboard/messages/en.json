@@ -175,8 +175,6 @@
     "refresh": "Refresh",
     "pairScreen": "Pair screen",
     "dragToReorder": "Drag to reorder",
-    "limitReached": "Screen limit reached ({limit})",
-    "limitReachedContactAdmin": "Ask an admin to upgrade your plan to pair more screens",
     "pairModalTitle": "Pair a screen",
     "pairModalBody": "Enter the 6-character code shown on the screen.",
     "pairing": "Pairing…",
