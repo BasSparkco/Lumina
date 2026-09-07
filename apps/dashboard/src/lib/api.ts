@@ -1135,7 +1135,10 @@ export interface CrashReport {
 }
 export interface FleetStatus {
   total: number; online: number; offline: number;
-  screens: { id: string; crashCount7d: number }[];
+  // uptimePercent (P8, docs/tenant_isolation_and_platform_admin_plan.md) — real, computed from
+  // ScreenAlert history over a rolling 30-day window; null when the screen hasn't existed long
+  // enough yet to have an observable window.
+  screens: { id: string; crashCount7d: number; uptimePercent: number | null }[];
 }
 // A font id from the shared FONT_LIBRARY (@lumina/types) — kept as a plain string here (not
 // re-imported) so this file's existing "duplicate the server's shape locally" convention holds.

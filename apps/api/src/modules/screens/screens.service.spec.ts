@@ -8,10 +8,11 @@ import type { ScreenGateway } from '../ws/screen.gateway';
 import type { AuditService } from '../audit/audit.service';
 import type { EntitlementsService } from '../entitlements/entitlements.service';
 
-function makeService(prismaOverrides: { screen?: object; pairingSession?: object } = {}) {
+function makeService(prismaOverrides: { screen?: object; pairingSession?: object; screenAlert?: object; crashReport?: object } = {}) {
   const prisma = {
     screen: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
       count: jest.fn().mockResolvedValue(0),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findUniqueOrThrow: jest.fn(),
@@ -20,6 +21,14 @@ function makeService(prismaOverrides: { screen?: object; pairingSession?: object
     pairingSession: {
       findUnique: jest.fn().mockResolvedValue(null),
       ...(prismaOverrides.pairingSession ?? {}),
+    },
+    screenAlert: {
+      findMany: jest.fn().mockResolvedValue([]),
+      ...(prismaOverrides.screenAlert ?? {}),
+    },
+    crashReport: {
+      groupBy: jest.fn().mockResolvedValue([]),
+      ...(prismaOverrides.crashReport ?? {}),
     },
     $transaction: jest.fn().mockImplementation((fn: (tx: unknown) => unknown) => fn(prisma)),
   } as unknown as PrismaService;
@@ -155,5 +164,97 @@ describe('ScreensService.confirmPairing — re-pairing an existing screen', () =
       new BadRequestException('Invalid or expired pairing code'),
     );
     expect(prisma.screen.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// P8 (docs/tenant_isolation_and_platform_admin_plan.md) — fleetStatus's uptimePercent, computed
+// from real ScreenAlert (type OFFLINE) intervals apps/worker's FleetMonitorService already
+// writes, replacing the dashboard's fabricated-random-number mock.
+describe('ScreensService.fleetStatus — uptimePercent', () => {
+  const ORG_ID = 'org_1';
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  it('reports 100% for a long-lived screen with no offline alerts', async () => {
+    const { service } = makeService({
+      screen: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'scr_1', name: 'Lobby', status: 'ONLINE', lastSeenAt: new Date(now), createdAt: new Date(now - 60 * DAY_MS), alerts: [] },
+        ]),
+      },
+    });
+
+    const result = await service.fleetStatus(ORG_ID);
+
+    expect(result.screens[0]!.uptimePercent).toBe(100);
+  });
+
+  it('subtracts an ongoing (unresolved) offline interval from the window', async () => {
+    const { service } = makeService({
+      screen: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'scr_1', name: 'Lobby', status: 'OFFLINE', lastSeenAt: new Date(now - DAY_MS), createdAt: new Date(now - 60 * DAY_MS), alerts: [] },
+        ]),
+      },
+      screenAlert: {
+        findMany: jest.fn().mockResolvedValue([
+          { screenId: 'scr_1', createdAt: new Date(now - DAY_MS), resolvedAt: null },
+        ]),
+      },
+    });
+
+    const result = await service.fleetStatus(ORG_ID);
+
+    // 1 day down out of a 30-day window ≈ 96.7%
+    expect(result.screens[0]!.uptimePercent).toBeCloseTo(96.7, 1);
+  });
+
+  it('scopes the window to a screen younger than UPTIME_WINDOW_MS instead of penalizing pre-pairing time', async () => {
+    const { service } = makeService({
+      screen: {
+        findMany: jest.fn().mockResolvedValue([
+          // Paired 2 days ago, offline for 1 of those 2 days — 50%, not ~96.7% against a 30-day window.
+          { id: 'scr_1', name: 'New Screen', status: 'ONLINE', lastSeenAt: new Date(now), createdAt: new Date(now - 2 * DAY_MS), alerts: [] },
+        ]),
+      },
+      screenAlert: {
+        findMany: jest.fn().mockResolvedValue([
+          { screenId: 'scr_1', createdAt: new Date(now - DAY_MS), resolvedAt: new Date(now) },
+        ]),
+      },
+    });
+
+    const result = await service.fleetStatus(ORG_ID);
+
+    expect(result.screens[0]!.uptimePercent).toBeCloseTo(50, 0);
+  });
+
+  it('returns null for a screen with no observable window yet (created in the future relative to "now")', async () => {
+    const { service } = makeService({
+      screen: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'scr_1', name: 'Brand New', status: 'ONLINE', lastSeenAt: new Date(now), createdAt: new Date(now + 60_000), alerts: [] },
+        ]),
+      },
+    });
+
+    const result = await service.fleetStatus(ORG_ID);
+
+    expect(result.screens[0]!.uptimePercent).toBeNull();
+  });
+
+  it('queries ScreenAlert once for every screen, not per-screen', async () => {
+    const { service, prisma } = makeService({
+      screen: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'scr_1', name: 'A', status: 'ONLINE', lastSeenAt: new Date(now), createdAt: new Date(now - 60 * DAY_MS), alerts: [] },
+          { id: 'scr_2', name: 'B', status: 'ONLINE', lastSeenAt: new Date(now), createdAt: new Date(now - 60 * DAY_MS), alerts: [] },
+        ]),
+      },
+    });
+
+    await service.fleetStatus(ORG_ID);
+
+    expect(prisma.screenAlert.findMany).toHaveBeenCalledTimes(1);
   });
 });

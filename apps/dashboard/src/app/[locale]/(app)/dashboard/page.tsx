@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { Activity, AlertTriangle, Tv2, List, ImageIcon, HardDrive, RefreshCw } from 'lucide-react';
 import { screensApi, assetsApi, playlistsApi, type Screen } from '@/lib/api';
-import { getUptimePercents } from '@/lib/mocks/uptime';
 import { useScreenSocket } from '@/hooks/useScreenSocket';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
 
@@ -63,7 +62,12 @@ export default function DashboardPage() {
     void qc.invalidateQueries({ queryKey: ['fleetStatus'] });
   }
 
-  const uptimeByScreen = useMemo(() => getUptimePercents(screens.map((s: Screen) => s.id)), [screens]);
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — real, computed server-side from
+  // ScreenAlert history (screensApi.fleetStatus), not a fabricated per-browser number.
+  const uptimeByScreen = useMemo(
+    () => Object.fromEntries((fleetStatus?.screens ?? []).map(s => [s.id, s.uptimePercent])),
+    [fleetStatus],
+  );
   const crashCountByScreen = useMemo(
     () => Object.fromEntries((fleetStatus?.screens ?? []).map(s => [s.id, s.crashCount7d])),
     [fleetStatus],
@@ -77,9 +81,10 @@ export default function DashboardPage() {
   const rows = screens.map((screen: Screen) => ({ screen, status: effectiveStatus(screen) }));
   const onlineCount = rows.filter(r => r.status === 'ONLINE').length;
   const offlineRows = rows.filter(r => r.status === 'OFFLINE');
-  const avgUptime = screens.length > 0
-    ? Math.round((screens.reduce((sum: number, s: Screen) => sum + (uptimeByScreen[s.id] ?? 0), 0) / screens.length) * 10) / 10
-    : 0;
+  const uptimeValues = screens.map((s: Screen) => uptimeByScreen[s.id]).filter((v): v is number => v !== null && v !== undefined);
+  const avgUptime = uptimeValues.length > 0
+    ? Math.round((uptimeValues.reduce((sum, v) => sum + v, 0) / uptimeValues.length) * 10) / 10
+    : null;
   const totalStorageBytes = assets.reduce((sum, a) => sum + a.sizeBytes, 0);
   const screensWithCrashes = Object.values(crashCountByScreen).filter(c => c > 0).length;
 
@@ -114,7 +119,7 @@ export default function DashboardPage() {
         </div>
         <div className="glass-panel rounded-2xl p-4">
           <p className="text-xs text-[var(--deck-text-low)] mb-1">{t('avgUptime')}</p>
-          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{avgUptime}%</p>
+          <p className="text-2xl font-bold text-[var(--deck-text-hi)]">{avgUptime === null ? '—' : `${avgUptime}%`}</p>
         </div>
       </div>
 
@@ -188,7 +193,7 @@ export default function DashboardPage() {
                   <td className="px-4 py-2.5 text-[var(--deck-text-mid)] whitespace-nowrap">
                     {screen.lastSeenAt ? formatDateTime(screen.lastSeenAt, dateFormat) : ts('neverSeen')}
                   </td>
-                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{uptimeByScreen[screen.id] ?? 0}%</td>
+                  <td className="px-4 py-2.5 text-[var(--deck-text-hi)]">{uptimeByScreen[screen.id] == null ? '—' : `${uptimeByScreen[screen.id]}%`}</td>
                   <td className="px-4 py-2.5">
                     {(crashCountByScreen[screen.id] ?? 0) > 0 ? (
                       <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${

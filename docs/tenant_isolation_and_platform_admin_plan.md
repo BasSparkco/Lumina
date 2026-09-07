@@ -572,7 +572,9 @@ Priority 3 (screen-group tagging/assignment) is also done — this one needed no
 
 Priority 4 (approvals) is also done. Unlike screen-groups, this one had a real, deployed, but incomplete backend: `Playlist.approvalStatus` and the `submit`/`approve`/`reject` state machine (`PlaylistsController`) already existed and were already enforced (EDITOR-created playlists start `DRAFT`, others `APPROVED`; `submit`/`approve`/`reject` validate the transition) — but nothing recorded *who* submitted/reviewed or *why* something was rejected, and `reject` took no comment at all. Added `Playlist.submittedById`/`submittedAt`/`reviewedById`/`reviewedAt`/`rejectionComment` (migration `20260907124359_p8_playlist_approval_review_fields`) and a `RejectPlaylistDto`. The dashboard's org-wide "require approval" toggle had no real backend equivalent at all (the real policy is role-based and fixed, not a toggle) — removed from the UI rather than fabricated. `lib/mocks/approvals.ts` deleted.
 
-Remaining priorities (uptime, billing) not started this pass — still mock-backed with `PreviewFeatureNotice` shown, task 3's flag-gating not yet applied to either.
+Priority 5 (uptime) is also done, and turned out smaller than it first looked. The mock's own comment said a real uptime % "can't be computed from real data" (`Screen` only stores current status, never a history) — true, but `ScreenAlert` (already written every minute by `apps/worker`'s `FleetMonitorService`, `type: 'OFFLINE'`, with `createdAt`/`resolvedAt`) already *is* an offline-interval history, just never read for this. No new table or write path needed: `ScreensService.uptimePercents()` sums each screen's `ScreenAlert` overlap with a 30-day rolling window (one batched query, not per-screen) and folds the result into the existing `fleetStatus()` endpoint the dashboard already called for crash counts. `lib/mocks/uptime.ts` deleted.
+
+Remaining priority (billing) not started this pass — still mock-backed with `PreviewFeatureNotice` shown, task 3's flag-gating not yet applied. Billing is deliberately last per the plan's own task 7.
 
 **Goal:** Eliminate account-to-account UI contamination on shared browsers.
 

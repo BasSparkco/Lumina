@@ -21,7 +21,7 @@ Order per the plan's §6 (Recommended Execution Order):
 - [~] **P6a** — Complete security-critical Super Admin controls (depends on P2, done) — first pass done and deployed 2026-09-06 (suspend-reason, cross-tenant member/invite management, session revocation, name edit, audit read endpoint); password reset, email-change-with-verification, slug change, and locale settings explicitly deferred — see below
 - [x] **P7** — Make published templates immutable and safe to distribute (implemented and tested 2026-09-07; not yet deployed to production — see below)
 - [x] **P6b** — Super Admin operational visibility (implemented and tested 2026-09-07; not yet deployed to production)
-- [~] **P8** — Remove or isolate remaining browser-global production mocks (parallelizable with P3–P5a) — Audit Log, proof of play/reports, screen-group tagging, approvals done 2026-09-07, two features remain mock-backed
+- [~] **P8** — Remove or isolate remaining browser-global production mocks (parallelizable with P3–P5a) — Audit Log, proof of play/reports, screen-group tagging, approvals, uptime done 2026-09-07, only billing remains mock-backed
 - [ ] **P9** — Tenant-isolation verification suite and rollout
 - [ ] **P5b** — Optional PostgreSQL RLS and database-role separation (only if a compliance/threat-model decision requires it — see plan §7)
 
@@ -136,7 +136,7 @@ Deployed 2026-09-05 (`docker compose -f docker-compose.prod.yml up -d --build ap
 
 **Not yet done:** no live HTTP smoke test against a booted server this pass — an ad-hoc `ts-node` script bootstrapping the full Nest DI graph hit a pre-existing `tsconfig.json` `rootDir`/`include` conflict (`src/**/*` + `prisma/**/*` siblings) unrelated to this change, and starting a real `nest start` instance on this shared host risked colliding with other tenants' processes (see [[dev_environment_gotchas]]) without a straightforward way to obtain a Super-Admin JWT for a scripted curl check. Verification for this pass is unit tests (which exercise every aggregate code path against realistic mocked Prisma responses) plus a clean `tsc`/`nest build`/`next build`, not a live request against real data — same caveat as P7 above. Not deployed to production either.
 
-## P8 status — in progress (2026-09-07): Audit Log, proof of play, screen-group tagging, approvals done, two features remain
+## P8 status — in progress (2026-09-07): Audit Log, proof of play, screen-group tagging, approvals, uptime done, only billing remains
 
 **Goal:** eliminate account-to-account UI contamination — a dashboard page must never present one browser's `localStorage` as if it were shared, server-side tenant data.
 
@@ -177,7 +177,14 @@ Deployed 2026-09-05 (`docker compose -f docker-compose.prod.yml up -d --build ap
 - **Deliberately not built**: the mock's org-wide "require approval" toggle (`ApprovalSettings.required`) has no real backend counterpart — the actual policy is role-based and permanent (baked into `create()`), not an admin-configurable setting. Rather than invent a new `Organization` column for a toggle nobody asked for, the toggle UI was removed; the workflow itself is unaffected since role-based `DRAFT` assignment already implements the intended policy.
 - 4 new unit tests (submit/approve/reject stamping, reject-with-no-comment stores `null` not `undefined`). Full API suite 271/271 passing; `tsc`/`nest build`/`next build` clean on both apps.
 
-**Not done this pass:** priorities 5-6 (uptime, billing) are untouched — still backed by `lib/mocks/{uptime,billing}.ts`, still showing `PreviewFeatureNotice`. Task 3's fallback (hide behind an explicit demo/development flag rather than presenting mock data as live) has not been applied to either. Task 4 (classify device-local preferences) and task 7 (verify Billing's direct-routing exposure) not started. Not deployed to production.
+**Task 2, priority 5 (uptime) — done, smaller than it first looked.** The mock's own comment claimed a real uptime % "can't be computed from real data" — true only in that no *purpose-built* history existed; `ScreenAlert` (`type: 'OFFLINE'`, `createdAt`/`resolvedAt`) already recorded exactly that history, written every minute by `apps/worker`'s pre-existing `FleetMonitorService` (flags a screen offline after 3 minutes of no heartbeat, resolves the alert once heartbeats resume), just never read for an uptime calculation before now:
+
+- New `ScreensService.uptimePercents()` (private): one batched `ScreenAlert.findMany` per call (not per screen) over a 30-day rolling window, sums each screen's offline-interval overlap with `[windowStart, now]`, and divides. A screen younger than 30 days is scoped to its own `createdAt` (P5a: a `Screen` row is only ever created at successful pairing) rather than having its pre-pairing time count as downtime; a screen with no observable window yet (just paired) reports `null`, not a misleading 0% or 100%.
+- Folded into the existing `fleetStatus()` endpoint as a new `uptimePercent` field per screen — the dashboard already called this endpoint for crash counts, so no new route was needed.
+- Dashboard: `dashboard/page.tsx`'s fleet table and its average-uptime stat tile now read `fleetStatus.screens[i].uptimePercent`, rendering `—` for `null` instead of the mock's `?? 0` (0% would misleadingly read as "always down" for a brand-new screen with no data yet). `lib/mocks/uptime.ts` deleted.
+- 5 new unit tests (100%-no-alerts, an ongoing unresolved outage subtracted correctly, a young screen's window scoped to its own `createdAt` rather than the full 30 days, `null` for no observable window, and one batched query confirmed regardless of fleet size). Full API suite 276/276 passing; `tsc`/`nest build`/`next build` clean on both apps.
+
+**Not done this pass:** priority 6 (billing) is untouched — still backed by `lib/mocks/billing.ts`, still showing `PreviewFeatureNotice`. Task 3's fallback (hide behind an explicit demo/development flag rather than presenting mock data as live) has not been applied. Task 4 (classify device-local preferences) and task 7 (verify Billing's direct-routing exposure, the plan's own reason for placing it last) not started. Not deployed to production.
 
 ## Open production decisions (plan §7)
 

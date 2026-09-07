@@ -19,6 +19,9 @@ export type UnpairOrigin =
   | { type: 'DEVICE'; deviceInfo?: string };
 
 const CRASH_ROLLUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+// P8 (docs/tenant_isolation_and_platform_admin_plan.md) — rolling window for the uptime %
+// computed in uptimePercents() below.
+const UPTIME_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 // P4 task 11 / P5a schema task 4 (docs/tenant_isolation_and_platform_admin_plan.md) — how long a
 // pairing code stays valid, for both of confirmPairing's two paths: a brand-new device's
@@ -469,6 +472,56 @@ export class ScreensService {
     return this.prisma.screen.update({ where: { id: screenId }, data: { groupId } });
   }
 
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — a real uptime % per screen over
+  // UPTIME_WINDOW_MS, replacing the dashboard's mock (which openly admitted it couldn't compute
+  // one from real data and synthesized a random number instead). Turns out it can: ScreenAlert
+  // (type 'OFFLINE', already written by apps/worker's FleetMonitorService every minute, no new
+  // write path needed) already records exactly the interval [createdAt, resolvedAt ?? ongoing]
+  // for every offline period, at ~1-4min granularity (the cron's own polling cadence + the
+  // 3-minute staleness threshold) — real, not fabricated, just never read for this before.
+  // One batched query for every screen in `screenIds`, not a per-screen loop.
+  private async uptimePercents(orgId: string, screens: { id: string; createdAt: Date }[]): Promise<Record<string, number | null>> {
+    const now = Date.now();
+    const windowStart = new Date(now - UPTIME_WINDOW_MS);
+    const screenIds = screens.map(s => s.id);
+    if (screenIds.length === 0) return {};
+
+    const alerts = await this.prisma.screenAlert.findMany({
+      where: {
+        organizationId: orgId,
+        type: 'OFFLINE',
+        screenId: { in: screenIds },
+        createdAt: { lte: new Date(now) },
+        OR: [{ resolvedAt: null }, { resolvedAt: { gte: windowStart } }],
+      },
+      select: { screenId: true, createdAt: true, resolvedAt: true },
+    });
+
+    const downtimeByScreen = new Map<string, number>();
+    for (const alert of alerts) {
+      const start = Math.max(alert.createdAt.getTime(), windowStart.getTime());
+      const end = Math.min((alert.resolvedAt ?? new Date(now)).getTime(), now);
+      if (end <= start) continue;
+      downtimeByScreen.set(alert.screenId, (downtimeByScreen.get(alert.screenId) ?? 0) + (end - start));
+    }
+
+    const result: Record<string, number | null> = {};
+    for (const screen of screens) {
+      // A screen younger than the window has nothing to compute uptime over before it existed —
+      // observe from its own creation (P5a: a Screen row is only ever created at successful
+      // pairing) rather than treating pre-pairing time as unaccounted-for downtime.
+      const observableStart = Math.max(windowStart.getTime(), screen.createdAt.getTime());
+      const observableMs = now - observableStart;
+      if (observableMs <= 0) {
+        result[screen.id] = null;
+        continue;
+      }
+      const downtimeMs = Math.min(downtimeByScreen.get(screen.id) ?? 0, observableMs);
+      result[screen.id] = Math.round(((observableMs - downtimeMs) / observableMs) * 1000) / 10;
+    }
+    return result;
+  }
+
   async fleetStatus(orgId: string) {
     const screens = await this.prisma.screen.findMany({
       where: { organizationId: orgId },
@@ -484,6 +537,7 @@ export class ScreensService {
       _count: { id: true },
     });
     const crashCountByScreen = Object.fromEntries(crashCounts.map(c => [c.screenId, c._count.id]));
+    const uptimeByScreen = await this.uptimePercents(orgId, screens);
 
     const now = Date.now();
     const items = screens.map(s => ({
@@ -494,6 +548,7 @@ export class ScreensService {
       offlineForMs: s.status === 'OFFLINE' && s.lastSeenAt ? now - s.lastSeenAt.getTime() : null,
       alerts: s.alerts,
       crashCount7d: crashCountByScreen[s.id] ?? 0,
+      uptimePercent: uptimeByScreen[s.id] ?? null,
     }));
 
     return {
