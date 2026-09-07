@@ -696,6 +696,11 @@ export const playlistsApi = {
   // playsetting.md Phase 1/4 — short-lived token the Preview button hands to the player app so
   // it can open a read-only preview without a device pairing.
   previewToken: (id: string) => req<{ token: string; expiresAt: string }>(`/playlists/${id}/preview-token`, { method: 'POST' }),
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — content approval workflow. Real,
+  // org-scoped, replacing the old lib/mocks/approvals.ts per-browser record.
+  submit: (id: string) => req<PlaylistSummary>(`/playlists/${id}/submit`, { method: 'POST' }),
+  approve: (id: string) => req<PlaylistSummary>(`/playlists/${id}/approve`, { method: 'POST' }),
+  reject: (id: string, comment?: string) => req<PlaylistSummary>(`/playlists/${id}/reject`, { method: 'POST', body: JSON.stringify({ comment }) }),
 };
 
 // ── Layouts ─────────────────────────────────────────────────────────────────
@@ -1218,9 +1223,16 @@ export type PlaybackOrder = 'SEQUENTIAL' | 'SHUFFLE';
 // scaleSettings is keyed by asset type but lives on Playlist, not Asset.
 export type AssetType = Asset['type'];
 export type ScaleFitMode = 'contain' | 'cover' | 'fill';
+export type ApprovalStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
 export interface PlaylistSummary {
   id: string; name: string; _count: { items: number }; updatedAt: string;
   totalDurationSecs: number; totalSizeBytes: number;
+  approvalStatus: ApprovalStatus;
+  submittedBy: { id: string; name: string } | null;
+  submittedAt: string | null;
+  reviewedBy: { id: string; name: string } | null;
+  reviewedAt: string | null;
+  rejectionComment: string | null;
 }
 export interface Playlist extends PlaylistSummary {
   items: PlaylistItem[];

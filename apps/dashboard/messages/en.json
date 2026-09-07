@@ -1309,8 +1309,6 @@
     }
   },
   "approvals": {
-    "requireApproval": "Require approval before publishing",
-    "requireApprovalDesc": "When on, editors' playlists must be approved by an admin/owner before they count as approved. When off, every playlist is automatically approved.",
     "pendingSectionTitle": "{count, plural, one {# playlist awaiting approval} other {# playlists awaiting approval}}",
     "submittedBy": "submitted by {name}",
     "approve": "Approve",

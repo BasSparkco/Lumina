@@ -13,7 +13,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 import { useCapabilities } from '@/hooks/useCapabilities';
 import { playlistsApi } from '@/lib/api';
-import { approvalsApi } from '@/lib/mocks/approvals';
 
 type Permissions = ReturnType<typeof usePermissions>;
 type NavItem = {
@@ -133,12 +132,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // Shares its query keys with the Playlists page's own fetches, so this doesn't add an extra
+  // Shares its query key with the Playlists page's own fetch, so this doesn't add an extra
   // network round-trip when that page is already open. The pending-approvals section now lives
-  // on the Playlists page itself; this badge is just a heads-up in the nav.
+  // on the Playlists page itself; this badge is just a heads-up in the nav. approvalStatus is a
+  // real field on every playlist row (P8, docs/tenant_isolation_and_platform_admin_plan.md) — no
+  // separate approvals query needed.
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list, enabled: perms.canApproveContent });
-  const { data: approvals = {} } = useQuery({ queryKey: ['approvals'], queryFn: approvalsApi.listAll, enabled: perms.canApproveContent });
-  const pendingApprovalsCount = playlists.filter(pl => approvals[pl.id]?.status === 'PENDING').length;
+  const pendingApprovalsCount = playlists.filter(pl => pl.approvalStatus === 'PENDING').length;
 
   useEffect(() => {
     if (!loading && !user) router.replace(`/${locale}/login`);

@@ -58,6 +58,7 @@ class UpdateConfigDto {
   // class-validator has no clean way to validate a dynamic-key map.
   @IsOptional() @IsObject() scaleSettings?: Record<string, string>;
 }
+class RejectPlaylistDto { @IsString() @IsOptional() comment?: string; }
 
 @ApiTags('playlists')
 @ApiBearerAuth()
@@ -152,19 +153,19 @@ export class PlaylistsController {
 
   @Post(':id/submit')
   submit(@CurrentUser() user: JwtUser, @Param('id') id: string) {
-    return this.playlists.submit(user.orgId, id);
+    return this.playlists.submit(user.orgId, id, user.sub);
   }
 
   @Post(':id/approve')
   @Roles('OWNER', 'ADMIN')
   approve(@CurrentUser() user: JwtUser, @Param('id') id: string) {
-    return this.playlists.approve(user.orgId, id);
+    return this.playlists.approve(user.orgId, id, user.sub);
   }
 
   @Post(':id/reject')
   @Roles('OWNER', 'ADMIN')
-  reject(@CurrentUser() user: JwtUser, @Param('id') id: string) {
-    return this.playlists.reject(user.orgId, id);
+  reject(@CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: RejectPlaylistDto) {
+    return this.playlists.reject(user.orgId, id, user.sub, dto.comment);
   }
 }
 

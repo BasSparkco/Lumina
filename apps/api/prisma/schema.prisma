@@ -138,6 +138,11 @@ model User {
   // outlive the account that made it.
   roomReservations RoomReservation[]
 
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — Playlist.submittedById/reviewedById's
+  // opposite sides; see Playlist's own comment for why these are FKs rather than snapshot strings.
+  submittedPlaylists Playlist[] @relation("PlaylistSubmittedBy")
+  reviewedPlaylists  Playlist[] @relation("PlaylistReviewedBy")
+
   @@index([organizationId])
 }
 
@@ -657,6 +662,21 @@ model Playlist {
   id                   String          @id @default(cuid())
   name                 String
   approvalStatus       ApprovalStatus  @default(APPROVED)
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — who submitted/reviewed and why a
+  // rejection happened, so the dashboard's Approvals UI can show a real history instead of the
+  // per-browser localStorage record it used before. Snapshotting the actor as a nullable FK
+  // (SetNull, same convention as AuditLog.userId) rather than a copied display-name string —
+  // this survives a name change and matches how every other actor reference in this schema
+  // works, unlike the old mock's frozen submittedByName/reviewedByName strings.
+  submittedById        String?
+  submittedBy          User?           @relation("PlaylistSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt          DateTime?
+  reviewedById         String?
+  reviewedBy           User?           @relation("PlaylistReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt           DateTime?
+  // Only ever meaningful alongside approvalStatus REJECTED — cleared (set null) on the next
+  // submit/approve so a stale rejection reason never lingers past the cycle it belongs to.
+  rejectionComment     String?
   // Playlist-wide default transition. Individual items may override this — see
   // PlaylistItem.transitionStyle below — with null on the item meaning "inherit this".
   transitionStyle      TransitionStyle @default(NONE)

@@ -18,19 +18,22 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, PLAYER_URL, TRANSITION_STYLE_OPTIONS, TRANSITION_LABEL_KEYS, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
+import { playlistsApi, assetsApi, themesApi, layoutsApi, designsApi, PLAYER_URL, TRANSITION_STYLE_OPTIONS, TRANSITION_LABEL_KEYS, type PlaylistSummary, type Playlist, type PlaylistItem, type PlaylistItemKind, type Asset, type Theme, type Layout, type DesignAsset, type TransitionStyle, type PlaybackOrder, type ApprovalStatus } from '@/lib/api';
 import { ASSET_SORT_OPTIONS, ASSET_TYPE_LABELS, distinctAssetTypes, sortAssets, formatRelativeTime, type AssetSortKey } from '@/lib/assetSort';
-import { approvalsApi, APPROVAL_STATUS_STYLES, statusOf, type ApprovalRecord, type ApprovalSettings } from '@/lib/mocks/approvals';
-import { PreviewFeatureNotice } from '@/components/PreviewFeatureNotice';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useDefaultItemDuration } from '@/hooks/useDefaultItemDuration';
-import { Toggle } from '@/components/Toggle';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { CropEditor, type MediaCrop } from '@/components/CropEditor';
 import { PlaylistSettingsModal } from '@/components/PlaylistSettingsModal';
+
+const APPROVAL_STATUS_STYLES: Record<ApprovalStatus, string> = {
+  DRAFT: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
+  PENDING: 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300',
+  APPROVED: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300',
+  REJECTED: 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300',
+};
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -192,7 +195,6 @@ function PlaylistItemRow({
  * don't pay for items/approval queries they aren't showing). */
 function PlaylistDetail({ id }: { id: string }) {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent, canApproveContent } = usePermissions();
   const { duration: defaultDuration } = useDefaultItemDuration();
   const t = useTranslations('playlistDetail');
@@ -215,27 +217,20 @@ function PlaylistDetail({ id }: { id: string }) {
     queryFn: () => playlistsApi.get(id),
   });
 
-  const { data: approval, isLoading: approvalLoading } = useQuery({
-    queryKey: ['approval', id],
-    queryFn: () => approvalsApi.get(id),
-  });
-  const { data: approvalSettings = { required: true } } = useQuery({
-    queryKey: ['approvalSettings'], queryFn: approvalsApi.getSettings,
-  });
-  const status = statusOf(approval, approvalSettings);
+  const status = playlist?.approvalStatus;
 
-  // Admins/owners are the approvers, so their own submissions have no one left to review
-  // them — auto-approve instead of routing to the Pending Approvals queue. Same when the org
-  // has turned approvals off entirely: nothing should require manual review while that's set.
+  // Admins/owners are the approvers, so their own submissions have no one left to review them —
+  // submit-then-approve in one click instead of routing through the Pending Approvals queue.
+  // Two real calls (submit requires PENDING before approve accepts it — see
+  // PlaylistsService.approve's own state-machine check), not a shortcut around that invariant.
   const submitMut = useMutation({
-    mutationFn: () => (canApproveContent || !approvalSettings.required)
-      ? approvalsApi.approve(id, user?.name ?? user?.email ?? '')
-      : approvalsApi.submit(id, user?.name ?? user?.email ?? ''),
+    mutationFn: async () => {
+      const submitted = await playlistsApi.submit(id);
+      return canApproveContent ? playlistsApi.approve(id) : submitted;
+    },
     onSuccess: (updated) => {
-      qc.setQueryData<ApprovalRecord>(['approval', id], updated);
-      qc.setQueryData<Record<string, ApprovalRecord>>(['approvals'], (old) => ({ ...old, [id]: updated }));
-      void qc.invalidateQueries({ queryKey: ['approval', id] });
-      void qc.invalidateQueries({ queryKey: ['approvals'] });
+      qc.setQueryData<Playlist>(['playlist', id], (old) => (old ? { ...old, ...updated } : old));
+      void qc.invalidateQueries({ queryKey: ['playlists'] });
     },
   });
 
@@ -373,7 +368,7 @@ function PlaylistDetail({ id }: { id: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {canEditContent && !approvalLoading && (status === 'DRAFT' || status === 'REJECTED') && (
+          {canEditContent && (status === 'DRAFT' || status === 'REJECTED') && (
             <button onClick={() => submitMut.mutate()} disabled={submitMut.isPending}
               className="flex items-center gap-2 border border-[var(--deck-accent)] text-[var(--deck-accent)] px-3 py-2 rounded-lg text-xs font-medium hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
               <Send className="w-3.5 h-3.5" />
@@ -394,9 +389,9 @@ function PlaylistDetail({ id }: { id: string }) {
           {t('pendingReviewBanner')}
         </div>
       )}
-      {status === 'REJECTED' && approval?.comment && (
+      {status === 'REJECTED' && playlist?.rejectionComment && (
         <div className="text-xs text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">
-          <span className="font-medium">{t('rejectedReasonLabel')}: </span>{approval.comment}
+          <span className="font-medium">{t('rejectedReasonLabel')}: </span>{playlist.rejectionComment}
         </div>
       )}
 
@@ -655,7 +650,6 @@ function SortablePlaylistRow({ id, disabled, children }: {
 
 export default function PlaylistsPage() {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent, canApproveContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
   const t = useTranslations('playlists');
@@ -674,32 +668,21 @@ export default function PlaylistsPage() {
   const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const { data: playlists = [], isLoading } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
-  const { data: approvals = {}, isLoading: approvalsLoading } = useQuery({ queryKey: ['approvals'], queryFn: approvalsApi.listAll });
-  // Not gated behind canApproveContent — this is an org-wide setting that changes what every
-  // role sees on the status badges below, not just what admins can act on.
-  const { data: approvalSettings = { required: true }, isLoading: settingsLoading } = useQuery({
-    queryKey: ['approvalSettings'], queryFn: approvalsApi.getSettings,
-  });
-
-  const settingsMut = useMutation({
-    mutationFn: (settings: ApprovalSettings) => approvalsApi.updateSettings(settings),
-    onSuccess: (settings) => qc.setQueryData(['approvalSettings'], settings),
-  });
 
   const approveMut = useMutation({
-    mutationFn: (playlist: PlaylistSummary) => approvalsApi.approve(playlist.id, user?.name ?? user?.email ?? ''),
-    onSuccess: (updated, playlist) => {
-      qc.setQueryData<Record<string, ApprovalRecord>>(['approvals'], (old) => ({ ...old, [playlist.id]: updated }));
-      void qc.invalidateQueries({ queryKey: ['approvals'] });
+    mutationFn: (playlist: PlaylistSummary) => playlistsApi.approve(playlist.id),
+    onSuccess: (updated) => {
+      qc.setQueryData<PlaylistSummary[]>(['playlists'], (old) => old?.map(p => (p.id === updated.id ? { ...p, ...updated } : p)));
+      void qc.invalidateQueries({ queryKey: ['playlists'] });
     },
   });
 
   const rejectMut = useMutation({
     mutationFn: ({ playlist, comment }: { playlist: PlaylistSummary; comment: string }) =>
-      approvalsApi.reject(playlist.id, user?.name ?? user?.email ?? '', comment),
-    onSuccess: (updated, { playlist }) => {
-      qc.setQueryData<Record<string, ApprovalRecord>>(['approvals'], (old) => ({ ...old, [playlist.id]: updated }));
-      void qc.invalidateQueries({ queryKey: ['approvals'] });
+      playlistsApi.reject(playlist.id, comment),
+    onSuccess: (updated) => {
+      qc.setQueryData<PlaylistSummary[]>(['playlists'], (old) => old?.map(p => (p.id === updated.id ? { ...p, ...updated } : p)));
+      void qc.invalidateQueries({ queryKey: ['playlists'] });
       setRejectingId(null);
       setRejectComment('');
     },
@@ -795,9 +778,7 @@ export default function PlaylistsPage() {
     setExpandedId(prev => (prev === id ? null : id));
   }
 
-  const pending = canApproveContent
-    ? playlists.filter((pl: PlaylistSummary) => statusOf(approvals[pl.id], approvalSettings) === 'PENDING')
-    : [];
+  const pending = canApproveContent ? playlists.filter((pl) => pl.approvalStatus === 'PENDING') : [];
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
@@ -814,29 +795,13 @@ export default function PlaylistsPage() {
         )}
       </div>
 
-      {/* Unlike the rest of this page, the approval workflow below (this card, and the pending-
-          approvals queue further down) is still mock-backed — see PreviewFeatureNotice. Scoped
-          to canApproveContent since that's the only audience who'd see the workflow at all. */}
-      {canApproveContent && !settingsLoading && <PreviewFeatureNotice />}
-
-      {canApproveContent && !settingsLoading && (
-        <div className="glass-panel rounded-2xl p-4 mb-4 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--deck-text-hi)]">{tApp('requireApproval')}</p>
-            <p className="text-xs text-[var(--deck-text-mid)]">{tApp('requireApprovalDesc')}</p>
-          </div>
-          <Toggle checked={approvalSettings.required} onChange={v => settingsMut.mutate({ required: v })} />
-        </div>
-      )}
-
-      {canApproveContent && !approvalsLoading && !settingsLoading && pending.length > 0 && (
+      {canApproveContent && pending.length > 0 && (
         <div className="mb-6">
           <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--deck-text-hi)] mb-2">
             <ClipboardCheck className="w-4 h-4 text-amber-600" /> {tApp('pendingSectionTitle', { count: pending.length })}
           </p>
           <div className="space-y-2">
             {pending.map((pl: PlaylistSummary) => {
-              const record = approvals[pl.id];
               const isRejecting = rejectingId === pl.id;
               return (
                 <div key={pl.id} className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-xl p-4">
@@ -851,7 +816,7 @@ export default function PlaylistsPage() {
                       </button>
                       <p className="text-xs text-[var(--deck-text-low)]">
                         {t('itemCount', { count: pl._count.items })}
-                        {record?.submittedByName && ` · ${tApp('submittedBy', { name: record.submittedByName })}`}
+                        {pl.submittedBy && ` · ${tApp('submittedBy', { name: pl.submittedBy.name })}`}
                       </p>
                     </div>
                     {!isRejecting && (
@@ -987,11 +952,9 @@ export default function PlaylistsPage() {
                                     {pl.name}
                                   </p>
                                 )}
-                                {!approvalsLoading && !settingsLoading && (
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${APPROVAL_STATUS_STYLES[statusOf(approvals[pl.id], approvalSettings)]}`}>
-                                    {tc(`approvalStatus.${statusOf(approvals[pl.id], approvalSettings)}`)}
-                                  </span>
-                                )}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${APPROVAL_STATUS_STYLES[pl.approvalStatus]}`}>
+                                  {tc(`approvalStatus.${pl.approvalStatus}`)}
+                                </span>
                               </div>
                               <p className="text-xs text-[var(--deck-text-low)]">
                                 {t('itemCount', { count: pl._count.items })}

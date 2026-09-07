@@ -86,3 +86,71 @@ describe('PlaylistsService — cross-tenant item ownership', () => {
     );
   });
 });
+
+// P8 (docs/tenant_isolation_and_platform_admin_plan.md) — submit/approve/reject now stamp who
+// acted and when (submittedById/reviewedById/*At), replacing the dashboard's per-browser
+// localStorage approval record with a real one.
+describe('PlaylistsService — submit/approve/reject review trail', () => {
+  const ORG_ID = 'org_mine';
+  const PLAYLIST_ID = 'playlist_mine';
+  const USER_ID = 'user_1';
+
+  function makeService(playlist: { approvalStatus: string }) {
+    const prisma = {
+      playlist: {
+        findFirst: jest.fn().mockResolvedValue({ id: PLAYLIST_ID, organizationId: ORG_ID, ...playlist }),
+        update: jest.fn(({ data }: { data: Record<string, unknown> }) => ({ id: PLAYLIST_ID, ...data })),
+      },
+    } as unknown as PrismaService;
+    const storage = {} as unknown as StorageService;
+    const orgScoped = new OrgScopedService();
+    const jwt = { sign: jest.fn(), verify: jest.fn() } as unknown as JwtService;
+    return { service: new PlaylistsService(prisma, storage, orgScoped, jwt), prisma };
+  }
+
+  it('submit stamps submittedById/submittedAt, clears any stale rejectionComment, and moves to PENDING', async () => {
+    const { service, prisma } = makeService({ approvalStatus: 'REJECTED' });
+
+    await service.submit(ORG_ID, PLAYLIST_ID, USER_ID);
+
+    expect(prisma.playlist.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ approvalStatus: 'PENDING', submittedById: USER_ID, rejectionComment: null }),
+      }),
+    );
+  });
+
+  it('approve stamps reviewedById/reviewedAt and clears rejectionComment', async () => {
+    const { service, prisma } = makeService({ approvalStatus: 'PENDING' });
+
+    await service.approve(ORG_ID, PLAYLIST_ID, USER_ID);
+
+    expect(prisma.playlist.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ approvalStatus: 'APPROVED', reviewedById: USER_ID, rejectionComment: null }),
+      }),
+    );
+  });
+
+  it('reject stamps reviewedById/reviewedAt and stores the given comment', async () => {
+    const { service, prisma } = makeService({ approvalStatus: 'PENDING' });
+
+    await service.reject(ORG_ID, PLAYLIST_ID, USER_ID, 'Wrong logo, please fix');
+
+    expect(prisma.playlist.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ approvalStatus: 'REJECTED', reviewedById: USER_ID, rejectionComment: 'Wrong logo, please fix' }),
+      }),
+    );
+  });
+
+  it('reject with no comment stores null, not undefined', async () => {
+    const { service, prisma } = makeService({ approvalStatus: 'PENDING' });
+
+    await service.reject(ORG_ID, PLAYLIST_ID, USER_ID);
+
+    expect(prisma.playlist.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ rejectionComment: null }) }),
+    );
+  });
+});

@@ -41,6 +41,8 @@ export class PlaylistsService {
       include: {
         _count: { select: { items: true } },
         items: { select: { durationSecs: true, asset: { select: { sizeBytes: true } } } },
+        submittedBy: { select: { id: true, name: true } },
+        reviewedBy: { select: { id: true, name: true } },
       },
     });
     // The row list only needs the totals, not the items themselves — drop them here so the
@@ -61,6 +63,8 @@ export class PlaylistsService {
             orderBy: { position: 'asc' },
             include: { asset: true, theme: { select: { id: true, name: true, category: true } }, layout: { select: { id: true, name: true } }, designAsset: { select: { id: true, name: true } } },
           },
+          submittedBy: { select: { id: true, name: true } },
+          reviewedBy: { select: { id: true, name: true } },
         },
       }),
       'Playlist not found',
@@ -353,28 +357,44 @@ export class PlaylistsService {
     );
   }
 
-  async submit(orgId: string, id: string) {
+  // P8 (docs/tenant_isolation_and_platform_admin_plan.md) — submittedById/reviewedById snapshot
+  // who acted and when, replacing the dashboard's per-browser localStorage record. rejectionComment
+  // is cleared here (not just on reject) so a resubmission after a rejection doesn't leave the old
+  // reviewer's comment visible against a playlist that's pending review again.
+  async submit(orgId: string, id: string, userId: string) {
     const playlist = await this.assertOwns(orgId, id);
     if (!['DRAFT', 'REJECTED'].includes(playlist.approvalStatus)) {
       throw new BadRequestException('Only draft or rejected playlists can be submitted for review');
     }
-    return this.prisma.playlist.update({ where: { id }, data: { approvalStatus: 'PENDING' } });
+    return this.prisma.playlist.update({
+      where: { id },
+      data: { approvalStatus: 'PENDING', submittedById: userId, submittedAt: new Date(), rejectionComment: null },
+      include: { submittedBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
+    });
   }
 
-  async approve(orgId: string, id: string) {
+  async approve(orgId: string, id: string, userId: string) {
     const playlist = await this.assertOwns(orgId, id);
     if (playlist.approvalStatus !== 'PENDING') {
       throw new BadRequestException('Only playlists pending review can be approved');
     }
-    return this.prisma.playlist.update({ where: { id }, data: { approvalStatus: 'APPROVED' } });
+    return this.prisma.playlist.update({
+      where: { id },
+      data: { approvalStatus: 'APPROVED', reviewedById: userId, reviewedAt: new Date(), rejectionComment: null },
+      include: { submittedBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
+    });
   }
 
-  async reject(orgId: string, id: string) {
+  async reject(orgId: string, id: string, userId: string, comment?: string) {
     const playlist = await this.assertOwns(orgId, id);
     if (playlist.approvalStatus !== 'PENDING') {
       throw new BadRequestException('Only playlists pending review can be rejected');
     }
-    return this.prisma.playlist.update({ where: { id }, data: { approvalStatus: 'REJECTED' } });
+    return this.prisma.playlist.update({
+      where: { id },
+      data: { approvalStatus: 'REJECTED', reviewedById: userId, reviewedAt: new Date(), rejectionComment: comment ?? null },
+      include: { submittedBy: { select: { id: true, name: true } }, reviewedBy: { select: { id: true, name: true } } },
+    });
   }
 
   private async assertOwns(orgId: string, id: string) {
