@@ -20,10 +20,8 @@ import { PoiMapEditor } from '@/components/PoiMapEditor';
 import { RouteGraphEditor, type RouteGraphMode } from '@/components/RouteGraphEditor';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
-import { useAuditLog } from '@/hooks/useAuditLog';
 import { useModuleRouteGuard } from '@/hooks/useModuleRouteGuard';
 import { useCapabilities } from '@/hooks/useCapabilities';
-import { useAuth } from '@/context/AuthContext';
 
 const POI_STATUSES: PoiStatus[] = ['OPEN', 'CLOSED', 'RELOCATED'];
 const ROUTE_EDGE_TYPES: RouteEdgeType[] = ['WALK', 'ELEVATOR', 'ESCALATOR', 'STAIRS'];
@@ -88,10 +86,8 @@ const labelClass = 'text-xs text-[var(--deck-text-mid)] block mb-1';
 
 export default function WayfindingPage() {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
-  const logAction = useAuditLog();
   const t = useTranslations('wayfinding');
   const tc = useTranslations('common');
   // A direct URL visit by a tenant without the WAYFINDING module redirects away and never
@@ -137,11 +133,7 @@ export default function WayfindingPage() {
       input.id
         ? wayfindingApi.updateBuilding(input.id, input.name, input.address || undefined)
         : wayfindingApi.createBuilding(input.name, input.address || undefined),
-    onSuccess: (saved, input) => {
-      logAction({
-        resourceType: 'BUILDING', resourceName: saved.name, action: input.id ? 'UPDATE' : 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['buildings'] });
       setBuildingModal(null);
     },
@@ -151,10 +143,6 @@ export default function WayfindingPage() {
   const removeBuildingMut = useMutation({
     mutationFn: (b: Building) => wayfindingApi.removeBuilding(b.id),
     onSuccess: (_data, b) => {
-      logAction({
-        resourceType: 'BUILDING', resourceName: b.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       if (selectedBuildingId === b.id) { setSelectedBuildingId(null); setSelectedFloorId(null); }
       void qc.invalidateQueries({ queryKey: ['buildings'] });
     },
@@ -231,10 +219,6 @@ export default function WayfindingPage() {
   const setEvacuationMut = useMutation({
     mutationFn: (input: { buildingId: string; active: boolean }) => wayfindingApi.setEvacuation(input.buildingId, input.active),
     onSuccess: () => {
-      logAction({
-        resourceType: 'BUILDING', resourceName: selectedBuilding?.name ?? '', action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
     onError: (e: Error) => setError(e.message),

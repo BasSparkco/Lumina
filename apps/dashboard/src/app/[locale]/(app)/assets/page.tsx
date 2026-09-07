@@ -11,8 +11,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { ContextMenu, type ContextMenuState, type ContextMenuAction } from '@/components/ContextMenu';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
-import { useAuth } from '@/context/AuthContext';
-import { useAuditLog } from '@/hooks/useAuditLog';
 import { FontPicker, fontStack } from '@/components/FontPicker';
 import { TickerTextPreview } from '@/components/TickerTextPreview';
 import { DesignPreview } from '@/components/DesignPreview';
@@ -554,13 +552,10 @@ function LibraryUploadModal({ onClose, onUploaded }: LibraryUploadModalProps) {
 
 function AssetsPageInner() {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent, canManageLibrary } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
-  const logAction = useAuditLog();
   const t = useTranslations('assets');
   const tc = useTranslations('common');
-  const ta = useTranslations('auditLog');
   const router = useRouter();
   const locale = useLocale();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -634,11 +629,7 @@ function AssetsPageInner() {
     enabled: tab === 'apps',
   });
 
-  function handleAppCreated(asset: Asset) {
-    logAction({
-      resourceType: 'ASSET', resourceName: asset.name, action: 'CREATE',
-      userName: user?.name ?? '', userEmail: user?.email ?? '',
-    });
+  function handleAppCreated(_asset: Asset) {
     void qc.invalidateQueries({ queryKey: ['assets'] });
     setAppModalProvider(null);
     setAppPlaylistModalProvider(null);
@@ -647,24 +638,14 @@ function AssetsPageInner() {
 
   const useFromLibraryMut = useMutation({
     mutationFn: (asset: Asset) => assetsApi.useFromLibrary(asset.id),
-    onSuccess: (added, source) => {
-      logAction({
-        resourceType: 'ASSET', resourceName: added.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailDuplicatedFrom', { name: source.name }),
-      });
+    onSuccess: (_added, source) => {
       void qc.invalidateQueries({ queryKey: ['assets'], exact: true });
       setJustAddedId(source.id);
       setTimeout(() => setJustAddedId(id => (id === source.id ? null : id)), 2000);
     },
   });
 
-  function handleLibraryUploaded(asset: Asset) {
-    logAction({
-      resourceType: 'ASSET', resourceName: asset.name, action: 'CREATE',
-      userName: user?.name ?? '', userEmail: user?.email ?? '',
-      detail: t('libraryUpload'),
-    });
+  function handleLibraryUploaded(_asset: Asset) {
     void qc.invalidateQueries({ queryKey: ['assets', 'library'] });
     setShowLibraryUpload(false);
   }
@@ -680,12 +661,8 @@ function AssetsPageInner() {
 
   const removeLibraryMut = useMutation({
     mutationFn: (asset: Asset) => assetsApi.removeFromLibrary(asset.id),
-    onSuccess: (_data, asset) => {
+    onSuccess: () => {
       setLibraryDeleteError('');
-      logAction({
-        resourceType: 'ASSET', resourceName: asset.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['assets', 'library'] });
     },
     onError: (e: Error) => setLibraryDeleteError(e.message),
@@ -709,11 +686,7 @@ function AssetsPageInner() {
     updateLibraryMut.mutate({ id: asset.id, tags });
   }
 
-  function handleTextSaved(saved: Asset, previousName?: string) {
-    logAction({
-      resourceType: 'ASSET', resourceName: previousName ?? saved.name, action: previousName ? 'UPDATE' : 'CREATE',
-      userName: user?.name ?? '', userEmail: user?.email ?? '',
-    });
+  function handleTextSaved(_saved: Asset, _previousName?: string) {
     void qc.invalidateQueries({ queryKey: ['assets'] });
     setTextModal(null);
   }
@@ -722,10 +695,6 @@ function AssetsPageInner() {
     mutationFn: (asset: Asset) => assetsApi.remove(asset.id),
     onSuccess: (_data, asset) => {
       setDeleteError('');
-      logAction({
-        resourceType: 'ASSET', resourceName: asset.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<Asset[]>(['assets'], (old) => old?.filter(a => a.id !== asset.id));
       void qc.invalidateQueries({ queryKey: ['assets'] });
     },
@@ -740,24 +709,14 @@ function AssetsPageInner() {
 
   const audioMut = useMutation({
     mutationFn: ({ id, audioEnabled }: { id: string; audioEnabled: boolean }) => assetsApi.setAudioEnabled(id, audioEnabled),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'ASSET', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: updated.audioEnabled ? t('audioEnabled') : t('audioDisabled'),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['assets'] });
     },
   });
 
   const extractAudioMut = useMutation({
     mutationFn: (video: Asset) => assetsApi.extractAudio(video.id),
-    onSuccess: (created, source) => {
-      logAction({
-        resourceType: 'ASSET', resourceName: created.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailExtractedFrom', { name: source.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['assets'] });
     },
     onError: (e: Error) => setUploadError(e.message),
@@ -765,12 +724,7 @@ function AssetsPageInner() {
 
   const renameMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => assetsApi.rename(id, name),
-    onSuccess: (renamed, { previousName }) => {
-      logAction({
-        resourceType: 'ASSET', resourceName: previousName, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: renamed.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['assets'] });
       setRenamingId(null);
     },
@@ -790,12 +744,7 @@ function AssetsPageInner() {
 
   const renameDesignMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => designsApi.rename(id, name),
-    onSuccess: (renamed, { previousName }) => {
-      logAction({
-        resourceType: 'DESIGN', resourceName: previousName, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: renamed.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['designs'] });
       setRenamingDesignId(null);
     },
@@ -819,13 +768,9 @@ function AssetsPageInner() {
     setUploadError('');
     try {
       for (const { file, extractAudioOnly } of entries) {
-        const uploaded = extractAudioOnly
+        extractAudioOnly
           ? await assetsApi.uploadAudioFromVideo(file, setProgress)
           : await assetsApi.upload(file, setProgress);
-        logAction({
-          resourceType: 'ASSET', resourceName: uploaded.name, action: 'CREATE',
-          userName: user?.name ?? '', userEmail: user?.email ?? '',
-        });
       }
       void qc.invalidateQueries({ queryKey: ['assets'] });
     } catch (e) {

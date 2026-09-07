@@ -27,7 +27,6 @@ import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useDefaultItemDuration } from '@/hooks/useDefaultItemDuration';
-import { useAuditLog } from '@/hooks/useAuditLog';
 import { Toggle } from '@/components/Toggle';
 import { ImageLightbox } from '@/components/ImageLightbox';
 import { CropEditor, type MediaCrop } from '@/components/CropEditor';
@@ -196,7 +195,6 @@ function PlaylistDetail({ id }: { id: string }) {
   const { user } = useAuth();
   const { canEditContent, canApproveContent } = usePermissions();
   const { duration: defaultDuration } = useDefaultItemDuration();
-  const logAction = useAuditLog();
   const t = useTranslations('playlistDetail');
   const tc = useTranslations('common');
   const ta = useTranslations('approvals');
@@ -234,10 +232,6 @@ function PlaylistDetail({ id }: { id: string }) {
       ? approvalsApi.approve(id, user?.name ?? user?.email ?? '')
       : approvalsApi.submit(id, user?.name ?? user?.email ?? ''),
     onSuccess: (updated) => {
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: canApproveContent ? 'APPROVE' : 'SUBMIT',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<ApprovalRecord>(['approval', id], updated);
       qc.setQueryData<Record<string, ApprovalRecord>>(['approvals'], (old) => ({ ...old, [id]: updated }));
       void qc.invalidateQueries({ queryKey: ['approval', id] });
@@ -269,15 +263,7 @@ function PlaylistDetail({ id }: { id: string }) {
   const addMut = useMutation({
     mutationFn: ({ kind, assetId, themeId, layoutId, designAssetId, dur }: { kind: PlaylistItemKind; assetId?: string; themeId?: string; layoutId?: string; designAssetId?: string; dur: number }) =>
       playlistsApi.addItem(id, { kind, assetId, themeId, layoutId, designAssetId }, dur),
-    onSuccess: (created, { kind, assetId, themeId, layoutId, designAssetId }) => {
-      const name = kind === 'ASSET' ? assets.find((a: Asset) => a.id === assetId)?.name
-        : kind === 'THEME' ? themesList.find((th: Theme) => th.id === themeId)?.name
-        : kind === 'LAYOUT' ? layoutsList.find((l: Layout) => l.id === layoutId)?.name
-        : designsList.find((d: DesignAsset) => d.id === designAssetId)?.name;
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: 'ADD_ITEM',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: name ?? '',
-      });
+    onSuccess: (created, { kind, assetId }) => {
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: [...old.items, created] });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
       void qc.invalidateQueries({ queryKey: ['playlists'] });
@@ -294,11 +280,6 @@ function PlaylistDetail({ id }: { id: string }) {
   const removeMut = useMutation({
     mutationFn: (item: PlaylistItem) => playlistsApi.removeItem(id, item.id),
     onSuccess: (_data, item) => {
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: playlist?.name ?? '', action: 'REMOVE_ITEM',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: item.asset?.name ?? item.theme?.name ?? item.layout?.name ?? item.design?.name ?? '',
-      });
       qc.setQueryData<Playlist>(['playlist', id], (old) => old && { ...old, items: old.items.filter(i => i.id !== item.id) });
       void qc.invalidateQueries({ queryKey: ['playlist', id] });
       void qc.invalidateQueries({ queryKey: ['playlists'] });
@@ -677,10 +658,8 @@ export default function PlaylistsPage() {
   const { user } = useAuth();
   const { canEditContent, canApproveContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
-  const logAction = useAuditLog();
   const t = useTranslations('playlists');
   const tc = useTranslations('common');
-  const ta = useTranslations('auditLog');
   const tApp = useTranslations('approvals');
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -710,10 +689,6 @@ export default function PlaylistsPage() {
   const approveMut = useMutation({
     mutationFn: (playlist: PlaylistSummary) => approvalsApi.approve(playlist.id, user?.name ?? user?.email ?? ''),
     onSuccess: (updated, playlist) => {
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: playlist.name, action: 'APPROVE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<Record<string, ApprovalRecord>>(['approvals'], (old) => ({ ...old, [playlist.id]: updated }));
       void qc.invalidateQueries({ queryKey: ['approvals'] });
     },
@@ -722,11 +697,7 @@ export default function PlaylistsPage() {
   const rejectMut = useMutation({
     mutationFn: ({ playlist, comment }: { playlist: PlaylistSummary; comment: string }) =>
       approvalsApi.reject(playlist.id, user?.name ?? user?.email ?? '', comment),
-    onSuccess: (updated, { playlist, comment }) => {
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: playlist.name, action: 'REJECT',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: comment,
-      });
+    onSuccess: (updated, { playlist }) => {
       qc.setQueryData<Record<string, ApprovalRecord>>(['approvals'], (old) => ({ ...old, [playlist.id]: updated }));
       void qc.invalidateQueries({ queryKey: ['approvals'] });
       setRejectingId(null);
@@ -737,10 +708,6 @@ export default function PlaylistsPage() {
   const createMut = useMutation({
     mutationFn: () => playlistsApi.create(newName.trim()),
     onSuccess: (created) => {
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: created.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['playlists'] });
       setNewName('');
       setCreating(false);
@@ -752,10 +719,6 @@ export default function PlaylistsPage() {
     mutationFn: (playlist: PlaylistSummary) => playlistsApi.remove(playlist.id),
     onSuccess: (_data, playlist) => {
       setDeleteError('');
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: playlist.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<PlaylistSummary[]>(['playlists'], (old) => old?.filter(p => p.id !== playlist.id));
       void qc.invalidateQueries({ queryKey: ['playlists'] });
       setExpandedId(prev => (prev === playlist.id ? null : prev));
@@ -765,12 +728,7 @@ export default function PlaylistsPage() {
 
   const renameMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => playlistsApi.rename(id, name),
-    onSuccess: (renamed, { previousName }) => {
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: previousName, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: renamed.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['playlists'] });
       setRenamingId(null);
     },
@@ -789,13 +747,8 @@ export default function PlaylistsPage() {
       }
       return created;
     },
-    onSuccess: (created, playlist) => {
+    onSuccess: () => {
       setDeleteError('');
-      logAction({
-        resourceType: 'PLAYLIST', resourceName: created.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailDuplicatedFrom', { name: playlist.name }),
-      });
       void qc.invalidateQueries({ queryKey: ['playlists'] });
     },
     onError: (e: Error) => setDeleteError(e.message),

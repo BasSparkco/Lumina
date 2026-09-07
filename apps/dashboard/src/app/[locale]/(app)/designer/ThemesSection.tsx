@@ -74,9 +74,7 @@ import { ThemeCanvasPanel } from './ThemeCanvasPanel';
 import { captureCanvasAsAsset } from '@/lib/exportDesignAsAsset';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
-import { useAuth } from '@/context/AuthContext';
 import { useEditorDirty } from '@/context/EditorDirtyContext';
-import { useAuditLog } from '@/hooks/useAuditLog';
 import { useEditorHistory } from '@/hooks/useEditorHistory';
 import { AssetPicker } from '@/components/AssetPicker';
 import { ImagePicker } from '@/components/ImagePicker';
@@ -774,13 +772,10 @@ export function ThemesSection(props: ThemesSectionProps) {
   const locale = useLocale();
   const tn = useTranslations('nav');
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
-  const logAction = useAuditLog();
   const t = useTranslations('themes');
   const tc = useTranslations('common');
-  const ta = useTranslations('auditLog');
   const tCrop = useTranslations('cropEditor');
 
   const { data: themes = [], isLoading } = useQuery({
@@ -937,14 +932,7 @@ export function ThemesSection(props: ThemesSectionProps) {
   const createMut = useMutation({
     mutationFn: () =>
       themesApi.create({ name, category, aspectRatio, palette, typography, elements }),
-    onSuccess: (created) => {
-      logAction({
-        resourceType: 'THEME',
-        resourceName: created.name,
-        action: 'CREATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['themes'] });
       router.push(`/${locale}/templates`);
     },
@@ -959,14 +947,7 @@ export function ThemesSection(props: ThemesSectionProps) {
         typography,
         elements,
       }),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'THEME',
-        resourceName: updated.name,
-        action: 'UPDATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['themes'] });
       router.push(`/${locale}/templates`);
     },
@@ -994,13 +975,6 @@ export function ThemesSection(props: ThemesSectionProps) {
     mutationFn: (theme: Theme) => themesApi.remove(theme.id),
     onSuccess: (_data, theme) => {
       setDeleteError('');
-      logAction({
-        resourceType: 'THEME',
-        resourceName: theme.name,
-        action: 'DELETE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-      });
       qc.setQueryData<Theme[]>(['themes'], (old) => old?.filter((th) => th.id !== theme.id));
       void qc.invalidateQueries({ queryKey: ['themes'] });
     },
@@ -1009,30 +983,14 @@ export function ThemesSection(props: ThemesSectionProps) {
   const renameMut = useMutation({
     mutationFn: ({ theme, name: newName }: { theme: Theme; name: string }) =>
       themesApi.update(theme.id, { ...themeToInput(theme), name: newName }),
-    onSuccess: (updated, { theme }) => {
-      logAction({
-        resourceType: 'THEME',
-        resourceName: theme.name,
-        action: 'UPDATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: updated.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['themes'] });
       setRenamingId(null);
     },
   });
   const duplicateMut = useMutation({
     mutationFn: (theme: Theme) => themesApi.duplicate(theme.id),
-    onSuccess: (created, theme) => {
-      logAction({
-        resourceType: 'THEME',
-        resourceName: created.name,
-        action: 'CREATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-        detail: ta('detailDuplicatedFrom', { name: theme.name }),
-      });
+    onSuccess: (created) => {
       void qc.invalidateQueries({ queryKey: ['themes'] });
       return created;
     },

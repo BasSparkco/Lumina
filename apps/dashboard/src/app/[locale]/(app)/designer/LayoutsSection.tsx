@@ -52,9 +52,7 @@ import { captureFabricCanvasAsAsset } from '@/lib/exportDesignAsAsset';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
-import { useAuth } from '@/context/AuthContext';
 import { useEditorDirty } from '@/context/EditorDirtyContext';
-import { useAuditLog } from '@/hooks/useAuditLog';
 import { useEditorHistory } from '@/hooks/useEditorHistory';
 import { AssetPicker } from '@/components/AssetPicker';
 import { WidgetConfigFields } from '@/components/WidgetConfigFields';
@@ -168,15 +166,12 @@ export function LayoutsSection(props: LayoutsSectionProps) {
   const locale = useLocale();
   const tn = useTranslations('nav');
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
   const { enabled: faithEnabled } = useFaithFeatures();
-  const logAction = useAuditLog();
   const t = useTranslations('layouts');
   const tc = useTranslations('common');
   const tCrop = useTranslations('cropEditor');
-  const ta = useTranslations('auditLog');
   const { data: layouts = [], isLoading } = useQuery({
     queryKey: ['layouts'],
     queryFn: layoutsApi.list,
@@ -299,14 +294,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
   const createMut = useMutation({
     mutationFn: () => layoutsApi.create(name, zones),
-    onSuccess: (created) => {
-      logAction({
-        resourceType: 'LAYOUT',
-        resourceName: created.name,
-        action: 'CREATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['layouts'] });
       router.push(`/${locale}/templates`);
     },
@@ -314,14 +302,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
 
   const updateMut = useMutation({
     mutationFn: () => layoutsApi.update((editing as Layout).id, name, zones),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'LAYOUT',
-        resourceName: updated.name,
-        action: 'UPDATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['layouts'] });
       router.push(`/${locale}/templates`);
     },
@@ -348,13 +329,6 @@ export function LayoutsSection(props: LayoutsSectionProps) {
     mutationFn: (layout: Layout) => layoutsApi.remove(layout.id),
     onSuccess: (_data, layout) => {
       setDeleteError('');
-      logAction({
-        resourceType: 'LAYOUT',
-        resourceName: layout.name,
-        action: 'DELETE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-      });
       qc.setQueryData<Layout[]>(['layouts'], (old) => old?.filter((l) => l.id !== layout.id));
       void qc.invalidateQueries({ queryKey: ['layouts'] });
     },
@@ -364,15 +338,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
   const renameMut = useMutation({
     mutationFn: ({ layout, name: newName }: { layout: Layout; name: string }) =>
       layoutsApi.update(layout.id, newName, toZoneInputs(layout)),
-    onSuccess: (updated, { layout }) => {
-      logAction({
-        resourceType: 'LAYOUT',
-        resourceName: layout.name,
-        action: 'UPDATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: updated.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['layouts'] });
       setRenamingId(null);
     },
@@ -381,15 +347,7 @@ export function LayoutsSection(props: LayoutsSectionProps) {
   const duplicateMut = useMutation({
     mutationFn: (layout: Layout) =>
       layoutsApi.create(`${layout.name} (copy)`, toZoneInputs(layout)),
-    onSuccess: (created, layout) => {
-      logAction({
-        resourceType: 'LAYOUT',
-        resourceName: created.name,
-        action: 'CREATE',
-        userName: user?.name ?? '',
-        userEmail: user?.email ?? '',
-        detail: ta('detailDuplicatedFrom', { name: layout.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['layouts'] });
     },
     onError: (e: Error) => setDeleteError(e.message),

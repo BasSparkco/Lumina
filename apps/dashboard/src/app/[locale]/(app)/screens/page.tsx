@@ -22,8 +22,6 @@ import { useModuleAccess } from '@/hooks/useModuleAccess';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
-import { useAuth } from '@/context/AuthContext';
-import { useAuditLog } from '@/hooks/useAuditLog';
 import { TimezoneSelect } from '@/components/TimezoneSelect';
 import { AssetPicker } from '@/components/AssetPicker';
 
@@ -39,9 +37,7 @@ const PRAYER_METHOD_VALUES = [
 // settings (method, athan) on top of whatever location is set here.
 function LocationPanel({ screen }: { screen: Screen }) {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent } = usePermissions();
-  const logAction = useAuditLog();
   const t = useTranslations('screens');
   const [lat, setLat] = useState(screen.latitude?.toString() ?? '');
   const [lon, setLon] = useState(screen.longitude?.toString() ?? '');
@@ -53,10 +49,6 @@ function LocationPanel({ screen }: { screen: Screen }) {
         longitude: lon ? parseFloat(lon) : undefined,
       }),
     onSuccess: () => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: screen.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -92,9 +84,7 @@ function LocationPanel({ screen }: { screen: Screen }) {
 
 function PrayerPanel({ screen }: { screen: Screen }) {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent } = usePermissions();
-  const logAction = useAuditLog();
   const t = useTranslations('screens');
   const [method, setMethod] = useState(screen.prayerMethod ?? 'UmmAlQura');
   const [athan, setAthan] = useState(screen.athanEnabled ?? false);
@@ -110,10 +100,6 @@ function PrayerPanel({ screen }: { screen: Screen }) {
       // layout name, it'd need its own translation lookup at render time, and the audit log
       // has no reliable way to tell "this SCREEN update's detail is a prayer method code" apart
       // from a timezone string or a playlist name without a fragile heuristic.
-      logAction({
-        resourceType: 'SCREEN', resourceName: screen.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -490,8 +476,6 @@ function CrashHistoryPanel({ screen }: { screen: Screen }) {
 
 function VolumeControl({ screen, disabled }: { screen: Screen; disabled: boolean }) {
   const qc = useQueryClient();
-  const { user } = useAuth();
-  const logAction = useAuditLog();
   const t = useTranslations('screens');
   // Local draft so the slider tracks the pointer smoothly; the mutation only fires once the
   // user releases it, rather than on every intermediate onChange event while dragging.
@@ -499,11 +483,7 @@ function VolumeControl({ screen, disabled }: { screen: Screen; disabled: boolean
 
   const volumeMut = useMutation({
     mutationFn: (volume: number) => screensApi.setVolume(screen.id, volume),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: `${updated.volume}%`,
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -630,17 +610,14 @@ export default function ScreensPage() {
   const qc = useQueryClient();
   const router = useRouter();
   const locale = useLocale();
-  const { user } = useAuth();
   const { canEditContent, canManageBilling } = usePermissions();
   const { allowed: hasWayfinding } = useModuleAccess('WAYFINDING');
   const { allowed: hasRoomBooking } = useModuleAccess('ROOM_BOOKING');
   const { confirmDelete } = useConfirmBeforeDelete();
   const { enabled: faithEnabled } = useFaithFeatures();
   const { format: dateFormat } = useDateFormat();
-  const logAction = useAuditLog();
   const t = useTranslations('screens');
   const tc = useTranslations('common');
-  const ta = useTranslations('auditLog');
   const { data: screens = [], isLoading, isFetching } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
   const { data: currentPlan = 'STARTER' } = useQuery({ queryKey: ['billingPlan'], queryFn: billingApi.getCurrentPlan });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
@@ -677,10 +654,6 @@ export default function ScreensPage() {
   const pairMut = useMutation({
     mutationFn: () => screensApi.pair(pairCode.trim().toUpperCase()),
     onSuccess: (created) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: created.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['screens'] });
       setShowPair(false);
       setPairCode('');
@@ -692,12 +665,7 @@ export default function ScreensPage() {
 
   const renameMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => screensApi.rename(id, name),
-    onSuccess: (renamed, { previousName }) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: previousName, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: renamed.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
       setRenamingId(null);
     },
@@ -742,10 +710,6 @@ export default function ScreensPage() {
   const removeMut = useMutation({
     mutationFn: (screen: Screen) => screensApi.remove(screen.id),
     onSuccess: (_data, screen) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: screen.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<Screen[]>(['screens'], (old) => old?.filter(s => s.id !== screen.id));
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
@@ -753,24 +717,14 @@ export default function ScreensPage() {
 
   const unpairMut = useMutation({
     mutationFn: (screen: Screen) => screensApi.unpair(screen.id),
-    onSuccess: (_updated, screen) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: screen.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailUnpaired'),
-      });
+    onSuccess: (_updated) => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
 
   const assignMut = useMutation({
     mutationFn: ({ id, playlistId }: { id: string; playlistId: string | null }) => screensApi.assign(id, playlistId),
-    onSuccess: (updated, { playlistId }) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: playlistId ? playlists.find(p => p.id === playlistId)?.name : undefined,
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -778,23 +732,14 @@ export default function ScreensPage() {
   const streamingTypeMut = useMutation({
     mutationFn: ({ id, streamingType }: { id: string; streamingType: StreamingType }) =>
       screensApi.setStreamingType(id, streamingType),
-    onSuccess: (updated, { streamingType }) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: t(`streamingType.${streamingType}`),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
 
   const assetMut = useMutation({
     mutationFn: ({ id, assetId }: { id: string; assetId: string | null }) => screensApi.setAsset(id, assetId),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -808,34 +753,21 @@ export default function ScreensPage() {
   const emergencyMut = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       screensApi.setEmergency(id, active),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
   const stopMut = useMutation({
     mutationFn: ({ id, stopped }: { id: string; stopped: boolean }) =>
       screensApi.setStopped(id, stopped),
-    onSuccess: (updated, { stopped }) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: stopped ? ta('detailStopped') : ta('detailResumed'),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
   const timezoneMut = useMutation({
     mutationFn: ({ id, timezone, timezoneEnabled }: { id: string; timezone: string; timezoneEnabled: boolean }) =>
       screensApi.updatePrayer(id, { timezone, timezoneEnabled }),
-    onSuccess: (updated, { timezone, timezoneEnabled }) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: timezoneEnabled ? timezone : undefined,
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -843,12 +775,7 @@ export default function ScreensPage() {
   const showClockMut = useMutation({
     mutationFn: ({ id, showClock }: { id: string; showClock: boolean }) =>
       screensApi.setShowClock(id, showClock),
-    onSuccess: (updated, { showClock }) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: showClock ? ta('detailClockOn') : ta('detailClockOff'),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -856,11 +783,7 @@ export default function ScreensPage() {
   const orientationMut = useMutation({
     mutationFn: ({ id, orientation }: { id: string; orientation: 0 | 90 | 180 | 270 }) =>
       screensApi.setOrientation(id, orientation),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -868,11 +791,7 @@ export default function ScreensPage() {
   const aspectRatioMut = useMutation({
     mutationFn: ({ id, aspectRatio }: { id: string; aspectRatio: '16:9' | '9:16' | 'stretch' }) =>
       screensApi.setAspectRatio(id, aspectRatio),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'SCREEN', resourceName: updated.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['screens'] });
     },
   });
@@ -880,10 +799,6 @@ export default function ScreensPage() {
   const createGroupMut = useMutation({
     mutationFn: () => screenGroupsApi.create(newGroupName.trim()),
     onSuccess: (created) => {
-      logAction({
-        resourceType: 'GROUP', resourceName: created.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) => (old ? [...old, created] : [created]));
       void qc.invalidateQueries({ queryKey: ['screenGroups'] });
       setNewGroupName('');
@@ -893,12 +808,7 @@ export default function ScreensPage() {
 
   const renameGroupMut = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string; previousName: string }) => screenGroupsApi.rename(id, name),
-    onSuccess: (updated, { previousName }) => {
-      logAction({
-        resourceType: 'GROUP', resourceName: previousName, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: updated.name }),
-      });
+    onSuccess: (updated) => {
       qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) => old?.map(g => (g.id === updated.id ? updated : g)));
       void qc.invalidateQueries({ queryKey: ['screenGroups'] });
       setRenamingGroupId(null);
@@ -908,10 +818,6 @@ export default function ScreensPage() {
   const removeGroupMut = useMutation({
     mutationFn: (group: ScreenGroup) => screenGroupsApi.remove(group.id),
     onSuccess: (_data, group) => {
-      logAction({
-        resourceType: 'GROUP', resourceName: group.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<ScreenGroup[]>(['screenGroups'], (old) => old?.filter(g => g.id !== group.id));
       void qc.invalidateQueries({ queryKey: ['screenGroups'] });
       void qc.invalidateQueries({ queryKey: ['screenGroupAssignments'] });
@@ -922,18 +828,6 @@ export default function ScreensPage() {
   const assignGroupMut = useMutation({
     mutationFn: ({ screen, groupId }: { screen: Screen; groupId: string | null }) => screenGroupsApi.assign(screen.id, groupId),
     onSuccess: (_data, { screen, groupId }) => {
-      const previousGroupId = groupAssignments[screen.id];
-      const previousGroupName = previousGroupId ? groups.find(g => g.id === previousGroupId)?.name : undefined;
-      const newGroupName = groupId ? groups.find(g => g.id === groupId)?.name : undefined;
-      let detail: string | undefined;
-      if (newGroupName && previousGroupName) detail = ta('detailMovedFromTo', { from: previousGroupName, to: newGroupName });
-      else if (newGroupName) detail = ta('detailMovedToGroup', { group: newGroupName });
-      else if (previousGroupName) detail = ta('detailRemovedFromGroup', { group: previousGroupName });
-      logAction({
-        resourceType: 'SCREEN', resourceName: screen.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail,
-      });
       qc.setQueryData<Record<string, string>>(['screenGroupAssignments'], (old) => {
         const next = { ...old };
         if (groupId) next[screen.id] = groupId;

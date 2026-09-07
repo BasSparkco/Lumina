@@ -8,8 +8,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useTimeFormat, formatTime } from '@/hooks/useTimeFormat';
 import { TimeInput } from '@/components/TimeInput';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
-import { useAuth } from '@/context/AuthContext';
-import { useAuditLog } from '@/hooks/useAuditLog';
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
@@ -38,14 +36,11 @@ function toPayload(f: CreateScheduleInput, screenId: string): CreateScheduleInpu
 
 export default function SchedulesPage() {
   const qc = useQueryClient();
-  const { user } = useAuth();
   const { canEditContent } = usePermissions();
   const { confirmDelete } = useConfirmBeforeDelete();
-  const logAction = useAuditLog();
   const { format: timeFormat } = useTimeFormat();
   const t = useTranslations('schedules');
   const tc = useTranslations('common');
-  const ta = useTranslations('auditLog');
   const { data: schedules = [], isLoading } = useQuery({ queryKey: ['schedules'], queryFn: () => schedulesApi.list() });
   const { data: screens = [] } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
@@ -63,10 +58,6 @@ export default function SchedulesPage() {
   const createMut = useMutation({
     mutationFn: () => Promise.all(selectedScreenIds.map(screenId => schedulesApi.create(toPayload(form, screenId)))),
     onSuccess: () => {
-      logAction({
-        resourceType: 'SCHEDULE', resourceName: form.name, action: 'CREATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['schedules'] });
       setEditing(null);
     },
@@ -76,10 +67,6 @@ export default function SchedulesPage() {
   const updateMut = useMutation({
     mutationFn: () => schedulesApi.update((editing as ScheduleEntry).id, toPayload(form, form.screenId)),
     onSuccess: () => {
-      logAction({
-        resourceType: 'SCHEDULE', resourceName: form.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       void qc.invalidateQueries({ queryKey: ['schedules'] });
       setEditing(null);
     },
@@ -93,12 +80,7 @@ export default function SchedulesPage() {
         priority: schedule.priority, startTime: schedule.startTime, endTime: schedule.endTime,
         daysOfWeek: schedule.daysOfWeek, startDate: schedule.startDate, endDate: schedule.endDate,
       }, schedule.screenId)),
-    onSuccess: (updated, { schedule }) => {
-      logAction({
-        resourceType: 'SCHEDULE', resourceName: schedule.name, action: 'UPDATE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-        detail: ta('detailRenamedTo', { name: updated.name }),
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['schedules'] });
       setRenamingId(null);
     },
@@ -119,10 +101,6 @@ export default function SchedulesPage() {
   const removeMut = useMutation({
     mutationFn: (schedule: ScheduleEntry) => schedulesApi.remove(schedule.id),
     onSuccess: (_data, schedule) => {
-      logAction({
-        resourceType: 'SCHEDULE', resourceName: schedule.name, action: 'DELETE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<ScheduleEntry[]>(['schedules'], (old) => old?.filter(s => s.id !== schedule.id));
       void qc.invalidateQueries({ queryKey: ['schedules'] });
     },

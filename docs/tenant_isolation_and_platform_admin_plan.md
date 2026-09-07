@@ -564,6 +564,8 @@ Tasks:
 
 ### P8 — Remove or isolate every remaining browser-global production mock
 
+**Status: in progress (2026-09-07).** Task 1 (inventory) done — see `docs/tenant-isolation/README.md`. Task 2's first priority, Audit Log, is done: the dashboard now reads apps/api's real, already-globally-wired `AuditInterceptor`/`AuditService` (`GET /org/audit-log`) instead of `lib/auditLog.ts`'s per-browser localStorage mock; every manual `useAuditLog()` recording call site (60 across 9 files) removed as redundant, since the interceptor already logs every mutating request server-side regardless of client. Two real data-quality bugs fixed in the interceptor while wiring this up: `/admin/**` platform actions no longer also pollute the acting Super Admin's own org's tenant AuditLog (they already have their own `PlatformAuditLog` trail, P3/P5a/P6a), and the `org` routing-wrapper prefix no longer masks the real resource type for member/invite/settings mutations. Remaining priorities (proof of play/reports, screen-group tagging/assignment, approvals, uptime, billing) not started this pass — still mock-backed with `PreviewFeatureNotice` shown, task 3's flag-gating not yet applied to any of them.
+
 **Goal:** Eliminate account-to-account UI contamination on shared browsers.
 
 Tasks:

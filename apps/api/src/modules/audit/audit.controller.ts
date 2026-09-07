@@ -21,6 +21,7 @@ export class AuditController {
     @Query('resourceType') resourceType?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('userSearch') userSearch?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
@@ -28,6 +29,7 @@ export class AuditController {
       resourceType,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
+      userSearch,
       page: Number(page) || 1,
       pageSize: Math.min(Number(pageSize) || 50, 200),
     });

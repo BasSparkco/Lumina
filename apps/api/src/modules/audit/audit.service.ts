@@ -15,6 +15,7 @@ interface AuditQueryOptions {
   resourceType?: string;
   from?: Date;
   to?: Date;
+  userSearch?: string;
   page: number;
   pageSize: number;
 }
@@ -40,6 +41,9 @@ export class AuditService {
       ...(opts.resourceType ? { resourceType: opts.resourceType } : {}),
       ...(opts.from ?? opts.to
         ? { createdAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) } }
+        : {}),
+      ...(opts.userSearch?.trim()
+        ? { user: { OR: [{ name: { contains: opts.userSearch.trim(), mode: 'insensitive' as const } }, { email: { contains: opts.userSearch.trim(), mode: 'insensitive' as const } }] } }
         : {}),
     };
 

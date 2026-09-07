@@ -136,6 +136,50 @@ export const membersApi = {
     req<{ token: string; user: User }>('/org/invite/accept', { method: 'POST', body: JSON.stringify({ token, name, password }) }),
 };
 
+// ── Audit log (P8, docs/tenant_isolation_and_platform_admin_plan.md) ────────
+// Real, server-side, org-scoped audit trail — every mutating dashboard request is logged
+// automatically by apps/api's AuditInterceptor (globally registered), so there is nothing for
+// the dashboard to "record" itself; this only ever reads. `resourceType` and the raw `action`
+// string (e.g. "post /v1/screens/scr_1/reload") come straight from the request path/method —
+// not a curated enum — same convention as the Super Admin's platform audit log
+// (PlatformAuditEntry.action above).
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  metadata: unknown;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+}
+export interface AuditLogResult {
+  items: AuditLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+export interface AuditLogParams {
+  resourceType?: string;
+  from?: string;
+  to?: string;
+  userSearch?: string;
+  page?: number;
+  pageSize?: number;
+}
+export const auditLogApi = {
+  list: (params: AuditLogParams = {}) => {
+    const qs = new URLSearchParams();
+    if (params.resourceType) qs.set('resourceType', params.resourceType);
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.userSearch) qs.set('userSearch', params.userSearch);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return req<AuditLogResult>(`/org/audit-log${suffix}`);
+  },
+};
+
 // ── Platform tenants (Super Admin control plane) ─────────────────────────────
 export interface TenantModuleAssignment {
   key: ModuleKey;

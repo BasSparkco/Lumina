@@ -8,7 +8,6 @@ import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
-import { useAuditLog } from '@/hooks/useAuditLog';
 
 const ROLES: UserRole[] = ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER'];
 
@@ -31,7 +30,6 @@ export default function MembersPage() {
   const { canManageMembers } = usePermissions();
   const canRender = useRouteGuard(canManageMembers);
   const { confirmDelete } = useConfirmBeforeDelete();
-  const logAction = useAuditLog();
   const t = useTranslations('members');
   const tc = useTranslations('common');
 
@@ -68,11 +66,7 @@ export default function MembersPage() {
 
   const inviteMut = useMutation({
     mutationFn: () => membersApi.invite(inviteEmail.trim(), inviteRole),
-    onSuccess: (created) => {
-      logAction({
-        resourceType: 'MEMBER', resourceName: created.email, action: 'INVITE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: created.role,
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: invitesKey });
       setShowInvite(false);
       setInviteEmail('');
@@ -84,11 +78,7 @@ export default function MembersPage() {
 
   const roleMut = useMutation({
     mutationFn: ({ id, role }: { id: string; role: UserRole }) => membersApi.updateRole(id, role),
-    onSuccess: (updated) => {
-      logAction({
-        resourceType: 'MEMBER', resourceName: updated.email, action: 'ROLE_CHANGE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '', detail: updated.role,
-      });
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: membersKey });
     },
   });
@@ -96,10 +86,6 @@ export default function MembersPage() {
   const removeMut = useMutation({
     mutationFn: (member: Member) => membersApi.remove(member.id),
     onSuccess: (_data, member) => {
-      logAction({
-        resourceType: 'MEMBER', resourceName: member.email, action: 'REMOVE',
-        userName: user?.name ?? '', userEmail: user?.email ?? '',
-      });
       qc.setQueryData<Member[]>(membersKey, (old) => old?.filter(m => m.id !== member.id));
       void qc.invalidateQueries({ queryKey: membersKey });
     },
