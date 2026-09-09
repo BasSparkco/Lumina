@@ -10,16 +10,17 @@ import { useDesignerHistory } from '../state/history.store';
 import { useHotkeys } from '../hooks/useHotkeys';
 import { useAutosave, clearLocalDraft } from '../hooks/useAutosave';
 import {
-  createImagePlaceholderElement,
+  createMediaElement,
   createQrPlaceholderElement,
   createShapeElement,
   createTextElement,
-  createVideoPlaceholderElement,
 } from '../lib/defaultElements';
 import { DesignerTopBar, type SaveResult } from './DesignerTopBar';
 import { DesignerSidebar } from './DesignerSidebar';
 import { CanvasViewport } from './CanvasViewport';
 import { InspectorPanel, type InspectorTab } from './InspectorPanel';
+import { MediaInsertDialog } from './MediaInsertDialog';
+import type { MediaKind } from '../lib/mediaInsertion';
 import { SceneStrip } from './SceneStrip';
 import { VersionsPanel } from './VersionsPanel';
 
@@ -93,6 +94,7 @@ export function DesignerShell({
   // adapter.updateElement() directly for live-feedback edits (designer.md §8 amendment) without
   // CanvasViewport needing to know anything about property-panel UI. State (not a bare ref) so
   // PropertiesPanel re-renders once the adapter becomes available after mount.
+  const [mediaInsert, setMediaInsert] = useState<{ kind: MediaKind; documentId: string; sceneId: string } | null>(null);
   const [adapter, setAdapter] = useState<FabricCanvasAdapter | null>(null);
   // Same lifted-from-CanvasViewport convention as `adapter` above — pan offset is local
   // interaction state CanvasViewport owns, but the top bar's "Fit to Screen" button lives here.
@@ -101,6 +103,13 @@ export function DesignerShell({
   // holding a key while dragging awkward). Lives here (not in CanvasViewport) since the button
   // that toggles it is in DesignerTopBar; CanvasViewport just receives it as a prop.
   const [handToolActive, setHandToolActive] = useState(false);
+
+  const insertionContext = `${document?.id}:${activeSceneId}`;
+  const [previousInsertionContext, setPreviousInsertionContext] = useState(insertionContext);
+  if (previousInsertionContext !== insertionContext) {
+    setPreviousInsertionContext(insertionContext);
+    setMediaInsert(null);
+  }
 
   const { canUndo, canRedo, undo, redo, commit } = useDesignerHistory();
   const { confirmDelete } = useConfirmBeforeDelete();
@@ -265,6 +274,16 @@ export function DesignerShell({
 
   return (
     <div className="command-deck flex h-full w-full flex-col">
+      {mediaInsert && mediaInsert.documentId === document?.id && mediaInsert.sceneId === activeSceneId && (
+        <MediaInsertDialog kind={mediaInsert.kind} onClose={() => setMediaInsert(null)} onInsert={(media) => {
+          const state = useDesignerStore.getState();
+          const scene = state.document?.scenes.find((item) => item.id === state.activeSceneId);
+          if (!state.document || !scene || state.document.id !== mediaInsert.documentId || scene.id !== mediaInsert.sceneId) return;
+          const element = createMediaElement(state.document.canvas, scene.elements, media, adapter?.getInsertionBounds());
+          commit(() => addElement(element));
+          setMediaInsert(null);
+        }} />
+      )}
       <DesignerTopBar
         name={templateId ? `Template: ${templateName ?? document?.name ?? '…'}` : (document?.name ?? 'Untitled Design')}
         onRename={!templateId && document ? handleRename : undefined}
@@ -310,14 +329,14 @@ export function DesignerShell({
             onAddShape={(shape) => {
               if (document && activeScene) commit(() => addElement(createShapeElement(shape, document.canvas, activeScene.elements)));
             }}
-            onAddImagePlaceholder={() => {
-              if (document && activeScene) commit(() => addElement(createImagePlaceholderElement(document.canvas, activeScene.elements)));
+            onInsertImage={() => {
+              if (document && activeScene) setMediaInsert({ kind: 'IMAGE', documentId: document.id, sceneId: activeScene.id });
             }}
             onAddQrPlaceholder={() => {
               if (document && activeScene) commit(() => addElement(createQrPlaceholderElement(document.canvas, activeScene.elements)));
             }}
-            onAddVideoPlaceholder={() => {
-              if (document && activeScene) commit(() => addElement(createVideoPlaceholderElement(document.canvas, activeScene.elements)));
+            onInsertVideo={() => {
+              if (document && activeScene) setMediaInsert({ kind: 'VIDEO', documentId: document.id, sceneId: activeScene.id });
             }}
             onShowVariables={() => {
               setInspectorTab('variables');

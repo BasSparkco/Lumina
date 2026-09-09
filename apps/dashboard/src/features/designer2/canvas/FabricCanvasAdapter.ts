@@ -1,19 +1,8 @@
-/**
- * designer.md §4.2 — the only place outside this canvas/ directory allowed to import `fabric`
- * directly. Fabric owns rendering/selection/transform/zoom/pan only; everything else (tenant
- * permissions, persistence, timeline, Player contract, dynamic variables) lives elsewhere and
- * never touches this class.
- *
- * Phase 2: full element CRUD via FabricObjectFactory. `loadScene` clears and rebuilds every
- * element sorted by zIndex ascending — a deliberate simplification over LayoutCanvasPanel's
- * per-object reconciliation (see docs/adr/designer-architecture.md addendum / Phase 2 plan):
- * simpler, no stale-scale bugs, and Phase 2's acceptance criteria don't require reconciliation
- * performance. Every store mutation replaces `document`, which re-triggers loadScene from
- * CanvasViewport — live drag/resize/rotate still feels smooth because fabric handles those
- * natively and only reports back on `object:modified` (mouse-up), not per frame.
- */
-import { ActiveSelection, Canvas, runningAnimations, Textbox, type FabricObject } from 'fabric';
+/** Persistent Fabric projection of the Lumina scene. Ordinary edits reconcile by element ID. */
+import { ActiveSelection, runningAnimations, Textbox, type FabricObject } from 'fabric';
+import { applyElementPosition, fabricPositionForElement, readElementGeometry } from './geometryContract';
 import { ANIMATION_MOTION, resolveEasing, type AnimationMotion, type DesignElement, type DesignScene, type ElementAnimation, type VideoElement } from '@lumina/design-schema';
+import { LayeredCanvas } from './LayeredCanvas';
 import { fontStack } from '@lumina/types';
 import { createFabricObject, type ResolveAssetUrl } from './FabricObjectFactory';
 import {
@@ -24,6 +13,7 @@ import {
   bindSelectionEvents,
   type DesignerFabricObject,
   type ElementGeometryPatch,
+  type ElementGeometryUpdate,
   type Guides,
 } from './FabricEventBridge';
 
@@ -34,6 +24,7 @@ type EmphasisStep = NonNullable<ElementAnimation['emphasis']>;
 
 export interface CanvasAdapter {
   loadScene(scene: DesignScene): Promise<void>;
+  syncScene(scene: DesignScene): Promise<boolean>;
   clear(): void;
 
   addElement(element: DesignElement): Promise<void>;
@@ -77,6 +68,11 @@ export interface CanvasAdapter {
 export interface CanvasAdapterCallbacks {
   onSelectionChange: (ids: string[]) => void;
   onElementModified: (id: string, patch: ElementGeometryPatch) => void;
+  // A multi-select ActiveSelection drag/resize/rotate commits all its members through this one
+  // call instead of N calls to onElementModified, so the caller can wrap them in a single undo
+  // step (see bindModifiedEvents in FabricEventBridge.ts).
+  onElementsModified: (updates: ElementGeometryUpdate[]) => void;
+  onTextChanged: (id: string, text: string) => void;
   onGuidesChange: (guides: Guides) => void;
   onContextMenu: (elementId: string | null, clientX: number, clientY: number) => void;
   // Fires whenever the effective zoom changes for any reason, including fitToViewport's own
@@ -84,6 +80,7 @@ export interface CanvasAdapterCallbacks {
   // the wheel-zoom handler (Phase 1's original wiring) drifts out of sync with the canvas's
   // actual zoom the first time the window/container resizes.
   onZoomChange: (zoom: number) => void;
+  getViewportRect?: () => DOMRect | undefined;
   // designer2 pan feature — double-click on empty canvas resets the view (see
   // bindDoubleClickEvents). Never fires for a double-click on an actual element.
   onEmptyDoubleClick: () => void;
@@ -105,7 +102,12 @@ function disposeVideoOverlay(video: HTMLVideoElement): void {
 }
 
 export class FabricCanvasAdapter implements CanvasAdapter {
-  private canvas: Canvas;
+  private canvas: LayeredCanvas;
+  private generation = 0;
+  private pendingSync: AbortController | null = null;
+  private disposed = false;
+  private fitMode = true;
+  private applied = new Map<string, { element: DesignElement; resource: string }>();
   private objects = new Map<string, DesignerFabricObject>();
   // Captured once per object at construction time (addElement), before any animation ever touches
   // it — the authoritative "resting" scale baseline for playEnter/playExit/playEmphasisOnce,
@@ -116,19 +118,14 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   private designWidth = 1920;
   private designHeight = 1080;
   private callbacks: CanvasAdapterCallbacks;
-  // designer.md Phase 8 amendment — Fabric's Textbox has no real bidi/RTL shaping, so text
-  // elements paint transparent on canvas (FabricObjectFactory) and their actual visible glyphs
-  // are these DOM overlay divs instead, positioned by syncTextOverlays() on every render. One per
-  // text element, keyed by element id, appended into the container CanvasViewport provides.
-  private textOverlayContainer: HTMLDivElement;
+  // Native text preserves browser Arabic/bidi shaping. All visible elements share this stack.
+  private sceneLayerContainer: HTMLDivElement;
   private textOverlays = new Map<string, HTMLDivElement>();
-  // designer.md Phase 9 — same hybrid idea as text, one HTMLVideoElement per video element,
-  // synced by the same after:render hook. Sits in a container CanvasViewport positions *below*
-  // the canvas (see that file's Phase 9 comments) — the canvas itself no longer paints a
-  // background color (moved to a DOM layer below even this), so it's fully transparent and a
-  // video positioned beneath it is actually visible through it.
-  private videoOverlayContainer: HTMLDivElement;
   private videoOverlays = new Map<string, HTMLVideoElement>();
+  private paintedLayers: HTMLCanvasElement[] = [];
+  private textElements = new Map<string, Extract<DesignElement, { type: 'text' }>>();
+  private textEditor: HTMLTextAreaElement | null = null;
+  private finishTextEditing: ((save: boolean) => void) | null = null;
   private unbindAfterRender: () => void;
   // fabric's own Canvas.clear() internally calls discardActiveObject(), which fires a real
   // 'selection:cleared' event — an implementation detail of tearing the canvas down for a
@@ -146,23 +143,22 @@ export class FabricCanvasAdapter implements CanvasAdapter {
 
   constructor(
     canvasEl: HTMLCanvasElement,
-    textOverlayContainer: HTMLDivElement,
-    videoOverlayContainer: HTMLDivElement,
+    sceneLayerContainer: HTMLDivElement,
     callbacks: CanvasAdapterCallbacks,
   ) {
     this.callbacks = callbacks;
-    this.textOverlayContainer = textOverlayContainer;
-    this.videoOverlayContainer = videoOverlayContainer;
-    this.canvas = new Canvas(canvasEl, {
+    this.sceneLayerContainer = sceneLayerContainer;
+    this.canvas = new LayeredCanvas(canvasEl, {
       // Marquee + shift-click multi-select (designer.md §7, Phase 3).
       selection: true,
       preserveObjectStacking: true,
     });
+    this.canvas.renderLayers = (ctx, objects) => this.renderLayers(ctx, objects);
     this.unbindSelection = bindSelectionEvents(this.canvas, (ids) => {
       if (this.suppressSelectionEvents) return;
       callbacks.onSelectionChange(ids);
     });
-    this.unbindModified = bindModifiedEvents(this.canvas, callbacks.onElementModified);
+    this.unbindModified = bindModifiedEvents(this.canvas, callbacks.onElementModified, callbacks.onElementsModified);
     this.unbindLiveTransform = bindLiveTransformEvents(
       this.canvas,
       () => this.objects,
@@ -170,7 +166,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       callbacks.onGuidesChange,
     );
     this.unbindContextMenu = bindContextMenuEvents(this.canvas, callbacks.onContextMenu);
-    this.unbindDoubleClick = bindDoubleClickEvents(this.canvas, callbacks.onEmptyDoubleClick);
+    this.unbindDoubleClick = bindDoubleClickEvents(this.canvas, callbacks.onEmptyDoubleClick, (id) => this.editText(id));
     const onAfterRender = () => {
       this.syncTextOverlays();
       this.syncVideoOverlays();
@@ -181,13 +177,141 @@ export class FabricCanvasAdapter implements CanvasAdapter {
 
   async loadScene(scene: DesignScene): Promise<void> {
     this.clear();
-    // designer.md Phase 9 — scene background rendering moved entirely to CanvasViewport as a DOM
-    // layer (color fill below the video overlay layer; image/video background types still a
-    // documented no-op there, unchanged). This canvas never paints a background of its own.
-    for (const element of [...scene.elements].sort((a, b) => a.zIndex - b.zIndex)) {
-      await this.addElement(element);
+    await this.syncScene(scene);
+  }
+
+  // Prepare async resources before mutating the visible scene. Only the latest request may
+  // install its results; discarded image/QR decodes must release their Fabric caches too.
+  async syncScene(scene: DesignScene): Promise<boolean> {
+    if (this.disposed) return false;
+    const generation = ++this.generation;
+    this.pendingSync?.abort();
+    const controller = new AbortController();
+    this.pendingSync = controller;
+    const ordered = [...scene.elements].sort((a, b) => a.zIndex - b.zIndex);
+    const resourceFor = (el: DesignElement) =>
+      (el.type === 'image' || el.type === 'video') && el.assetId
+        ? this.callbacks.resolveAssetUrl(el.assetId) ?? '' : '';
+    const contentKey = (el: DesignElement) => {
+      const { x, y, width, height, rotation, opacity, visible, zIndex, name,
+        selectable, movable, resizable, deletable, editable, animation, templatePolicy,
+        ...content } = el;
+      // These fields are handled in-place or have no visual representation.
+      void [x, y, width, height, rotation, opacity, visible, zIndex, name, selectable,
+        movable, resizable, deletable, editable, animation, templatePolicy];
+      return JSON.stringify(el.type === 'video' ? { type: el.type, assetId: el.assetId }
+        : el.type === 'text' ? { type: el.type }
+        : el.type === 'shape' ? { type: el.type, shape: el.shape } : content);
+    };
+    const results = await Promise.allSettled(ordered.map(async (element) => {
+      const resource = resourceFor(element);
+      const previous = this.applied.get(element.id);
+      const replace = !previous || previous.resource !== resource || contentKey(previous.element) !== contentKey(element);
+      const object = replace ? await createFabricObject(element, () => resource, controller.signal) as DesignerFabricObject : null;
+      return { element, resource, object };
+    }));
+    const prepared = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+    const failure = results.find((result) => result.status === 'rejected');
+    if (failure || generation !== this.generation || this.disposed) {
+      for (const entry of prepared) entry.object?.dispose();
+      if (failure && generation === this.generation && !this.disposed) throw failure.reason;
+      return false;
+    }
+    this.suppressSelectionEvents = true;
+    try {
+      const ids = new Set(ordered.map((el) => el.id));
+      for (const id of this.objects.keys()) if (!ids.has(id)) this.removeElement(id);
+      for (const [index, { element, resource, object }] of prepared.entries()) {
+        if (object) {
+          this.removeElement(element.id);
+          this.installElement(element, object);
+        } else {
+          const previous = this.applied.get(element.id)!.element;
+          const obj = this.objects.get(element.id)!;
+          const geometryChanged = element.x !== previous.x || element.y !== previous.y ||
+            element.width !== previous.width || element.height !== previous.height ||
+            element.rotation !== previous.rotation;
+          const patch: Record<string, unknown> = {};
+          if (element.width !== previous.width) patch.scaleX = element.width / (obj.width || 1);
+          if (element.height !== previous.height) patch.scaleY = element.height / (obj.height || 1);
+          if (element.rotation !== previous.rotation) patch.angle = element.rotation;
+          if (element.opacity !== previous.opacity) patch.opacity = element.opacity;
+          patch.visible = element.visible;
+          patch.selectable = element.selectable;
+          patch.evented = element.selectable && element.visible;
+          patch.lockMovementX = patch.lockMovementY = !element.movable;
+          patch.lockScalingX = patch.lockScalingY = patch.lockRotation = !element.resizable;
+          obj.set(patch);
+          // Reposition after scale/angle above — see geometryContract.ts; patching left/top
+          // independently from x/y is only correct at rotation 0.
+          if (geometryChanged) applyElementPosition(obj, element);
+          obj.setCoords();
+          this.restingScale.set(element.id, { x: obj.scaleX, y: obj.scaleY });
+          if (element.type === 'text' && obj instanceof Textbox) {
+            this.textElements.set(element.id, element);
+            const before = previous.type === 'text' ? previous : null;
+            if (before && (before.text !== element.text || before.fontFamily !== element.fontFamily ||
+              before.fontSize !== element.fontSize || before.fontWeight !== element.fontWeight ||
+              before.fontStyle !== element.fontStyle || before.textAlign !== element.textAlign ||
+              before.lineHeight !== element.lineHeight || before.charSpacing !== element.charSpacing)) {
+              obj.set({ text: element.text, fontFamily: fontStack(element.fontFamily),
+                fontSize: element.fontSize, fontWeight: element.fontWeight,
+                fontStyle: element.fontStyle ?? 'normal', textAlign: element.textAlign,
+                lineHeight: element.lineHeight ?? 1.16, charSpacing: element.charSpacing ?? 0 });
+            }
+            const overlay = this.textOverlays.get(element.id)!;
+            this.styleTextOverlay(overlay, element);
+          }
+          if (element.type === 'shape') {
+            if (previous.type === 'shape') {
+              if (element.fill !== previous.fill) obj.set('fill', element.fill ?? 'transparent');
+              if (element.stroke !== previous.stroke) obj.set('stroke', element.stroke ?? null);
+              if (element.strokeWidth !== previous.strokeWidth) obj.set('strokeWidth', element.strokeWidth ?? 1);
+              if (element.shape === 'rounded-rectangle' && element.radius !== previous.radius) {
+                obj.set({ rx: element.radius ?? 12, ry: element.radius ?? 12 });
+              }
+            }
+          }
+          obj.setCoords();
+          const video = this.videoOverlays.get(element.id);
+          if (element.type === 'video' && video) {
+            video.muted = element.muted;
+            video.volume = element.volume;
+            video.loop = element.loop;
+            video.autoplay = element.autoplay;
+            video.style.objectFit = element.fit;
+            if (previous.type === 'video') {
+              if (!element.autoplay && previous.autoplay) video.pause();
+              if (element.startOffsetMs !== previous.startOffsetMs && video.readyState >= 1) {
+                video.currentTime = element.startOffsetMs / 1000;
+              }
+            }
+            const poster = element.posterAssetId ? this.callbacks.resolveAssetUrl(element.posterAssetId) : undefined;
+            if (poster) video.poster = poster;
+            else video.removeAttribute('poster');
+          }
+        }
+        this.applied.set(element.id, { element, resource });
+        this.canvas.moveObjectTo(this.objects.get(element.id)!, index);
+      }
+    } finally {
+      this.suppressSelectionEvents = false;
     }
     this.canvas.requestRenderAll();
+    return true;
+  }
+
+  getInsertionBounds(): { x: number; y: number; width: number; height: number } {
+    const fallback = { x: 0, y: 0, width: this.designWidth, height: this.designHeight };
+    const viewport = this.callbacks.getViewportRect?.();
+    const canvas = this.canvas.getElement().getBoundingClientRect();
+    if (!viewport || canvas.width <= 0 || canvas.height <= 0) return fallback;
+    const zoom = this.canvas.getZoom();
+    const x = Math.max(0, (viewport.left - canvas.left) / zoom);
+    const y = Math.max(0, (viewport.top - canvas.top) / zoom);
+    const right = Math.min(this.designWidth, (viewport.right - canvas.left) / zoom);
+    const bottom = Math.min(this.designHeight, (viewport.bottom - canvas.top) / zoom);
+    return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : fallback;
   }
 
   setDesignSize(width: number, height: number): void {
@@ -196,11 +320,20 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   }
 
   clear(): void {
+    ++this.generation;
+    this.pendingSync?.abort();
+    this.pendingSync = null;
+    this.applied.clear();
+    this.finishTextEditing?.(false);
+    this.textElements.clear();
+    for (const layer of this.paintedLayers) layer.remove();
+    this.paintedLayers = [];
     // Immediate cleanup of any in-flight enter/emphasis tweens on rebuild — belt-and-suspenders
     // alongside playEmphasisLoop's own natural self-stop (it re-checks `this.objects.get(id)`
     // against its captured object reference before every iteration).
     runningAnimations.cancelByCanvas(this.canvas);
     this.suppressSelectionEvents = true;
+    for (const object of this.objects.values()) object.dispose();
     this.canvas.clear();
     this.suppressSelectionEvents = false;
     this.objects.clear();
@@ -212,22 +345,39 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   }
 
   async addElement(element: DesignElement): Promise<void> {
+    const generation = this.generation;
     const obj = (await createFabricObject(element, this.callbacks.resolveAssetUrl)) as DesignerFabricObject;
+    if (this.disposed || generation !== this.generation) { obj.dispose(); return; }
+    this.installElement(element, obj);
+  }
+
+  private installElement(element: DesignElement, obj: DesignerFabricObject): void {
     this.objects.set(element.id, obj);
     this.restingScale.set(element.id, { x: obj.scaleX ?? 1, y: obj.scaleY ?? 1 });
     this.canvas.add(obj);
-    if (element.type === 'text') this.textOverlays.set(element.id, this.createTextOverlay(element));
+    if (element.type === 'text') {
+      this.textElements.set(element.id, element);
+      this.textOverlays.set(element.id, this.createTextOverlay(element));
+    }
     if (element.type === 'video' && element.assetId) this.videoOverlays.set(element.id, this.createVideoOverlay(element));
+    const resource = (element.type === 'video' || element.type === 'image') && element.assetId
+      ? this.callbacks.resolveAssetUrl(element.assetId) ?? '' : '';
+    this.applied.set(element.id, { element, resource });
   }
 
   updateElement(id: string, patch: Partial<DesignElement>): void {
     const obj = this.objects.get(id);
     if (!obj) return;
+    // Geometry fields (see geometryContract.ts) must be repositioned together, not patched
+    // independently: Fabric's left/top only equal x/y at rotation 0, so a patch that only sets
+    // e.g. rotation still needs x/y — read here before scale/angle change below — to compute the
+    // correct left/top for the new angle.
+    const geometryPatched = patch.x !== undefined || patch.y !== undefined ||
+      patch.width !== undefined || patch.height !== undefined || patch.rotation !== undefined;
+    const current = geometryPatched ? readElementGeometry(obj) : null;
     const next: Record<string, unknown> = {};
-    if (patch.x !== undefined) next.left = patch.x;
-    if (patch.y !== undefined) next.top = patch.y;
-    if (patch.width !== undefined) next.width = patch.width;
-    if (patch.height !== undefined) next.height = patch.height;
+    if (patch.width !== undefined) next.scaleX = patch.width / (obj.width || 1);
+    if (patch.height !== undefined) next.scaleY = patch.height / (obj.height || 1);
     if (patch.rotation !== undefined) next.angle = patch.rotation;
     if (patch.opacity !== undefined) next.opacity = patch.opacity;
     if (patch.visible !== undefined) next.visible = patch.visible;
@@ -238,30 +388,44 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     const fontSizePatch = (patch as Partial<Extract<DesignElement, { type: 'text' }>>).fontSize;
     if (fontSizePatch !== undefined && obj instanceof Textbox) next.fontSize = fontSizePatch;
     obj.set(next);
+    if (current) {
+      applyElementPosition(obj, {
+        x: patch.x ?? current.x,
+        y: patch.y ?? current.y,
+        width: patch.width ?? current.width,
+        height: patch.height ?? current.height,
+      });
+    }
     obj.setCoords();
     this.canvas.requestRenderAll();
   }
 
   removeElement(id: string): void {
+    if (this.textEditor?.dataset.elementId === id) this.finishTextEditing?.(false);
     const obj = this.objects.get(id);
     if (!obj) return;
     this.canvas.remove(obj);
     this.objects.delete(id);
+    this.applied.delete(id);
+    this.restingScale.delete(id);
+    obj.dispose();
     this.textOverlays.get(id)?.remove();
     this.textOverlays.delete(id);
+    this.textElements.delete(id);
     const video = this.videoOverlays.get(id);
     if (video) disposeVideoOverlay(video);
     this.videoOverlays.delete(id);
   }
 
-  // designer.md Phase 8 — the DOM overlay's static content: everything that only ever changes via
-  // a full loadScene rebuild (which recreates this div from scratch), not via a live in-place
-  // update. `dir` is the whole point — native browser bidi/RTL layout, which Fabric's Textbox
-  // can't do. `pointer-events: none` since this is purely visual; selection/hit-testing stays on
-  // the (invisible) Fabric Textbox underneath, and PropertiesPanel's Text field is the only way
-  // to edit content (no in-canvas double-click editing is wired for designer2 text at all).
+  // Static styles and browser-native text layout; Fabric remains responsible for hit testing.
   private createTextOverlay(element: Extract<DesignElement, { type: 'text' }>): HTMLDivElement {
     const div = document.createElement('div');
+    this.styleTextOverlay(div, element);
+    this.sceneLayerContainer.appendChild(div);
+    return div;
+  }
+
+  private styleTextOverlay(div: HTMLDivElement, element: Extract<DesignElement, { type: 'text' }>): void {
     div.dir = element.direction;
     div.textContent = element.text;
     Object.assign(div.style, {
@@ -269,7 +433,6 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       pointerEvents: 'none',
       whiteSpace: 'pre-wrap',
       overflow: 'visible',
-      transformOrigin: 'center center',
       fontFamily: fontStack(element.fontFamily),
       fontWeight: String(element.fontWeight),
       fontStyle: element.fontStyle ?? 'normal',
@@ -278,8 +441,92 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       lineHeight: element.lineHeight !== undefined ? String(element.lineHeight) : '',
       letterSpacing: element.charSpacing ? `${element.charSpacing / 1000}em` : '',
     });
-    this.textOverlayContainer.appendChild(div);
-    return div;
+  }
+
+  private editText(id: string): void {
+    const element = this.textElements.get(id);
+    const overlay = this.textOverlays.get(id);
+    const obj = this.objects.get(id);
+    if (!element || !overlay || !obj || !element.editable || !element.selectable) return;
+    this.finishTextEditing?.(true);
+    this.selectElement(id);
+    const editor = document.createElement('textarea');
+    editor.dataset.elementId = id;
+    editor.setAttribute('aria-label', element.name);
+    editor.value = element.text;
+    editor.dir = element.direction;
+    editor.style.cssText = overlay.style.cssText;
+    Object.assign(editor.style, {
+      pointerEvents: 'auto', resize: 'none', border: '0', padding: '0', margin: '0',
+      background: 'transparent', outline: '1px solid #818cf8', zIndex: '1',
+      boxSizing: 'border-box', overflow: 'auto',
+    });
+    this.textEditor = editor;
+    this.applyOverlayGeometry(editor, obj, this.canvas.getZoom());
+    overlay.style.visibility = 'hidden';
+    this.canvas.wrapperEl.appendChild(editor);
+    const finish = (save: boolean) => {
+      if (this.textEditor !== editor) return;
+      this.textEditor = null;
+      this.finishTextEditing = null;
+      const text = editor.value;
+      editor.remove();
+      overlay.style.visibility = '';
+      if (save && text !== element.text) this.callbacks.onTextChanged(id, text);
+    };
+    this.finishTextEditing = finish;
+    editor.addEventListener('blur', () => finish(true));
+    editor.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.isComposing) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+      } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        finish(true);
+      }
+    });
+    editor.focus();
+    editor.select();
+  }
+
+  private renderLayers(source: CanvasRenderingContext2D, objects: FabricObject[]): void {
+    let layerCount = 0;
+    let ctx: CanvasRenderingContext2D | null = null;
+    const lower = this.canvas.getElement();
+    for (const [index, object] of objects.entries()) {
+      const id = (object as DesignerFabricObject).elementId;
+      const overlay = id ? this.textOverlays.get(id) ?? this.videoOverlays.get(id) : undefined;
+      if (overlay) {
+        overlay.style.zIndex = String(index);
+        ctx = null;
+        continue;
+      }
+      if (!ctx) {
+        let layer = this.paintedLayers[layerCount];
+        if (!layer) {
+          layer = document.createElement('canvas');
+          Object.assign(layer.style, { position: 'absolute', inset: '0', pointerEvents: 'none' });
+          this.sceneLayerContainer.appendChild(layer);
+          this.paintedLayers.push(layer);
+        }
+        layerCount++;
+        if (layer.width !== lower.width) layer.width = lower.width;
+        if (layer.height !== lower.height) layer.height = lower.height;
+        layer.style.width = `${this.canvas.width}px`;
+        layer.style.height = `${this.canvas.height}px`;
+        layer.style.zIndex = String(index);
+        ctx = layer.getContext('2d');
+        if (!ctx) continue;
+        ctx.resetTransform();
+        ctx.clearRect(0, 0, layer.width, layer.height);
+        ctx.setTransform(source.getTransform());
+        ctx.imageSmoothingEnabled = source.imageSmoothingEnabled;
+      }
+      object.render(ctx);
+    }
+    for (const layer of this.paintedLayers.splice(layerCount)) layer.remove();
   }
 
   // designer.md Phase 9 — the visible video frame; the Fabric-side object (FabricObjectFactory)
@@ -303,52 +550,38 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       objectFit: element.fit,
       transformOrigin: 'center center',
     });
-    const startSec = element.startOffsetMs / 1000;
-    const endSec = element.endOffsetMs !== undefined ? element.endOffsetMs / 1000 : undefined;
+    const current = () => {
+      const latest = this.applied.get(element.id)?.element;
+      return latest?.type === 'video' ? latest : element;
+    };
     video.addEventListener('loadedmetadata', () => {
+      const startSec = current().startOffsetMs / 1000;
       if (startSec > 0) video.currentTime = startSec;
     });
-    if (endSec !== undefined) {
-      video.addEventListener('timeupdate', () => {
-        if (video.currentTime < endSec) return;
-        if (element.loop) video.currentTime = startSec;
-        else video.pause();
-      });
-    }
+    video.addEventListener('timeupdate', () => {
+      const settings = current();
+      if (settings.endOffsetMs === undefined || video.currentTime < settings.endOffsetMs / 1000) return;
+      if (settings.loop) video.currentTime = settings.startOffsetMs / 1000;
+      else video.pause();
+    });
     const url = element.assetId ? this.callbacks.resolveAssetUrl(element.assetId) : undefined;
     if (url) video.src = url;
-    this.videoOverlayContainer.appendChild(video);
+    this.sceneLayerContainer.appendChild(video);
     return video;
   }
 
-  // designer.md Phase 8/9 — recomputes one overlay's CSS position/size/transform from its Fabric
-  // hit-box's current geometry. Shared by text and video overlays (syncTextOverlays/
-  // syncVideoOverlays below) — both are plain HTMLElements needing identical position mirroring,
-  // on every canvas render (drag, resize, rotate, zoom, Phase 7 animation ticks — `after:render`
-  // fires after all of them uniformly). Pure position mirroring, not a full transform-matrix
-  // conversion: every element here uses originX/originY 'left'/'top' (see FabricObjectFactory),
-  // so left/top already give the *scaled* box's unrotated top-left corner directly (Fabric anchors
-  // left/top to whichever edge/corner a resize handle drag did *not* move) — the CSS box therefore
-  // has to be sized at the final scaled dimensions (width*scaleX, height*scaleY), not the
-  // pre-scale width/height with a separate CSS `scale()` layered on top. A `scale()` transform
-  // pivots around the CSS box's own center by default (`transformOrigin` is only ever set to
-  // 'center center', see createVideoOverlay), which matches Fabric only when the resize itself was
-  // anchored at the center — for every edge/corner-handle drag it isn't, so during a live resize
-  // the overlay visibly grew from the box's center instead of the handle's fixed opposite edge
-  // (e.g. dragging the bottom handle down made the video appear to grow upward too). Only rotation
-  // still needs a CSS transform — Fabric rotates around the object's own center exactly like CSS
-  // `rotate()` does, so that part was never wrong.
+  // Use the complete Fabric transform, including active multi-selection, rotation, and scale.
   private applyOverlayGeometry(el: HTMLElement, obj: DesignerFabricObject, zoom: number): void {
     el.style.display = obj.visible === false ? 'none' : 'block';
-    const scaleX = obj.scaleX ?? 1;
-    const scaleY = obj.scaleY ?? 1;
-    el.style.left = `${(obj.left ?? 0) * zoom}px`;
-    el.style.top = `${(obj.top ?? 0) * zoom}px`;
-    el.style.width = `${(obj.width ?? 0) * scaleX * zoom}px`;
-    el.style.height = `${(obj.height ?? 0) * scaleY * zoom}px`;
-    el.style.opacity = String(obj.opacity ?? 1);
-    const angle = obj.angle ?? 0;
-    el.style.transform = angle === 0 ? '' : `rotate(${angle}deg)`;
+    const matrix = obj.calcTransformMatrix();
+    el.style.left = '0';
+    el.style.top = '0';
+    el.style.width = `${obj.width}px`;
+    el.style.height = `${obj.height}px`;
+    el.style.opacity = String(obj.getObjectOpacity());
+    el.style.transformOrigin = '0 0';
+    const [a, b, c, d, e, f] = matrix.map((value) => value * zoom);
+    el.style.transform = `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f}) translate(-50%, -50%)`;
   }
 
   // Static content (text/font-family/color/align/direction) is set once at creation
@@ -363,7 +596,11 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       const obj = this.objects.get(id);
       if (!obj || !(obj instanceof Textbox)) continue;
       this.applyOverlayGeometry(div, obj, zoom);
-      div.style.fontSize = `${obj.fontSize * zoom}px`;
+      div.style.fontSize = `${obj.fontSize}px`;
+      if (this.textEditor?.dataset.elementId === id) {
+        this.applyOverlayGeometry(this.textEditor, obj, zoom);
+        this.textEditor.style.fontSize = div.style.fontSize;
+      }
     }
   }
 
@@ -451,6 +688,8 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   }
 
   setZoom(value: number): void {
+    if (value === this.canvas.getZoom() && this.canvas.width === this.designWidth * value && this.canvas.height === this.designHeight * value) return;
+    this.fitMode = false;
     this.canvas.setDimensions({ width: this.designWidth * value, height: this.designHeight * value });
     this.canvas.setZoom(value);
     this.canvas.requestRenderAll();
@@ -469,6 +708,10 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     this.canvas.upperCanvasEl.style.cursor = cursor;
   }
 
+  resizeViewport(width: number, height: number): void {
+    if (this.fitMode) this.fitToViewport(width, height);
+  }
+
   // designer.md §4.2 declares this with no parameters; the optional viewport size lets
   // CanvasViewport pass its ResizeObserver reading directly rather than the adapter having to
   // reach back into the DOM for its own container size.
@@ -479,6 +722,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     // "contain" fit, preserving aspect ratio, per designer.md §5.2 — never stretch.
     const scale = Math.min(vw / this.designWidth, vh / this.designHeight);
     this.setZoom(scale);
+    this.fitMode = true;
   }
 
   // designer.md Phase 6 amendment — captures exactly what's currently rendered (whatever scene
@@ -487,7 +731,14 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   // export remains unimplemented).
   async exportSceneSnapshot(): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      this.canvas.getElement().toBlob((blob) => {
+      const snapshot = document.createElement('canvas');
+      snapshot.width = this.canvas.getElement().width;
+      snapshot.height = this.canvas.getElement().height;
+      const ctx = snapshot.getContext('2d');
+      if (!ctx) { reject(new Error('Scene snapshot failed')); return; }
+      ctx.scale(this.canvas.getRetinaScaling(), this.canvas.getRetinaScaling());
+      this.canvas.renderCanvas(ctx, this.canvas.getObjects());
+      snapshot.toBlob((blob) => {
         if (blob) resolve(blob);
         else reject(new Error('Scene snapshot failed'));
       }, 'image/png');
@@ -501,7 +752,10 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   // not from wherever the last preview left the object).
   private restingProps(element: DesignElement) {
     const scale = this.restingScale.get(element.id) ?? { x: 1, y: 1 };
-    return { left: element.x, top: element.y, opacity: element.opacity, scaleX: scale.x, scaleY: scale.y };
+    // `element.x/y` is the unrotated content box's top-left (see geometryContract.ts) — not a
+    // valid Fabric left/top for a rotated object.
+    const position = fabricPositionForElement(element, element.rotation);
+    return { ...position, opacity: element.opacity, scaleX: scale.x, scaleY: scale.y };
   }
 
   private awayProps(resting: ReturnType<FabricCanvasAdapter['restingProps']>, motion: AnimationMotion) {
@@ -620,6 +874,15 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   }
 
   dispose(): void {
+    this.disposed = true;
+    ++this.generation;
+    this.pendingSync?.abort();
+    this.pendingSync = null;
+    this.applied.clear();
+    this.finishTextEditing?.(false);
+    for (const layer of this.paintedLayers) layer.remove();
+    this.paintedLayers = [];
+    this.textElements.clear();
     this.unbindSelection();
     this.unbindModified();
     this.unbindLiveTransform();

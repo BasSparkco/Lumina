@@ -3,18 +3,13 @@
  * FabricCanvasAdapter so the adapter's imperative CanvasAdapter interface (designer.md §4.2)
  * stays testable independent of store wiring.
  */
-import { ActiveSelection, type Canvas, type FabricObject, type TPointerEvent } from 'fabric';
+import { ActiveSelection, Textbox, type Canvas, type FabricObject, type TPointerEvent } from 'fabric';
 import { computeAlignTargets, snapDragAxis, type Box } from '@/lib/canvasSnap';
+import { readElementGeometry, type ElementGeometry } from './geometryContract';
 
 export type DesignerFabricObject = FabricObject & { elementId?: string };
 
-export interface ElementGeometryPatch {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
-}
+export type ElementGeometryPatch = ElementGeometry;
 
 export interface Guides {
   v: number[];
@@ -42,24 +37,64 @@ export function bindSelectionEvents(canvas: Canvas, onSelectionChange: (ids: str
   };
 }
 
+export interface ElementGeometryUpdate {
+  id: string;
+  patch: ElementGeometryPatch;
+}
+
+// A Textbox's corner controls (`scalingEqually`) are the only Fabric-default action that leaves
+// scaleX/scaleY non-1 on a Textbox — its side handles (`changeWidth`, ml/mr) resize `width`
+// directly with reflow, never scale, and top/bottom handles (`scalingYOrSkewingX`, mt/mb) touch
+// only scaleY. DesignElement never persists scaleX/scaleY (only x/y/width/height/rotation/
+// fontSize), so leftover scale surviving only on the live Fabric object would silently vanish —
+// and the font would visually "jump" back to its old size — the next time this element is
+// recreated from JSON (undo, reload, scene switch). Fold it into fontSize/width here, at the
+// Fabric boundary, so what's persisted is what's rendered.
+//
+// Only safe for a *standalone* object's own `object:modified`. A Textbox scaled as part of a
+// multi-select ActiveSelection is a separate, deliberately unhandled case: Fabric does not push
+// an ActiveSelection's composed scale down into a member's own scaleX/scaleY until the selection
+// is later dissolved — a member's scaleX/scaleY still reads 1 here even mid-gesture (verified
+// empirically), so there is nothing to normalize yet, and writing fontSize/width against a
+// guessed effective scale now would double up once Fabric's own pushdown happens afterward.
+function normalizeTextScale(obj: FabricObject): void {
+  if (!(obj instanceof Textbox)) return;
+  const scaleX = obj.scaleX ?? 1;
+  const scaleY = obj.scaleY ?? 1;
+  if (scaleX === 1 && scaleY === 1) return;
+  obj.set({
+    fontSize: (obj.fontSize ?? 1) * scaleY,
+    width: (obj.width ?? 1) * scaleX,
+    scaleX: 1,
+    scaleY: 1,
+  });
+  obj.setCoords();
+}
+
 // Fires once per drag/resize/rotate gesture (on mouse-up), not per frame — matches
 // LayoutCanvasPanel.tsx's own object:modified convention. Every Phase 2 object is built with
-// originX/originY: 'left'/'top' (see FabricObjectFactory), so left/top map directly to design
-// x/y with no center-point conversion needed.
+// originX/originY: 'left'/'top' (see FabricObjectFactory), so left/top equal design x/y only at
+// rotation 0 — readElementGeometry converts through the object's center for any other angle (see
+// geometryContract.ts). A multi-select `ActiveSelection` target has no elementId of its own
+// (it's a synthetic container, not a design element) — batch its members instead, one call
+// covering the whole gesture so undo restores it in a single step.
 export function bindModifiedEvents(
   canvas: Canvas,
   onElementModified: (id: string, patch: ElementGeometryPatch) => void,
+  onElementsModified: (updates: ElementGeometryUpdate[]) => void,
 ): () => void {
   const onModified = (e: { target: FabricObject }) => {
-    const obj = e.target as DesignerFabricObject;
-    if (!obj.elementId) return;
-    onElementModified(obj.elementId, {
-      x: obj.left ?? 0,
-      y: obj.top ?? 0,
-      width: obj.getScaledWidth(),
-      height: obj.getScaledHeight(),
-      rotation: obj.angle ?? 0,
-    });
+    const target = e.target as DesignerFabricObject;
+    if (target instanceof ActiveSelection) {
+      const updates = target.getObjects()
+        .filter((member): member is DesignerFabricObject => Boolean((member as DesignerFabricObject).elementId))
+        .map((member) => ({ id: member.elementId!, patch: readElementGeometry(member) }));
+      if (updates.length > 0) onElementsModified(updates);
+      return;
+    }
+    if (!target.elementId) return;
+    normalizeTextScale(target);
+    onElementModified(target.elementId, readElementGeometry(target));
   };
 
   canvas.on('object:modified', onModified);
@@ -128,15 +163,13 @@ export function bindContextMenuEvents(
   return () => upperEl.removeEventListener('contextmenu', handler);
 }
 
-// Double-click on empty canvas — Reset View (pan/zoom feature). Same findTarget-on-upperCanvasEl
-// pattern as bindContextMenuEvents, since detecting "empty canvas" needs the same target lookup;
-// double-clicking an actual element is left alone (no in-canvas double-click editing exists yet
-// for designer2, so this only ever needs to distinguish empty-vs-not).
-export function bindDoubleClickEvents(canvas: Canvas, onEmptyDoubleClick: () => void): () => void {
+// Use Fabric's front-most target so covered text cannot steal another layer's double-click.
+export function bindDoubleClickEvents(canvas: Canvas, onEmptyDoubleClick: () => void, onElementDoubleClick?: (id: string) => void): () => void {
   const upperEl = canvas.upperCanvasEl;
   const handler = (ev: MouseEvent) => {
     const target = canvas.findTarget(ev as TPointerEvent).target as DesignerFabricObject | undefined;
     if (!target) onEmptyDoubleClick();
+    else if (target.elementId) onElementDoubleClick?.(target.elementId);
   };
   upperEl.addEventListener('dblclick', handler);
   return () => upperEl.removeEventListener('dblclick', handler);

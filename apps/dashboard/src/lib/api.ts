@@ -530,7 +530,8 @@ export const proofOfPlayApi = {
 // ── Assets ──────────────────────────────────────────────────────────────────
 export const assetsApi = {
   list: () => req<Asset[]>('/assets'),
-  upload: async (file: File, onProgress?: (pct: number) => void): Promise<Asset> => {
+  upload: async (file: File, onProgress?: (pct: number) => void, signal?: AbortSignal): Promise<Asset> => {
+    signal?.throwIfAborted();
     const token = getToken();
     return new Promise((resolve, reject) => {
       const form = new FormData();
@@ -539,8 +540,17 @@ export const assetsApi = {
       xhr.open('POST', `${BASE}/assets/upload`);
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.upload.onprogress = (e: ProgressEvent) => { if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100)); };
-      xhr.onload = () => { if (xhr.status < 300) resolve(JSON.parse(xhr.responseText) as Asset); else reject(new Error(xhr.responseText)); };
+      xhr.onload = () => {
+        try {
+          if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText) as Asset);
+          else reject(new Error(xhr.responseText));
+        } catch (error) { reject(error); }
+      };
       xhr.onerror = () => reject(new Error('Upload failed'));
+      const abort = () => xhr.abort();
+      xhr.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
+      xhr.onloadend = () => signal?.removeEventListener('abort', abort);
+      signal?.addEventListener('abort', abort, { once: true });
       xhr.send(form);
     });
   },
@@ -559,7 +569,7 @@ export const assetsApi = {
     });
   },
   extractAudio: (id: string) => req<Asset>(`/assets/${id}/extract-audio`, { method: 'POST' }),
-  get: (id: string) => req<Asset>(`/assets/${id}`),
+  get: (id: string, signal?: AbortSignal) => req<Asset>(`/assets/${id}`, { signal }),
   rename: (id: string, name: string) => req<Asset>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
   setAudioEnabled: (id: string, audioEnabled: boolean) =>
     req<Asset>(`/assets/${id}/audio`, { method: 'PUT', body: JSON.stringify({ audioEnabled }) }),

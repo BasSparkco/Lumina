@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { LayersPanel as SharedLayersPanel } from '@/components/LayersPanel';
 import type { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
 import { useDesignerStore } from '../state/designer.store';
@@ -35,6 +36,20 @@ export function ObjectsPanel({ onReorder, adapter, commit, isTemplateMode }: Obj
   // has no one row to attach to, so its (align/duplicate/delete) properties render as a single
   // block under the whole list instead, matching PropertiesPanel's own multi-select branch.
   const singleSelectedId = selectedElementIds.length === 1 ? selectedElementIds[0]! : null;
+  const [propertiesState, setPropertiesState] = useState({ selectedId: singleSelectedId, collapsed: false });
+
+  // A new selection opens its properties; collapsing only changes the sidebar, not the canvas selection.
+  if (propertiesState.selectedId !== singleSelectedId) {
+    setPropertiesState({ selectedId: singleSelectedId, collapsed: false });
+  }
+
+  function handleSelect(id: string) {
+    if (id === singleSelectedId) {
+      setPropertiesState((state) => ({ selectedId: id, collapsed: !state.collapsed }));
+    } else {
+      setSelection([id]);
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -43,13 +58,13 @@ export function ObjectsPanel({ onReorder, adapter, commit, isTemplateMode }: Obj
         onOpenChange={() => {}}
         items={items}
         selectedId={selectedElementIds[0] ?? null}
-        onSelect={(id) => setSelection([id])}
+        onSelect={handleSelect}
         onReorder={onReorder}
         title="Objects"
         emptyLabel="No objects yet"
         closeLabel="Close"
         variant="inline"
-        expandedId={singleSelectedId}
+        expandedId={propertiesState.collapsed ? null : singleSelectedId}
         renderExpanded={() => <PropertiesPanel adapter={adapter} commit={commit} isTemplateMode={isTemplateMode} />}
       />
       {selectedElementIds.length > 1 && (

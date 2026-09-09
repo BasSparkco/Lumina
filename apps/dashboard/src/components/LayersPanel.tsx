@@ -53,10 +53,12 @@ interface LayersPanelProps {
 function LayerRow({
   item,
   selected,
+  expanded,
   onSelect,
 }: {
   item: LayerItem;
   selected: boolean;
+  expanded?: boolean;
   onSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -84,7 +86,7 @@ function LayerRow({
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
-      <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 truncate text-left">
+      <button type="button" onClick={onSelect} aria-expanded={expanded} className="flex flex-1 items-center gap-2 truncate text-left">
         {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
         <span className="flex-1 truncate">{item.label}</span>
         <span className="shrink-0 font-mono text-[10px] text-[var(--deck-text-low)]">
@@ -138,6 +140,7 @@ export function LayersPanel({
               <LayerRow
                 item={item}
                 selected={item.id === selectedId}
+                expanded={renderExpanded ? item.id === expandedId : undefined}
                 onSelect={() => onSelect(item.id)}
               />
               {renderExpanded && (

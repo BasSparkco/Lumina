@@ -23,6 +23,7 @@
  * FabricCanvasAdapter's Phase 9 comments for the full stacking model.
  */
 import { Circle, Ellipse, FabricImage, FabricText, filters, FixedLayout, Group, LayoutManager, Line, Rect, Textbox, Triangle, type FabricObject } from 'fabric';
+import { applyElementPosition } from './geometryContract';
 import QRCode from 'qrcode';
 import type { DesignElement, ImageElement, QrElement, VideoElement } from '@lumina/design-schema';
 import { fontStack } from '@lumina/types';
@@ -80,7 +81,11 @@ function placeholderGroup(width: number, height: number, label: string, fill: st
 }
 
 function createShapeObject(element: Extract<DesignElement, { type: 'shape' }>): FabricObject {
-  const common = omitUndefined({ left: 0, top: 0, fill: element.fill, stroke: element.stroke, strokeWidth: element.strokeWidth });
+  // strokeWidth is set explicitly (never omitted) so Fabric's own class default (1) can't inflate
+  // getScaledWidth/Height() beyond the declared box for a shape with no configured stroke — the
+  // selection/rotation geometry must match the declared content box exactly (geometryContract.ts).
+  const common = { left: 0, top: 0, strokeWidth: element.strokeWidth ?? 0,
+    ...omitUndefined({ fill: element.fill, stroke: element.stroke }) };
   switch (element.shape) {
     case 'rectangle':
       return new Rect({ ...common, width: element.width, height: element.height });
@@ -187,14 +192,15 @@ function buildImageClipPath(element: ImageElement, offsetX: number, offsetY: num
   });
 }
 
-async function createImageObject(element: ImageElement, resolveAssetUrl: ResolveAssetUrl): Promise<FabricObject> {
+async function createImageObject(element: ImageElement, resolveAssetUrl: ResolveAssetUrl, signal?: AbortSignal): Promise<FabricObject> {
   const url = element.assetId ? resolveAssetUrl(element.assetId) : undefined;
   if (!url) return placeholderGroup(element.width, element.height, 'Image', PLACEHOLDER_FILL, '#9ca3af');
 
   let img: FabricImage;
   try {
-    img = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' });
-  } catch {
+    img = await FabricImage.fromURL(url, { crossOrigin: 'anonymous', signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return placeholderGroup(element.width, element.height, 'Image', PLACEHOLDER_FILL, '#9ca3af');
   }
 
@@ -209,6 +215,7 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
   // ratio or the cover/contain scale applied above. Must use a fixed-size layout manager — see
   // fixedSizeLayoutManager's comment for why the default one breaks this.
   const group = new Group([img], {
+    strokeWidth: 0,
     left: 0,
     top: 0,
     width: element.width,
@@ -263,10 +270,10 @@ async function createQrObject(element: QrElement): Promise<FabricObject> {
 // rather than drawing anything — unlike Image/QR, there's no "generate a static picture" step.
 function createVideoObject(element: VideoElement): FabricObject {
   if (!element.assetId) return placeholderGroup(element.width, element.height, 'Video', PLACEHOLDER_FILL, '#9ca3af');
-  return new Rect({ left: 0, top: 0, width: element.width, height: element.height, fill: 'transparent' });
+  return new Rect({ left: 0, top: 0, width: element.width, height: element.height, strokeWidth: 0, fill: 'transparent' });
 }
 
-export async function createFabricObject(element: DesignElement, resolveAssetUrl: ResolveAssetUrl): Promise<FabricObject> {
+export async function createFabricObject(element: DesignElement, resolveAssetUrl: ResolveAssetUrl, signal?: AbortSignal): Promise<FabricObject> {
   let obj: FabricObject;
 
   switch (element.type) {
@@ -288,6 +295,11 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
           // tweens). The actual visible text is a synced DOM overlay (FabricCanvasAdapter),
           // rendered with native browser text layout — correct bidi for free, nothing hand-built.
           fill: 'transparent',
+          editable: false, // A native textarea handles editing with browser Arabic/bidi layout.
+          // Fabric's own class default (1) would otherwise inflate getCoords()/getScaledWidth()
+          // by a phantom pixel even though nothing is ever stroked here (see geometryContract.ts,
+          // which reads corners for selection/commit geometry) — same fix as the M3 shape proxy.
+          strokeWidth: 0,
           textAlign: element.textAlign,
           lineHeight: element.lineHeight,
           charSpacing: element.charSpacing,
@@ -295,7 +307,7 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
       );
       break;
     case 'image':
-      obj = await createImageObject(element, resolveAssetUrl);
+      obj = await createImageObject(element, resolveAssetUrl, signal);
       break;
     case 'shape':
       obj = createShapeObject(element);
@@ -311,12 +323,13 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
   obj.set({
     originX: 'left',
     originY: 'top',
-    left: element.x,
-    top: element.y,
     angle: element.rotation,
     opacity: element.opacity,
     visible: element.visible,
   });
+  // Position last: this reads the angle just set above to place the rotated box correctly (see
+  // geometryContract.ts) — setting `left`/`top` directly here would only be correct at rotation 0.
+  applyElementPosition(obj, element);
 
   // designer.md §6 amendment — capability flags replace a single `locked` boolean. No separate
   // "rotatable" flag exists in the model; rotation is grouped with resize (both are "transform"
@@ -329,6 +342,14 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
     lockScalingX: !element.resizable,
     lockScalingY: !element.resizable,
     lockRotation: !element.resizable,
+    // DesignElement has no skewX/skewY (or flip) fields for any type (designer_modernization_plan
+    // M3's "define allowed mirroring/skew behavior" — the answer here is: none yet). Fabric's
+    // default side/middle controls can switch from scale to skew on an Alt-drag; without this, a
+    // skewed object renders correctly until the next recreate (undo, reload, scene switch), then
+    // silently loses the skew because there's nowhere to persist it. Lock it out at the source
+    // instead of letting the editor offer an interaction whose result never survives a reload.
+    lockSkewingX: true,
+    lockSkewingY: true,
   });
 
   (obj as DesignerFabricObject).elementId = element.id;

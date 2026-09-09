@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Braces,
   LayoutTemplate,
@@ -8,7 +9,6 @@ import {
   Video,
   Shapes,
   QrCode,
-  Upload,
   Square,
   RectangleHorizontal,
   Circle,
@@ -27,9 +27,9 @@ interface DesignerSidebarProps {
   isTemplatesActive?: boolean;
   onAddText: () => void;
   onAddShape: (shape: ShapeKind) => void;
-  onAddImagePlaceholder: () => void;
+  onInsertImage: () => void;
   onAddQrPlaceholder: () => void;
-  onAddVideoPlaceholder: () => void;
+  onInsertVideo: () => void;
   // Opens (or re-focuses) the Variables tab in the merged InspectorPanel — same pattern as
   // onShowTemplates above.
   onShowVariables: () => void;
@@ -41,7 +41,6 @@ const tabBtn =
 // Colored fill + soft ring, matching the mockups' `.tool.active` treatment.
 const tabBtnActive =
   'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-[var(--deck-accent)] bg-[var(--deck-accent-soft)] shadow-[0_0_0_1px_var(--deck-accent-soft)]';
-const disabledTabBtn = 'flex w-14 flex-col items-center gap-1 rounded-md py-2 text-[10px] text-[var(--deck-text-low)]';
 
 const SHAPE_OPTIONS: { kind: ShapeKind; label: string; icon: typeof Square }[] = [
   { kind: 'rectangle', label: 'Rectangle', icon: RectangleHorizontal },
@@ -57,12 +56,13 @@ export function DesignerSidebar({
   isTemplatesActive,
   onAddText,
   onAddShape,
-  onAddImagePlaceholder,
+  onInsertImage,
   onAddQrPlaceholder,
-  onAddVideoPlaceholder,
+  onInsertVideo,
   onShowVariables,
   isVariablesActive,
 }: DesignerSidebarProps) {
+  const t = useTranslations('designer2Media');
   const [shapesOpen, setShapesOpen] = useState(false);
 
   return (
@@ -77,14 +77,14 @@ export function DesignerSidebar({
         Text
       </button>
 
-      <button className={tabBtn} onClick={onAddImagePlaceholder}>
+      <button className={tabBtn} onClick={onInsertImage}>
         <ImageIcon className="h-4 w-4" />
-        Images
+        {t('image')}
       </button>
 
-      <button className={tabBtn} onClick={onAddVideoPlaceholder}>
+      <button className={tabBtn} onClick={onInsertVideo}>
         <Video className="h-4 w-4" />
-        Video
+        {t('video')}
       </button>
 
       <div className="relative">
@@ -124,13 +124,7 @@ export function DesignerSidebar({
         Variables
       </button>
 
-      {/* Phase 4 wired media browse/upload/replace into the Image element's own Properties panel
-          (ImagePicker's "existing"/"upload"/"paste"/"stock" tabs), not a separate sidebar tab —
-          a standalone media-library browser stays a deferred nice-to-have. */}
-      <button disabled title="Uploads — coming soon" className={disabledTabBtn}>
-        <Upload className="h-4 w-4" />
-        Uploads
-      </button>
+
     </div>
   );
 }

@@ -120,3 +120,20 @@ it, reusing `apps/dashboard/src/lib/canvasSnap.ts`.
 - **"No raw Fabric JSON is required by Player"**: `player-contract.ts`'s `ResolvedDesignPayload`
   contract never mentions Fabric, and is defined independently of the editor's internal
   representation.
+
+## Amendment (2026-09-09, modernization M1)
+
+The earlier always-rebuild synchronization convention is superseded for Designer2.
+`CanvasViewport` maintains one adapter for its mounted lifetime and uses `syncScene` to
+reconcile the active scene by element ID. Ordinary geometry, text/shape style, metadata and
+layer-order changes retain existing Fabric objects and native video/text nodes. Resource or
+unsupported content changes may replace only the affected object. Scene/document switches
+explicitly clear the projection. Async preparation is generation-guarded, aborts image loads
+when superseded, and disposes stale results.
+
+Lumina JSON remains authoritative; the adapter's last-applied projection is only a reconciliation
+cache. Persistent geometry semantics have not been migrated by M1. Manual zoom is independent
+of content synchronization, and viewport resize auto-fits only while fit mode is active.
+
+See `docs/designer/designer_modernization_plan.md` for the staged media, geometry, selection,
+properties and persistence work still required. This amendment does not change legacy editors.

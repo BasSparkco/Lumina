@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { assetsApi, orgApi } from '@/lib/api';
+import { assetsApi, orgApi, type Asset } from '@/lib/api';
 import {
   ArrowUpToLine,
   ArrowDownToLine,
@@ -17,9 +17,11 @@ import {
 import { ContextMenu, type ContextMenuState } from '@/components/ContextMenu';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
-import type { ElementGeometryPatch, Guides } from '../canvas/FabricEventBridge';
+import type { ElementGeometryPatch, ElementGeometryUpdate, Guides } from '../canvas/FabricEventBridge';
 import { useDesignerStore } from '../state/designer.store';
 import { resolveElementBindings, type VariableMap } from '@lumina/design-schema';
+
+const EMPTY_ASSETS: Asset[] = [];
 
 interface CanvasViewportProps {
   // Commit-wrapped by the caller (DesignerShell owns useDesignerHistory) so finishing a
@@ -46,10 +48,13 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasBoxRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
-  const textOverlayContainerRef = useRef<HTMLDivElement>(null);
-  const videoOverlayContainerRef = useRef<HTMLDivElement>(null);
+  const sceneLayerContainerRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<FabricCanvasAdapter | null>(null);
+  const projectionKey = useRef<string | null>(null);
+  const viewportKey = useRef<string | null>(null);
+  const pendingAnimationKey = useRef<string | null>(null);
   const [guides, setGuides] = useState<Guides>({ v: [], h: [] });
+  const [canvasError, setCanvasError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   // Pan (Space+drag / middle-mouse-drag) — a DOM-level `transform: translate` applied directly to
   // canvasBoxRef, entirely outside Fabric's own viewportTransform/zoom. Kept in refs and mutated
@@ -70,14 +75,13 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
   // second network fetch. Image elements only ever store an assetId (designer.md §9); resolving
   // it to a real URL for Fabric to render is this component's job, not the canvas adapter's
   // (designer.md §4.1 keeps data/auth concerns out of the Fabric layer).
-  const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
+  const { data: assets = EMPTY_ASSETS } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   // designer.md §17.2 — `{{business.name}}`'s real backing. Same `['orgSettings']` query key
   // screens/page.tsx and settings/page.tsx already use, so React Query dedupes this rather than
   // firing a second request.
   const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
 
   const document = useDesignerStore((s) => s.document);
-  const activeSceneId = useDesignerStore((s) => s.activeSceneId);
   const selectedElementIds = useDesignerStore((s) => s.selectedElementIds);
   const zoom = useDesignerStore((s) => s.zoom);
   const setSelection = useDesignerStore((s) => s.setSelection);
@@ -203,25 +207,34 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
   // one's DOM node.
   useEffect(() => {
     const host = canvasHostRef.current;
-    const overlayContainer = textOverlayContainerRef.current;
-    const videoOverlayContainer = videoOverlayContainerRef.current;
-    if (!host || !overlayContainer || !videoOverlayContainer) return;
+    const overlayContainer = sceneLayerContainerRef.current;
+    if (!host || !overlayContainer) return;
     const canvasEl = window.document.createElement('canvas');
     host.appendChild(canvasEl);
-    const adapter = new FabricCanvasAdapter(canvasEl, overlayContainer, videoOverlayContainer, {
+    const adapter = new FabricCanvasAdapter(canvasEl, overlayContainer, {
       onSelectionChange: (ids) => latest.current.setSelection(ids),
       onElementModified: (id, patch: ElementGeometryPatch) =>
         latest.current.commit(() => latest.current.updateElement(id, patch)),
-      onGuidesChange: setGuides,
+      onElementsModified: (updates: ElementGeometryUpdate[]) =>
+        latest.current.commit(() => {
+          for (const { id, patch } of updates) latest.current.updateElement(id, patch);
+        }),
+      onTextChanged: (id, text) =>
+        latest.current.commit(() => latest.current.updateElement(id, { text })),
+      onGuidesChange: (next) => setGuides((previous) =>
+        previous.v.join(',') === next.v.join(',') && previous.h.join(',') === next.h.join(',') ? previous : next),
       onContextMenu: (elementId, clientX, clientY) => {
         if (!elementId) return; // empty-canvas right-click: no menu (nothing to act on yet)
         setContextMenu({ x: clientX, y: clientY, actions: buildContextMenuActions(elementId) });
       },
       onZoomChange: (z) => latest.current.setZoom(z),
+      getViewportRect: () => containerRef.current?.getBoundingClientRect(),
       onEmptyDoubleClick: () => resetView(),
       resolveAssetUrl: (assetId) => latest.current.resolveAssetUrl(assetId),
     });
     adapterRef.current = adapter;
+    projectionKey.current = null;
+    viewportKey.current = null;
     onAdapterReady(adapter);
     onResetViewReady(resetView);
     return () => {
@@ -234,47 +247,50 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally initialized once; see `latest` ref above
   }, []);
 
-  // Tracks the previous activeSceneId so the effect below can tell "the scene actually changed"
-  // apart from "the same scene's content was edited" — see the animation-trigger comment there.
-  const prevSceneIdRef = useRef<string | null>(null);
+  const activeScene = useDesignerStore((s) => s.document?.scenes.find((scene) => scene.id === s.activeSceneId));
+  const variables = useDesignerStore((s) => s.document?.variables);
+  const documentId = document?.id;
+  const designWidth = document?.canvas.width;
+  const designHeight = document?.canvas.height;
 
-  // Load the active scene whenever the document or active scene changes, then restore selection
-  // (loadScene fully rebuilds every fabric object, so the previous selection is gone otherwise —
-  // that would visually deselect an element the instant you finish dragging/resizing it, since
-  // that also flows through this same effect via the store's `document` reference changing).
+  // Top-bar zoom and wheel zoom use the same adapter path. Equal values retain fit mode.
+  useEffect(() => { adapterRef.current?.setZoom(zoom); }, [zoom]);
+
   useEffect(() => {
     const adapter = adapterRef.current;
-    if (!adapter || !document || !activeSceneId) return;
-    const scene = document.scenes.find((s) => s.id === activeSceneId);
-    if (!scene) return;
-    // designer.md §17.2 — V1 variable sources: the org's own name (real, if the only field that
-    // exists for it), overridable by/merged with this document's own instance variables (the
-    // VariablesPanel). CanvasViewport resolves bindings before the adapter ever sees an element —
-    // per §4.1, Fabric/the adapter must never know about variables at all.
-    const variables: VariableMap = { ...(orgSettings ? { 'business.name': orgSettings.name } : {}), ...document.variables };
-    const resolvedScene = { ...scene, elements: scene.elements.map((el) => resolveElementBindings(el, variables)) };
-    // designer.md Phase 7 — this effect re-runs on *every* document mutation (Phase 2's documented
-    // always-rebuild strategy), not just real scene switches, so enter/emphasis animations can't
-    // be triggered unconditionally here or editing one element would replay every other element's
-    // enter animation on every unrelated edit. Only fire them on a genuine scene change — which
-    // also means the Phase 6 preview loop's scene-to-scene stepping gets animation playback for
-    // free, since it changes activeSceneId per scene.
-    const sceneChanged = prevSceneIdRef.current !== activeSceneId;
-    prevSceneIdRef.current = activeSceneId;
-    adapter.setDesignSize(document.canvas.width, document.canvas.height);
-    void adapter.loadScene(resolvedScene).then(() => {
+    if (!adapter || !activeScene || !documentId || !designWidth || !designHeight) return;
+    const key = `${documentId}:${activeScene.id}`;
+    const sceneChanged = projectionKey.current !== key;
+    if (sceneChanged) {
+      adapter.clear();
+      projectionKey.current = key;
+      pendingAnimationKey.current = key;
+    }
+    const dimensionsKey = `${documentId}:${designWidth}:${designHeight}`;
+    adapter.setDesignSize(designWidth, designHeight);
+    if (viewportKey.current !== dimensionsKey) {
+      viewportKey.current = dimensionsKey;
       adapter.fitToViewport(containerRef.current?.clientWidth, containerRef.current?.clientHeight);
+    }
+    const resolvedVariables: VariableMap = { ...(orgSettings ? { 'business.name': orgSettings.name } : {}), ...variables };
+    const resolvedScene = { ...activeScene, elements: activeScene.elements.map((el) => resolveElementBindings(el, resolvedVariables)) };
+    let cancelled = false;
+    void adapter.syncScene(resolvedScene).then((applied) => {
+      if (cancelled || !applied) return;
+      setCanvasError(null);
       adapter.selectElements(useDesignerStore.getState().selectedElementIds);
-      if (sceneChanged) adapter.playSceneEnterAnimations(resolvedScene);
+      if (pendingAnimationKey.current === key) {
+        pendingAnimationKey.current = null;
+        adapter.playSceneEnterAnimations(resolvedScene);
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) setCanvasError(error instanceof Error ? error.message : 'Could not render scene');
     });
-    // `assets` is included so that an image element added just before its own asset finishes
-    // uploading (still resolving to a placeholder at that instant) re-resolves to the real photo
-    // the moment the assets list query refetches, without requiring another unrelated edit.
-  }, [document, activeSceneId, assets, orgSettings]);
+    return () => { cancelled = true; };
+  }, [activeScene, documentId, designWidth, designHeight, variables, assets, orgSettings]);
 
-  // Store -> fabric selection sync (e.g. clicking a row in the Layers panel). Safe to fire
-  // during an in-flight loadScene rebuild above — selectElements no-ops harmlessly if the
-  // targeted object doesn't exist yet, and the rebuild's own .then() re-applies selection anyway.
+  // Selection is independent of scene content. Reconciliation restores pending selections
+  // once an asynchronously created object is available.
   useEffect(() => {
     adapterRef.current?.selectElements(selectedElementIds);
   }, [selectedElementIds]);
@@ -284,11 +300,11 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
     const container = containerRef.current;
     if (!container) return;
     const observer = new ResizeObserver(() => {
-      adapterRef.current?.fitToViewport(container.clientWidth, container.clientHeight);
+      adapterRef.current?.resizeViewport(container.clientWidth, container.clientHeight);
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [document]);
+  }, []);
 
   // Ctrl/Cmd+scroll zoom — same convention as LayoutCanvasPanel/ThemeCanvasPanel.
   useEffect(() => {
@@ -422,7 +438,6 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
 
   const canvasPxWidth = (document?.canvas.width ?? 0) * zoom;
   const canvasPxHeight = (document?.canvas.height ?? 0) * zoom;
-  const activeScene = document?.scenes.find((s) => s.id === activeSceneId);
   // designer.md Phase 9 — a color scene background is now a DOM layer, not `canvas.backgroundColor`
   // (see FabricCanvasAdapter's Phase 9 comments for why: an opaque Fabric-painted background would
   // sit on top of a video element positioned behind the canvas and hide it completely). Image/video
@@ -438,20 +453,13 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
           'radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--deck-accent) 7%, transparent), transparent 55%), var(--deck-glass-fill)',
       }}
     >
+      {canvasError && <div role="alert" className="absolute top-2 z-10 rounded bg-red-950 px-3 py-2 text-xs text-white">{canvasError}</div>}
       <div ref={canvasBoxRef} className="relative" style={{ width: canvasPxWidth, height: canvasPxHeight, willChange: 'transform' }}>
         <div className="absolute inset-0" style={{ backgroundColor }} />
-        {/* designer.md Phase 9 — video elements' actual playback (FabricCanvasAdapter
-            populates/positions these; the Fabric hit-box underneath is fully transparent). Sits
-            below the canvas so canvas-drawn Shape/Image/QR content can layer on top of video —
-            see designer.md's Phase 9 amendment for the three-band stacking model and its limits. */}
-        <div ref={videoOverlayContainerRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
-        <div ref={canvasHostRef} />
-        {/* designer.md Phase 8 — text elements' actual visible glyphs (FabricCanvasAdapter
-            populates/positions these; the Fabric Textbox underneath paints transparent). Sits
-            above the canvas but below guides/context-menu, and doesn't itself intercept pointer
-            events — selection/hit-testing stays on the canvas. */}
-        <div ref={textOverlayContainerRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
-        <div className="pointer-events-none absolute inset-0">
+        {/* One ordered stack for text, video, and Fabric-painted images/shapes. */}
+        <div ref={sceneLayerContainerRef} className="pointer-events-none absolute inset-0 z-0 overflow-hidden" />
+        <div ref={canvasHostRef} className="relative z-[1]" />
+        <div className="pointer-events-none absolute inset-0 z-[2]">
           {guides.v.map((x) => (
             <div key={`v-${x}`} className="absolute top-0 bottom-0 w-px bg-pink-500" style={{ left: x * zoom }} />
           ))}

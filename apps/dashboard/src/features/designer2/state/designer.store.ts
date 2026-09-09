@@ -38,8 +38,8 @@ interface DesignerState {
 }
 
 // Applies `updater` to the active scene's element list, returning a new document (new scene
-// array, new scene object) so React/Zustand consumers see a changed reference — CanvasViewport's
-// effect (keyed on [document, activeSceneId]) relies on this to know when to re-render the canvas.
+// array, new scene object) so active-scene selectors can reconcile changed elements in place.
+// Unchanged scenes retain their references; metadata edits do not trigger canvas synchronization.
 function withActiveSceneElements(
   document: DesignDocument,
   activeSceneId: string | null,

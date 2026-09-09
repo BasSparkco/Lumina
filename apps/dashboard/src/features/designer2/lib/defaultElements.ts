@@ -1,5 +1,7 @@
 import type { DesignElement, ShapeKindSchema } from '@lumina/design-schema';
 import type { z } from 'zod';
+import { fitMediaBox, type MediaBounds } from './mediaGeometry';
+import type { ReadyMedia } from './mediaInsertion';
 import { nextLayerZIndex } from '@/lib/layers';
 
 type ShapeKind = z.infer<typeof ShapeKindSchema>;
@@ -109,4 +111,19 @@ export function createVideoPlaceholderElement(
     fit: 'cover',
     autoplay: true,
   };
+}
+
+// Insertion chooses media before creating a model element. Legacy frame constructors remain
+// available for existing documents and replacement workflows.
+export function createMediaElement(
+  canvas: { width: number; height: number }, elements: DesignElement[], media: ReadyMedia,
+  bounds: MediaBounds = { x: 0, y: 0, ...canvas },
+): DesignElement {
+  const geometry = fitMediaBox(media.width, media.height, bounds);
+  const common = { ...baseFields(canvas, elements, geometry.width, geometry.height), ...geometry,
+    name: media.asset.name, assetId: media.asset.id };
+  if (media.asset.type === 'IMAGE') return { ...common, type: 'image', fit: 'contain' };
+  if (media.asset.type !== 'VIDEO') throw new Error('Unsupported media type');
+  return { ...common, type: 'video', fit: 'contain', startOffsetMs: 0,
+    muted: true, volume: 1, loop: true, autoplay: true };
 }
