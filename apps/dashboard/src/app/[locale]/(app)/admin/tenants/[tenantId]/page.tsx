@@ -192,7 +192,7 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
   if (!canRender) return null;
 
   return (
-    <div className="mx-auto max-w-4xl p-8">
+    <div className="signal-page signal-workspace-page signal-admin-tenants-detail-page space-y-6">
       <Link href={`/${locale}/admin/tenants`} className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]">
         <ArrowLeft className="h-3.5 w-3.5" /> {t('backToTenants')}
       </Link>
@@ -201,7 +201,7 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ te
 
       {tenant && (
         <>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="signal-page-heading">
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{tenant.name}</h1>

@@ -5,7 +5,7 @@
   "nav": {
     "dashboard": "لوحة التحكم",
     "screens": "الشاشات",
-    "assets": "الأصول",
+    "assets": "مكتبة الوسائط",
     "playlists": "قوائم التشغيل",
     "designer": "المصمم",
     "designer2": "المصمم 2",
@@ -29,7 +29,10 @@
       "content": "المحتوى",
       "operations": "العمليات",
       "management": "الإدارة",
-      "settings": "الإعدادات"
+      "settings": "الإعدادات",
+      "workspace": "مساحة العمل",
+      "design": "التصميم والقوالب",
+      "platform": "إدارة المنصة"
     },
     "expandSidebar": "توسيع الشريط الجانبي",
     "collapseSidebar": "طي الشريط الجانبي",
@@ -97,7 +100,10 @@
       "PENDING": "بانتظار المراجعة",
       "APPROVED": "مُعتمدة",
       "REJECTED": "مرفوضة"
-    }
+    },
+    "all": "الكل",
+    "loadFailed": "تعذّر تحميل المعلومات. حاول مرة أخرى.",
+    "retryLoad": "إعادة المحاولة"
   },
   "cropEditor": {
     "title": "ضبط التأطير",
@@ -365,10 +371,42 @@
         "UNCAUGHT_EXCEPTION": "عطل",
         "WATCHDOG_RECOVERY": "استعادة قسرية (تجمّد)"
       }
+    },
+    "overview": {
+      "total": "إجمالي الشاشات",
+      "online": "متصلة",
+      "offline": "غير متصلة",
+      "caption": "الشاشات والمحتوى المعيّن وحالة الاتصال",
+      "screen": "الشاشة / المجموعة",
+      "connection": "الاتصال",
+      "content": "المحتوى المعيّن",
+      "lastSeen": "آخر اتصال",
+      "actions": "الإجراءات",
+      "manage": "إدارة",
+      "manageScreen": "إدارة {name}",
+      "ungrouped": "دون مجموعة",
+      "unassigned": "لم يعيّن محتوى",
+      "unavailableContent": "المحتوى المعيّن غير متاح",
+      "view": "طريقة عرض الشاشات",
+      "listView": "نظرة عامة",
+      "controlsView": "التحكم",
+      "allStatuses": "كل الحالات",
+      "offlineHint": "بعض الشاشات غير متصلة. قد يستمر تشغيل المحتوى المخزّن؛ حالة الاتصال ليست دليلًا على التشغيل.",
+      "controlsHint": "جميع أدوات التحكم الحالية متاحة هنا. لترتيب الشاشات، امسح البحث وفلاتر المجموعة والاتصال.",
+      "pairingCode": "رمز الربط",
+      "loadFailed": "تعذّر تحديث بيانات الشاشات. استخدم زر التحديث للمحاولة مجددًا؛ قد تكون البيانات المعروضة قديمة.",
+      "player": "المشغّل",
+      "playerOffline": "المشغّل غير متصل",
+      "playerUnknown": "التشغيل غير مؤكد",
+      "playerPaused": "متوقف مؤقتًا · وفق المشغّل",
+      "playerPlaying": "المحتوى قيد التشغيل",
+      "playerWaiting": "بانتظار تقدّم التشغيل",
+      "playerProgress": "موضع التشغيل المرسل",
+      "playerUnconfirmed": "لا يوجد تأكيد حالي للتشغيل"
     }
   },
   "assets": {
-    "title": "الأصول",
+    "title": "مكتبة الوسائط",
     "subtitle": "الصور ومقاطع الفيديو والملفات الصوتية",
     "uploading": "جارٍ الرفع {progress}%",
     "upload": "رفع",
@@ -586,7 +624,24 @@
     "unmute": "تشغيل الصوت في المشغل",
     "playFullVideo": "الفيديو كاملاً",
     "customLength": "مدة مخصصة",
-    "videoDuration": "مدة الفيديو"
+    "videoDuration": "مدة الفيديو",
+    "dragToReorder": "اسحب لإعادة الترتيب",
+    "removeItem": "إزالة العنصر",
+    "assetTypes": {
+      "IMAGE": "صورة",
+      "VIDEO": "فيديو",
+      "AUDIO": "صوت",
+      "TEXT": "نص",
+      "DOCUMENT": "مستند",
+      "APP": "تطبيق"
+    },
+    "assetSort": {
+      "recentlyAdded": "الأحدث إضافة",
+      "recentlyUsed": "الأحدث استخدامًا",
+      "mostUsed": "الأكثر استخدامًا",
+      "name": "الاسم"
+    },
+    "sortBy": "ترتيب حسب"
   },
   "designer": {
     "title": "المصمم",
@@ -1604,5 +1659,89 @@
     "rotateHandleStyleDesc": "طريقة ظهور مقبض التدوير عند تحديد عنصر في محرري التخطيطات والقوالب",
     "rotateHandleCorners": "أسهم في الزوايا",
     "rotateHandleSingle": "مقبض واحد"
+  },
+  "shell": {
+    "workspace": "مساحة المؤسسة",
+    "platform": "إدارة المنصة",
+    "platformScope": "إدارة عبر المؤسسات",
+    "navigation": "التنقل الرئيسي",
+    "skipToContent": "انتقل إلى المحتوى",
+    "switchToArabic": "التغيير إلى العربية",
+    "switchToEnglish": "التغيير إلى الإنجليزية",
+    "lightMode": "استخدام المظهر الفاتح",
+    "darkMode": "استخدام المظهر الداكن",
+    "pendingApprovals": "قوائم تشغيل بانتظار الاعتماد: {count}",
+    "roles": {
+      "VIEWER": "مشاهد",
+      "EDITOR": "محرر محتوى",
+      "ADMIN": "مدير المؤسسة",
+      "OWNER": "مالك المؤسسة"
+    }
+  },
+  "adminTemplates": {
+    "name": "الاسم",
+    "description": "الوصف",
+    "category": "الفئة",
+    "visibilityLabel": "الإتاحة",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "title": "قوالب التصميم",
+    "newTemplate": "قالب جديد",
+    "statusLabel": "الحالة",
+    "version": "الإصدار",
+    "clones": "التصاميم المنسوخة",
+    "loading": "جارٍ التحميل…",
+    "empty": "لا توجد قوالب بعد.",
+    "edit": "تعديل",
+    "tenants": "المستأجرون",
+    "unpublish": "إلغاء النشر",
+    "publish": "نشر",
+    "subtitle": "إدارة القوالب القابلة لإعادة الاستخدام ونشرها وإتاحتها للمستأجرين.",
+    "accessHint": "اختر المؤسسات المسموح لها باستخدام القالب عند ضبط الإتاحة على مستأجرين محددين.",
+    "accessTitle": "إتاحة القالب · {name}",
+    "editTitle": "تعديل · {name}",
+    "create": "إنشاء",
+    "editDesign": "تعديل التصميم",
+    "archive": "أرشفة",
+    "archiveConfirm": "هل تريد أرشفة «{name}»؟ سيحتفظ العملاء الذين يستخدمونه بنسخهم الخاصة.",
+    "categories": {
+      "GENERIC": "عام",
+      "RESTAURANT_MENU": "قائمة مطعم",
+      "RETAIL_PROMO": "عروض المتاجر",
+      "HOTEL_LOBBY": "ردهة فندق",
+      "CLINIC_WAITING": "انتظار العيادة",
+      "MOSQUE": "مسجد"
+    },
+    "visibility": {
+      "HIDDEN": "مخفي",
+      "GLOBAL": "جميع المستأجرين",
+      "SELECTED_TENANTS": "مستأجرون محددون"
+    },
+    "status": {
+      "DRAFT": "مسودة",
+      "PUBLISHED": "منشور",
+      "ARCHIVED": "مؤرشف"
+    }
+  },
+  "designer2Media": {
+    "image": "صور",
+    "video": "فيديو",
+    "imageTitle": "إدراج صورة",
+    "videoTitle": "إدراج فيديو",
+    "upload": "رفع ملف",
+    "assets": "اختيار من الأصول",
+    "cancel": "إلغاء",
+    "choose": "اختر ملف وسائط",
+    "search": "البحث في الأصول…",
+    "empty": "لا توجد وسائط جاهزة",
+    "chooseFile": "اختيار ملف",
+    "loading": "جارٍ تحميل الأصول…",
+    "preparing": "جارٍ تجهيز الوسائط…",
+    "uploading": "جارٍ الرفع {progress}٪",
+    "failed": "تعذر تجهيز الوسائط. يرجى المحاولة مجددًا.",
+    "timeout": "لا تزال الوسائط قيد المعالجة. حاول اختيارها من الأصول لاحقًا.",
+    "dimensions": "تعذر قراءة أبعاد الوسائط. يرجى اختيار ملف آخر.",
+    "wrongType": "اختر ملفًا مطابقًا لنوع الوسائط.",
+    "retry": "إعادة المحاولة"
   }
 }

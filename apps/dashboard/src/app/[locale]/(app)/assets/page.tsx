@@ -846,14 +846,14 @@ function AssetsPageInner() {
   ];
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="signal-page signal-assets-page">
+      <div className="signal-page-heading">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
         </div>
         {tab === 'mine' && canEditContent && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {uploading && (
               <span className="flex items-center gap-1.5 text-xs text-[var(--deck-text-mid)]">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> {t('uploading', { progress })}
@@ -914,7 +914,7 @@ function AssetsPageInner() {
         />
       )}
 
-      <div className="flex gap-1 mb-6 border-b border-[var(--deck-glass-border)]">
+      <div className="flex flex-wrap gap-1 mb-6 border-b border-[var(--deck-glass-border)]">
         <button onClick={() => setTab('mine')}
           className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === 'mine' ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-transparent text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)]'}`}>
           <ImageIcon className="w-4 h-4" /> {t('myAssetsTab')}
@@ -949,10 +949,10 @@ function AssetsPageInner() {
       {nonAppAssets.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-5">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder={tc('search')}
-              className="w-full border border-[var(--deck-glass-border)] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
+              placeholder={tc('search')} aria-label={tc('search')}
+              className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
           </div>
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as Asset['type'] | '')}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none">
@@ -988,7 +988,7 @@ function AssetsPageInner() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <div className="signal-asset-grid">
         {filteredAssets.map((asset: Asset) => (
           <div key={asset.id} className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] overflow-hidden group">
             {/* Thumbnail — click to view full size (images) or edit (text) */}
@@ -1019,7 +1019,7 @@ function AssetsPageInner() {
                   <div className="text-[var(--deck-text-low)]">{assetIcon(asset)}</div>
                 )}
                 {(asset.thumbnailUrl || (asset.type === 'TEXT' && canEditContent)) && (
-                  <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
+                  <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 group-focus-within/thumb:opacity-100 transition-all">
                     <span className="flex items-center gap-1.5 text-white text-xs font-medium">
                       {asset.thumbnailUrl ? <><Maximize2 className="w-3.5 h-3.5" /> {t('view')}</> : <><Pencil className="w-3.5 h-3.5" /> {tc('edit')}</>}
                     </span>
@@ -1071,7 +1071,7 @@ function AssetsPageInner() {
                     </p>
                   )}
                   <p className="text-xs text-[var(--deck-text-low)] mt-0.5 flex items-center gap-1">
-                    {assetIcon(asset)} {formatBytes(asset.sizeBytes)}
+                    {assetIcon(asset)} <bdi dir="ltr">{formatBytes(asset.sizeBytes)}</bdi>
                     {asset.inUse && (
                       <span className="ms-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-medium">
                         {t('inUse')}
@@ -1155,7 +1155,7 @@ function AssetsPageInner() {
               <p className="text-sm">{t('apps.galleryEmpty')}</p>
             </div>
           )}
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="signal-asset-grid">
             {appAssets.map((asset: Asset) => {
               const playlistConfig = asset.appConfig?.kind === 'playlist' ? asset.appConfig : null;
               const thumbnailUrl = playlistConfig ? (playlistConfig.items[0]?.thumbnailUrl ?? null) : asset.thumbnailUrl;
@@ -1176,7 +1176,7 @@ function AssetsPageInner() {
                         <div className="text-[var(--deck-text-low)]">{assetIcon(asset)}</div>
                       )}
                       {!playlistConfig && asset.sourceUrl && (
-                        <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition-all">
+                        <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/40 flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 group-focus-within/thumb:opacity-100 transition-all">
                           <span className="flex items-center gap-1.5 text-white text-xs font-medium">
                             <ExternalLink className="w-3.5 h-3.5" /> {t('apps.openSource')}
                           </span>
@@ -1245,7 +1245,7 @@ function AssetsPageInner() {
               <p className="text-sm">{t('apps.empty')}</p>
             </div>
           )}
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="signal-asset-grid">
             {appProviders.map((provider: AppProvider) => (
               <button key={provider.id}
                 onClick={e => {
@@ -1289,10 +1289,10 @@ function AssetsPageInner() {
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-5">
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
               <input value={librarySearch} onChange={e => setLibrarySearch(e.target.value)}
                 placeholder={t('librarySearchPlaceholder')}
-                className="w-full border border-[var(--deck-glass-border)] rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
+                className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
             </div>
             <select value={libraryCategory} onChange={e => setLibraryCategory(e.target.value as AssetCategory | '')}
               className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none">
@@ -1310,7 +1310,7 @@ function AssetsPageInner() {
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="signal-asset-grid">
             {libraryAssets.map((asset: Asset) => (
               <div key={asset.id} className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] overflow-hidden">
                 <div className="relative w-full aspect-video bg-[var(--deck-glass-fill-strong)] flex items-center justify-center">
@@ -1406,7 +1406,7 @@ function AssetsPageInner() {
             </div>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="signal-asset-grid">
             {designs.map((design: DesignAsset) => (
               <div
                 key={design.id}

@@ -1,9 +1,10 @@
 'use client';
+import { SignalDialog } from '@/components/SignalDialog';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, X, Check, Link2, ChevronRight, AlertTriangle, Search } from 'lucide-react';
+import { Plus, Check, Link2, ChevronRight, AlertTriangle, Search } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
 import { platformTenantsApi, type CreateTenantInput, type TenantSummary, type TenantAlert, type TenantListParams } from '@/lib/api';
@@ -21,22 +22,7 @@ const STATUS_STYLES: Record<OrganizationStatus, string> = {
 };
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={onClose}>
-      <div
-        className="glass-popup flex max-h-[85vh] w-full max-w-lg flex-col gap-4 overflow-y-auto rounded-xl p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[var(--deck-text-hi)]">{title}</h2>
-          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-hi)]">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <SignalDialog open title={title} onClose={onClose}><div className="signal-form-stack">{children}</div></SignalDialog>;
 }
 
 function slugify(name: string): string {
@@ -253,8 +239,8 @@ export default function AdminTenantsPage() {
   if (!canRender) return null;
 
   return (
-    <div className="mx-auto max-w-6xl p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="signal-page signal-workspace-page signal-admin-tenants-page space-y-6">
+      <div className="signal-page-heading">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="mt-1 text-sm text-[var(--deck-text-mid)]">{t('subtitle')}</p>
@@ -309,7 +295,7 @@ export default function AdminTenantsPage() {
 
       <div className="overflow-x-auto rounded-xl border border-[var(--deck-glass-border)]">
         <table className="w-full min-w-[900px] text-sm">
-          <thead className="bg-[var(--deck-glass-fill-strong)] text-left text-xs uppercase tracking-wide text-[var(--deck-text-mid)]">
+          <thead className="bg-[var(--deck-glass-fill-strong)] text-start text-xs uppercase tracking-wide text-[var(--deck-text-mid)]">
             <tr>
               <th className="px-4 py-2">{tc('name')}</th>
               <th className="px-4 py-2">{t('statusLabel')}</th>

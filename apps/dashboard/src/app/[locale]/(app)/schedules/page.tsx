@@ -193,8 +193,8 @@ export default function SchedulesPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="signal-page signal-workspace-page signal-schedules-page space-y-6">
+      <div className="signal-page-heading">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
@@ -214,14 +214,14 @@ export default function SchedulesPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('ruleName')}</label>
-              <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              <label htmlFor="signal-schedules-field-1" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('ruleName')}</label>
+              <input id="signal-schedules-field-1" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]"
                 placeholder={t('ruleNamePlaceholder')} />
             </div>
             <div>
-              <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('priority')}</label>
-              <input type="number" value={form.priority ?? 0} onChange={e => setForm(f => ({ ...f, priority: parseInt(e.target.value) || 0 }))}
+              <label htmlFor="signal-schedules-field-2" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('priority')}</label>
+              <input id="signal-schedules-field-2" type="number" value={form.priority ?? 0} onChange={e => setForm(f => ({ ...f, priority: parseInt(e.target.value) || 0 }))}
                 className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
             </div>
           </div>
@@ -324,13 +324,13 @@ export default function SchedulesPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('activeFrom')}</label>
-              <input type="date" value={form.startDate ?? ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+              <label htmlFor="signal-schedules-field-3" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('activeFrom')}</label>
+              <input id="signal-schedules-field-3" type="date" value={form.startDate ?? ''} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
                 className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
             </div>
             <div>
-              <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('activeUntil')}</label>
-              <input type="date" value={form.endDate ?? ''} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+              <label htmlFor="signal-schedules-field-4" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('activeUntil')}</label>
+              <input id="signal-schedules-field-4" type="date" value={form.endDate ?? ''} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                 className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
             </div>
           </div>
@@ -347,7 +347,7 @@ export default function SchedulesPage() {
             )}
             <button onClick={() => setEditing(null)}
               className="px-4 py-2 text-sm text-[var(--deck-text-mid)] border border-[var(--deck-glass-border)] rounded-lg hover:bg-[var(--deck-glass-fill-strong)]">
-              <X className="w-4 h-4 inline mr-1" />{tc('cancel')}
+              <X className="w-4 h-4 inline me-1" />{tc('cancel')}
             </button>
             <button onClick={() => editing === 'new' ? createMut.mutate() : updateMut.mutate()}
               disabled={!canSave || saving}

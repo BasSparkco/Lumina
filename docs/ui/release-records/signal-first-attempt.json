@@ -1,0 +1,8 @@
+{
+  "rollbackImage": "sha256:8ddf66788b94f620e22c0018bbe065ad1ccbd31d3a54aa1d4fb226a285d8acfd",
+  "userAuthorizedProduction": true,
+  "stagingWaivedByUser": true,
+  "deployed": false,
+  "rolledBack": true,
+  "error": "Public login readiness failed"
+}

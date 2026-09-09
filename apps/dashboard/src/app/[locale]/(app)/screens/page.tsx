@@ -5,12 +5,12 @@ import NextImage from 'next/image';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import {
-  DndContext, PointerSensor, closestCenter, useSensor, useSensors,
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, TriangleAlert, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical, DoorOpen } from 'lucide-react';
+import { Monitor, Plus, Unplug, Trash2, Tv2, RefreshCw, Send, AlertTriangle, Moon, Clock, FolderKanban, Pencil, X, Check, Pause, Play, Camera, Bug, Volume2, MapPin, Image as ImageIcon, ListVideo, Palette, Search, Navigation, RotateCcw, RotateCw, Eraser, GripVertical, DoorOpen } from 'lucide-react';
 import { screensApi, playlistsApi, themesApi, orgApi, assetsApi, wayfindingApi, roomBookingApi, screenGroupsApi, QUICK_BOOKING_DURATIONS_MINUTES, type Screen, type StreamingType, type ScreenGroup } from '@/lib/api';
 import { PoiMapEditor } from '@/components/PoiMapEditor';
 import { useScreenSocket, type PlaybackProgress } from '@/hooks/useScreenSocket';
@@ -21,6 +21,8 @@ import { useFaithFeatures } from '@/hooks/useFaithFeatures';
 import { useDateFormat, formatDateTime } from '@/hooks/useDateFormat';
 import { TimezoneSelect } from '@/components/TimezoneSelect';
 import { AssetPicker } from '@/components/AssetPicker';
+import { SignalDialog } from '@/components/SignalDialog';
+import { ScreenOverview, ScreenSummary } from '@/components/screens/ScreenOverview';
 
 const PRAYER_METHOD_VALUES = [
   'UmmAlQura', 'Dubai', 'Kuwait', 'Qatar', 'Egyptian', 'MuslimWorldLeague',
@@ -613,7 +615,8 @@ export default function ScreensPage() {
   const { format: dateFormat } = useDateFormat();
   const t = useTranslations('screens');
   const tc = useTranslations('common');
-  const { data: screens = [], isLoading, isFetching } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
+  const to = useTranslations('screens.overview');
+  const { data: screens = [], isLoading, isFetching, isError: screensFailed } = useQuery({ queryKey: ['screens'], queryFn: screensApi.list });
   const { data: playlists = [] } = useQuery({ queryKey: ['playlists'], queryFn: playlistsApi.list });
   const { data: assets = [] } = useQuery({ queryKey: ['assets'], queryFn: assetsApi.list });
   const { data: groups = [] } = useQuery({ queryKey: ['screenGroups'], queryFn: screenGroupsApi.list });
@@ -628,7 +631,7 @@ export default function ScreensPage() {
   const { data: orgSettings } = useQuery({ queryKey: ['orgSettings'], queryFn: orgApi.getSettings });
   const autoPublish = orgSettings?.autoPublish ?? false;
   const { statuses: liveStatuses, playbackProgress } = useScreenSocket();
-  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   const [showPair, setShowPair] = useState(false);
   const [pairCode, setPairCode] = useState('');
@@ -650,6 +653,9 @@ export default function ScreensPage() {
   const [namingWarningScreen, setNamingWarningScreen] = useState<Screen | null>(null);
   const [search, setSearch] = useState('');
   const [showUnpaired, setShowUnpaired] = useState(false);
+  const [viewMode, setViewMode] = useState<'overview' | 'controls'>('overview');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
+  const [managedId, setManagedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Record<string, 'content' | 'settings'>>({});
 
   const pairMut = useMutation({
@@ -679,10 +685,11 @@ export default function ScreensPage() {
 
   function handleScreenDragEnd(e: DragEndEvent) {
     const { active, over } = e;
-    if (!over || active.id === over.id) return;
+    if (!canDragScreens || !over || active.id === over.id) return;
     const orderedIds = pairedScreens.map(s => s.id);
     const oldIndex = orderedIds.indexOf(String(active.id));
     const newIndex = orderedIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
     reorderMut.mutate(arrayMove(orderedIds, oldIndex, newIndex));
   }
 
@@ -855,196 +862,24 @@ export default function ScreensPage() {
   const pairedScreens = screens.filter(s => s.paired);
   const unpairedScreens = screens.filter(s => !s.paired);
   const groupFilteredScreens = activeGroupId ? pairedScreens.filter(s => groupAssignments[s.id] === activeGroupId) : pairedScreens;
-  const visibleScreens = groupFilteredScreens.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+  const visibleScreens = groupFilteredScreens.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) && (statusFilter === 'ALL' || statusFor(s) === statusFilter));
+  const managedScreen = pairedScreens.find(screen => screen.id === managedId);
   // Dragging reorders the *unfiltered* paired-screens list by array index, which doesn't map
   // cleanly onto a filtered/grouped subset — so only enable it with no group filter or search
   // active. Same reasoning as playlists/page.tsx's canDragPlaylists.
-  const canDragScreens = canEditContent && !search.trim() && activeGroupId === null;
+  const canDragScreens = canEditContent && !search.trim() && activeGroupId === null && statusFilter === 'ALL' && !reorderMut.isPending;
+  const canDragControls = canDragScreens && viewMode === 'controls' && !managedId;
 
-  return (
-    <div className="px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
-          <p className="text-base text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => void qc.invalidateQueries({ queryKey: ['screens'] })}
-            disabled={isFetching}
-            title={t('refresh')}
-            className="flex items-center gap-1.5 text-base border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] px-3 py-2 rounded-lg font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
-          </button>
-          {canEditContent && (
-            <button onClick={() => { setShowPair(true); setPairError(''); }}
-              className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-base font-medium ">
-              <Plus className="w-4 h-4" /> {t('pairScreen')}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {pairedScreens.length > 0 && (
-        <div className="relative mb-4 max-w-sm">
-          <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder={tc('search')}
-            className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-base focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
-        </div>
-      )}
-
-      {/* Group filter bar */}
-      <div className="flex items-center flex-wrap gap-2 mb-4">
-        <button onClick={() => setActiveGroupId(null)}
-          className={`text-base px-4 py-2 rounded-full font-medium border transition-colors ${
-            activeGroupId === null
-              ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
-              : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
-          }`}>
-          {t('groups.allScreens')}
-        </button>
-        {groups.map((group: ScreenGroup) => (
-          <div key={group.id} className="group/chip relative">
-            {renamingGroupId === group.id ? (
-              <input autoFocus value={renameGroupValue} onChange={e => setRenameGroupValue(e.target.value)}
-                onBlur={() => { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed }); else setRenamingGroupId(null); }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed }); }
-                  if (e.key === 'Escape') setRenamingGroupId(null);
-                }}
-                className="text-base px-4 py-2 rounded-full border border-[var(--deck-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />
-            ) : (
-              <button onClick={() => setActiveGroupId(group.id)}
-                className={`flex items-center gap-2 text-base px-4 py-2 rounded-full font-medium border transition-colors ${
-                  activeGroupId === group.id
-                    ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
-                    : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
-                }`}>
-                <FolderKanban className="w-3.5 h-3.5" /> {group.name}
-                {canEditContent && (
-                  <>
-                    <span onClick={e => { e.stopPropagation(); setRenamingGroupId(group.id); setRenameGroupValue(group.name); }}
-                      title={t('groups.renameTitle')} className="opacity-0 group-hover/chip:opacity-70 hover:opacity-100">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </span>
-                    <span onClick={e => { e.stopPropagation(); if (confirmDelete(t('groups.deleteConfirm'))) removeGroupMut.mutate(group); }}
-                      title={t('groups.deleteTitle')} className="opacity-0 group-hover/chip:opacity-70 hover:opacity-100">
-                      <X className="w-3.5 h-3.5" />
-                    </span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        ))}
-        {canEditContent && (
-          creatingGroup ? (
-            <div className="flex items-center gap-1.5">
-              <input autoFocus value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && newGroupName.trim()) createGroupMut.mutate(); if (e.key === 'Escape') setCreatingGroup(false); }}
-                placeholder={t('groups.namePlaceholder')}
-                className="text-base px-4 py-2 rounded-full border border-[var(--deck-glass-border)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />
-              <button onClick={() => createGroupMut.mutate()} disabled={!newGroupName.trim() || createGroupMut.isPending}
-                className="text-[var(--deck-accent)] hover:text-[var(--deck-accent)] disabled:opacity-50"><Check className="w-5 h-5" /></button>
-              <button onClick={() => setCreatingGroup(false)} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"><X className="w-5 h-5" /></button>
-            </div>
-          ) : (
-            <button onClick={() => setCreatingGroup(true)}
-              className="flex items-center gap-1.5 text-base px-4 py-2 rounded-full border border-dashed border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]">
-              <Plus className="w-3.5 h-3.5" /> {t('groups.newGroup')}
-            </button>
-          )
-        )}
-        {activeGroupId && visibleScreens.length > 0 && canEditContent && !autoPublish && (
-          <button onClick={() => bulkPublishMut.mutate(visibleScreens.map(s => s.id))} disabled={bulkPublishMut.isPending}
-            className="ms-auto flex items-center gap-2 text-base px-4 py-2 rounded-full bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
-            <Send className="w-3.5 h-3.5" /> {bulkPublishMut.isPending ? t('groups.publishing') : t('groups.publishToGroup')}
-          </button>
-        )}
-      </div>
-
-      {publishedMessage && (
-        <div className="mb-4 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-base px-4 py-2 rounded-lg">{publishedMessage}</div>
-      )}
-
-      {/* Pair modal */}
-      {showPair && canEditContent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
-            <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4 flex items-center gap-2"><Unplug className="w-4 h-4 text-[var(--deck-accent)]" /> {t('pairModalTitle')}</h2>
-            <p className="text-base text-[var(--deck-text-mid)] mb-3">{t('pairModalBody')}</p>
-            <input value={pairCode} onChange={e => { setPairCode(e.target.value.toUpperCase()); setPairError(''); }}
-              placeholder="ABC123" maxLength={6}
-              className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-base text-center tracking-widest font-mono text-xl focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-2" />
-            {pairError && <p className="text-sm text-red-600 mb-2">{pairError}</p>}
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => setShowPair(false)}
-                className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-base hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
-              <button onClick={() => pairMut.mutate()} disabled={pairCode.length < 6 || pairMut.isPending}
-                className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-base font-medium  disabled:opacity-50">
-                {pairMut.isPending ? t('pairing') : t('pair')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Naming warning — nudges the user to replace the auto-generated "Unnamed Screen N"
-          right after pairing, since a fleet of same-named screens becomes hard to tell apart
-          later. Closing without typing anything just keeps that serial-numbered default. */}
-      {namingWarningScreen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
-            <h2 className="font-semibold text-[var(--deck-text-hi)] mb-2 flex items-center gap-2">
-              <TriangleAlert className="w-4 h-4 text-amber-500" /> {t('nameWarning.title')}
-            </h2>
-            <p className="text-base text-[var(--deck-text-mid)] mb-3">
-              {t('nameWarning.body', { name: namingWarningScreen.name })}
-            </p>
-            <input
-              autoFocus
-              value={renameValue}
-              onChange={e => setRenameValue(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && renameValue.trim()) commitNamingWarning(); }}
-              placeholder={t('nameWarning.placeholder')}
-              className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
-            <div className="flex gap-2">
-              <button onClick={() => { setNamingWarningScreen(null); setRenameValue(''); }}
-                className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-base hover:bg-[var(--deck-glass-fill-strong)]">
-                {t('nameWarning.skip')}
-              </button>
-              <button onClick={commitNamingWarning} disabled={!renameValue.trim() || renameMut.isPending}
-                className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-base font-medium  disabled:opacity-50">
-                {renameMut.isPending ? t('nameWarning.saving') : t('nameWarning.save')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isLoading && <p className="text-base text-[var(--deck-text-low)]">{t('loading')}</p>}
-
-      {!isLoading && visibleScreens.length === 0 && (
-        <div className="text-center py-16 text-[var(--deck-text-low)]">
-          <Monitor className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-base">{pairedScreens.length === 0 ? t('empty') : tc('noMatches')}</p>
-        </div>
-      )}
-
-      <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleScreenDragEnd}>
-        <SortableContext items={visibleScreens.map(s => s.id)} strategy={rectSortingStrategy}>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 items-start">
-            {visibleScreens.map((screen: Screen) => {
+  const renderScreenCard = (screen: Screen) => {
               const live = statusFor(screen);
               const tab = activeTab[screen.id] ?? 'content';
               return (
-                <SortableScreenCard key={screen.id} id={screen.id} disabled={!canDragScreens}>
+                <SortableScreenCard key={screen.id} id={screen.id} disabled={!canDragControls}>
                   {({ attributes, listeners, setNodeRef, style, isDragging }) => (
             <div ref={setNodeRef} style={style} className={`glass-panel rounded-2xl border border-[var(--deck-glass-border)] border-t-4 ${live === 'ONLINE' ? 'border-t-green-500' : 'border-t-[var(--deck-glass-border)]'} p-5 flex flex-col gap-3.5 ${isDragging ? 'z-10 opacity-70 shadow-lg' : ''}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2 min-w-0">
-                  {canDragScreens && (
+                  {canDragControls && (
                     <button type="button" {...attributes} {...listeners} title={t('dragToReorder')}
                       className="cursor-grab touch-none p-0.5 text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)] active:cursor-grabbing shrink-0">
                       <GripVertical className="w-3.5 h-3.5" />
@@ -1059,7 +894,7 @@ export default function ScreensPage() {
                       onBlur={() => commitRename(screen)}
                       onKeyDown={e => {
                         if (e.key === 'Enter') commitRename(screen);
-                        if (e.key === 'Escape') setRenamingId(null);
+                        if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null); }
                       }}
                       disabled={renameMut.isPending}
                       className="font-medium text-base text-[var(--deck-text-hi)] border border-[var(--deck-accent)] rounded px-1 -mx-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]"
@@ -1074,7 +909,7 @@ export default function ScreensPage() {
                   )}
                 </div>
                 <span className={`flex items-center gap-1 text-sm px-2 py-0.5 rounded-full font-medium shrink-0 ${live === 'ONLINE' ? 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400' : 'bg-[var(--deck-glass-fill-strong)] text-[var(--deck-text-mid)]'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${live === 'ONLINE' ? 'bg-green-500 animate-pulse' : 'bg-[var(--deck-text-low)]'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${live === 'ONLINE' ? 'bg-green-500' : 'bg-[var(--deck-text-low)]'}`} />
                   {live === 'ONLINE' ? t('online') : t('offline')}
                 </span>
               </div>
@@ -1197,7 +1032,7 @@ export default function ScreensPage() {
                     className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                     <Camera className="w-3.5 h-3.5" />
                     {expandedScreenshot === screen.id ? t('screenshot.hide') : t('screenshot.show')}
-                    {screen.screenshotUrl && <span className="ml-auto text-emerald-500 opacity-70">{t('set')}</span>}
+                    {screen.screenshotUrl && <span className="ms-auto text-emerald-500 opacity-70">{t('set')}</span>}
                   </button>
                   {expandedScreenshot === screen.id && <ScreenshotPanel screen={screen} />}
 
@@ -1267,7 +1102,7 @@ export default function ScreensPage() {
                         className="flex items-center gap-1.5 text-sm text-[var(--deck-text-mid)] hover:text-[var(--deck-text-hi)] font-medium">
                         <Clock className="w-3.5 h-3.5" />
                         {expandedTimezone === screen.id ? t('hideTimezone') : t('configureTimezone')}
-                        <span className="ml-auto text-[var(--deck-text-low)] opacity-70 truncate max-w-[8rem]">{screen.timezone}</span>
+                        <span className="ms-auto text-[var(--deck-text-low)] opacity-70 truncate max-w-[8rem]">{screen.timezone}</span>
                       </button>
                       {expandedTimezone === screen.id && (
                         <TimezoneSelect
@@ -1301,7 +1136,7 @@ export default function ScreensPage() {
                     {expandedDisplay === screen.id ? t('display.hide') : t('display.show')}
                   </button>
                   {expandedDisplay === screen.id && (
-                    <div className="space-y-2 pl-1">
+                    <div className="space-y-2 ps-1">
                       <div>
                         <label className="text-sm text-[var(--deck-text-low)] mb-1 block">{t('orientation.label')}</label>
                         <select
@@ -1348,7 +1183,7 @@ export default function ScreensPage() {
                     <MapPin className="w-3.5 h-3.5" />
                     {expandedLocation === screen.id ? t('hideLocation') : t('configureLocation')}
                     {screen.latitude != null && screen.longitude != null && (
-                      <span className="ml-auto text-emerald-500 opacity-70">{t('set')}</span>
+                      <span className="ms-auto text-emerald-500 opacity-70">{t('set')}</span>
                     )}
                   </button>
                   {expandedLocation === screen.id && <LocationPanel screen={screen} />}
@@ -1361,7 +1196,7 @@ export default function ScreensPage() {
                       <Moon className="w-3.5 h-3.5" />
                       {expandedPrayer === screen.id ? t('hideFaith') : t('configureFaith')}
                       {screen.latitude && screen.longitude && (
-                        <span className="ml-auto text-amber-500 opacity-70">{t('set')}</span>
+                        <span className="ms-auto text-amber-500 opacity-70">{t('set')}</span>
                       )}
                     </button>
                   )}
@@ -1412,10 +1247,197 @@ export default function ScreensPage() {
                   )}
                 </SortableScreenCard>
               );
-            })}
+  };
+
+  return (
+    <div className="signal-page">
+      <div className="signal-page-heading">
+        <div>
+          <h1 className="text-3xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
+          <p className="text-base text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void qc.invalidateQueries({ queryKey: ['screens'] })}
+            disabled={isFetching}
+            title={t('refresh')}
+            className="flex items-center gap-1.5 text-base border border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] px-3 py-2 rounded-lg font-medium hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> {t('refresh')}
+          </button>
+          {canEditContent && (
+            <button onClick={() => { setShowPair(true); setPairError(''); }}
+              className="flex items-center gap-2 bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-base font-medium ">
+              <Plus className="w-4 h-4" /> {t('pairScreen')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!isLoading && pairedScreens.length > 0 && <>
+        <ScreenSummary screens={pairedScreens} statusFor={statusFor} />
+        {pairedScreens.some(screen => statusFor(screen) === 'OFFLINE') && <p className="signal-connection-note"><AlertTriangle size={17} />{to('offlineHint')}</p>}
+        <div className="signal-screen-toolbar">
+          <div className="signal-view-switch" role="group" aria-label={to('view')}>
+            <button type="button" aria-pressed={viewMode === 'overview'} onClick={() => setViewMode('overview')}>{to('listView')}</button>
+            <button type="button" aria-pressed={viewMode === 'controls'} onClick={() => setViewMode('controls')}>{to('controlsView')}</button>
+          </div>
+          <label className="signal-status-filter">{to('connection')}
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as typeof statusFilter)}>
+              <option value="ALL">{to('allStatuses')}</option><option value="ONLINE">{to('online')}</option><option value="OFFLINE">{to('offline')}</option>
+            </select>
+          </label>
+        </div>
+      </>}
+      {pairedScreens.length > 0 && (
+        <div className="relative mb-4 max-w-sm">
+          <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={tc('search')} aria-label={tc('search')}
+            className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-base focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
+        </div>
+      )}
+
+      {/* Group filter bar */}
+      <div className="flex items-center flex-wrap gap-2 mb-4">
+        <button onClick={() => setActiveGroupId(null)}
+          className={`text-base px-4 py-2 rounded-full font-medium border transition-colors ${
+            activeGroupId === null
+              ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
+              : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
+          }`}>
+          {t('groups.allScreens')}
+        </button>
+        {groups.map((group: ScreenGroup) => (
+          <div key={group.id} className="group/chip relative">
+            {renamingGroupId === group.id ? (
+              <input autoFocus value={renameGroupValue} onChange={e => setRenameGroupValue(e.target.value)}
+                onBlur={() => { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed }); else setRenamingGroupId(null); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { const trimmed = renameGroupValue.trim(); if (trimmed) renameGroupMut.mutate({ id: group.id, name: trimmed }); }
+                  if (e.key === 'Escape') setRenamingGroupId(null);
+                }}
+                className="text-base px-4 py-2 rounded-full border border-[var(--deck-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />
+            ) : (
+              <button onClick={() => setActiveGroupId(group.id)}
+                className={`flex items-center gap-2 text-base px-4 py-2 rounded-full font-medium border transition-colors ${
+                  activeGroupId === group.id
+                    ? 'bg-[var(--deck-accent)] text-white border-[var(--deck-accent)]'
+                    : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]'
+                }`}>
+                <FolderKanban className="w-3.5 h-3.5" /> {group.name}
+                {canEditContent && (
+                  <>
+                    <span onClick={e => { e.stopPropagation(); setRenamingGroupId(group.id); setRenameGroupValue(group.name); }}
+                      title={t('groups.renameTitle')} className="opacity-0 group-hover/chip:opacity-70 hover:opacity-100">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </span>
+                    <span onClick={e => { e.stopPropagation(); if (confirmDelete(t('groups.deleteConfirm'))) removeGroupMut.mutate(group); }}
+                      title={t('groups.deleteTitle')} className="opacity-0 group-hover/chip:opacity-70 hover:opacity-100">
+                      <X className="w-3.5 h-3.5" />
+                    </span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        ))}
+        {canEditContent && (
+          creatingGroup ? (
+            <div className="flex items-center gap-1.5">
+              <input autoFocus value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && newGroupName.trim()) createGroupMut.mutate(); if (e.key === 'Escape') setCreatingGroup(false); }}
+                placeholder={t('groups.namePlaceholder')}
+                className="text-base px-4 py-2 rounded-full border border-[var(--deck-glass-border)] focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)] w-32" />
+              <button onClick={() => createGroupMut.mutate()} disabled={!newGroupName.trim() || createGroupMut.isPending}
+                className="text-[var(--deck-accent)] hover:text-[var(--deck-accent)] disabled:opacity-50"><Check className="w-5 h-5" /></button>
+              <button onClick={() => setCreatingGroup(false)} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"><X className="w-5 h-5" /></button>
+            </div>
+          ) : (
+            <button onClick={() => setCreatingGroup(true)}
+              className="flex items-center gap-1.5 text-base px-4 py-2 rounded-full border border-dashed border-[var(--deck-glass-border)] text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)]">
+              <Plus className="w-3.5 h-3.5" /> {t('groups.newGroup')}
+            </button>
+          )
+        )}
+        {activeGroupId && visibleScreens.length > 0 && canEditContent && !autoPublish && (
+          <button onClick={() => bulkPublishMut.mutate(visibleScreens.map(s => s.id))} disabled={bulkPublishMut.isPending}
+            className="ms-auto flex items-center gap-2 text-base px-4 py-2 rounded-full bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] hover:bg-[var(--deck-accent-soft)] disabled:opacity-50">
+            <Send className="w-3.5 h-3.5" /> {bulkPublishMut.isPending ? t('groups.publishing') : t('groups.publishToGroup')}
+          </button>
+        )}
+      </div>
+
+      {publishedMessage && (
+        <div className="mb-4 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 text-base px-4 py-2 rounded-lg">{publishedMessage}</div>
+      )}
+
+      {/* Pair first, then keep the existing post-pair naming workflow. */}
+      <SignalDialog open={showPair && canEditContent} title={t('pairModalTitle')} onClose={() => setShowPair(false)}>
+        <p className="text-sm text-[var(--deck-text-mid)] mb-4">{t('pairModalBody')}</p>
+        <form onSubmit={event => { event.preventDefault(); if (pairCode.trim().length === 6 && !pairMut.isPending) pairMut.mutate(); }}>
+          <label htmlFor="screen-pair-code" className="block text-sm text-[var(--deck-text-hi)] mb-2">{to('pairingCode')}</label>
+          <input id="screen-pair-code" data-dialog-autofocus autoFocus value={pairCode} onChange={event => { setPairCode(event.target.value.toUpperCase()); setPairError(''); }}
+            placeholder="ABC123" dir="ltr" maxLength={6} minLength={6} required aria-invalid={!!pairError} aria-describedby={pairError ? 'screen-pair-error' : undefined}
+            className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-3 text-center tracking-widest font-mono text-xl focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-2" />
+          {pairError && <p id="screen-pair-error" role="alert" className="text-sm text-red-600 dark:text-red-400 mb-2">{pairError}</p>}
+          <div className="flex justify-end gap-2 mt-5">
+            <button type="button" onClick={() => setShowPair(false)} className="border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] px-4 py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">{tc('cancel')}</button>
+            <button type="submit" disabled={pairCode.trim().length < 6 || pairMut.isPending} className="bg-[var(--deck-accent)] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">{pairMut.isPending ? t('pairing') : t('pair')}</button>
+          </div>
+        </form>
+      </SignalDialog>
+
+      {/* Naming warning — nudges the user to replace the auto-generated "Unnamed Screen N"
+          right after pairing, since a fleet of same-named screens becomes hard to tell apart
+          later. Closing without typing anything just keeps that serial-numbered default. */}
+      <SignalDialog open={!!namingWarningScreen} title={t('nameWarning.title')} onClose={() => { setNamingWarningScreen(null); setRenameValue(''); }}>
+        {namingWarningScreen && <>
+            <p className="text-base text-[var(--deck-text-mid)] mb-3">
+              {t('nameWarning.body', { name: namingWarningScreen.name })}
+            </p>
+            <input
+              data-dialog-autofocus
+              autoFocus
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && renameValue.trim()) commitNamingWarning(); }}
+              placeholder={t('nameWarning.placeholder')}
+              className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
+            <div className="flex gap-2">
+              <button onClick={() => { setNamingWarningScreen(null); setRenameValue(''); }}
+                className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-base hover:bg-[var(--deck-glass-fill-strong)]">
+                {t('nameWarning.skip')}
+              </button>
+              <button onClick={commitNamingWarning} disabled={!renameValue.trim() || renameMut.isPending}
+                className="flex-1 bg-[var(--deck-accent)] text-white py-2 rounded-lg text-base font-medium  disabled:opacity-50">
+                {renameMut.isPending ? t('nameWarning.saving') : t('nameWarning.save')}
+              </button>
+            </div>
+        </>}
+      </SignalDialog>
+
+      {screensFailed && <p role="alert" className="signal-connection-note">{to('loadFailed')}</p>}
+      {isLoading && <p className="text-base text-[var(--deck-text-low)]">{t('loading')}</p>}
+
+      {!isLoading && !screensFailed && visibleScreens.length === 0 && (
+        <div className="text-center py-16 text-[var(--deck-text-low)]">
+          <Monitor className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-base">{pairedScreens.length === 0 ? t('empty') : tc('noMatches')}</p>
+        </div>
+      )}
+
+      {viewMode === 'overview' && visibleScreens.length > 0 && <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleScreenDragEnd}><SortableContext items={visibleScreens.map(s => s.id)} strategy={verticalListSortingStrategy}><ScreenOverview canReorder={canDragScreens} playbackProgress={playbackProgress} screens={visibleScreens} groups={groups} assets={assets} playlists={playlists} statusFor={statusFor} dateFormat={dateFormat} onManage={screen => setManagedId(screen.id)} /></SortableContext></DndContext>}
+      <SignalDialog open={!!managedScreen && viewMode === 'overview'} title={managedScreen?.name ?? ''} onClose={() => setManagedId(null)}>
+        <DndContext><SortableContext items={managedScreen ? [managedScreen.id] : []}>{managedScreen && renderScreenCard(managedScreen)}</SortableContext></DndContext>
+      </SignalDialog>
+      {viewMode === 'controls' && <p className="text-sm text-[var(--deck-text-mid)] mb-4">{to('controlsHint')}</p>}
+      {viewMode === 'controls' && <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleScreenDragEnd}>
+        <SortableContext items={visibleScreens.map(s => s.id)} strategy={rectSortingStrategy}>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 items-start">
+            {visibleScreens.map(renderScreenCard)}
           </div>
         </SortableContext>
-      </DndContext>
+      </DndContext>}
 
       {/* Unpaired screens — kept server-side after Unpair so re-pairing the same device lands
           back on its name/history/settings, but that means they'd otherwise accumulate forever

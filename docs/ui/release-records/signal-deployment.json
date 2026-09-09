@@ -1,0 +1,11 @@
+{
+  "rollbackImage": "sha256:8ddf66788b94f620e22c0018bbe065ad1ccbd31d3a54aa1d4fb226a285d8acfd",
+  "userAuthorizedProduction": true,
+  "stagingWaivedByUser": true,
+  "deployed": true,
+  "imageId": "sha256:8089f2f840eb6e99feb21ca92bc6aef29294314b339984d7601fc8e2d9faca00",
+  "startedAt": "2026-09-08T10:34:19.168904355Z",
+  "buildId": "7Pk6u71jRrGmJDA2tesiY",
+  "otherServicesUnchanged": true,
+  "publicLoginStatus": 200
+}

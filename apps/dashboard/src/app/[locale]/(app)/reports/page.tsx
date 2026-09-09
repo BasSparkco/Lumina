@@ -63,21 +63,21 @@ function ProofOfPlayTab({ screens }: { screens: Screen[] }) {
     <div>
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('screen')}</label>
-          <select value={screenId} onChange={e => { setScreenId(e.target.value); setPage(1); }}
+          <label htmlFor="signal-reports-field-1" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('screen')}</label>
+          <select id="signal-reports-field-1" value={screenId} onChange={e => { setScreenId(e.target.value); setPage(1); }}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
             <option value="ALL">{t('allScreens')}</option>
             {screens.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
-          <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1); }}
+          <label htmlFor="signal-reports-field-2" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
+          <input id="signal-reports-field-2" type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1); }}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
-          <input type="date" value={untilDate} onChange={e => { setUntilDate(e.target.value); setPage(1); }}
+          <label htmlFor="signal-reports-field-3" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
+          <input id="signal-reports-field-3" type="date" value={untilDate} onChange={e => { setUntilDate(e.target.value); setPage(1); }}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <span className="text-xs text-[var(--deck-text-low)] pb-2">{t('resultCount', { count: total })}</span>
@@ -233,21 +233,21 @@ function KioskActivityTab({ screens }: { screens: Screen[] }) {
     <div>
       <div className="flex flex-wrap items-end gap-3 mb-6">
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('screen')}</label>
-          <select value={screenId} onChange={e => setScreenId(e.target.value)}
+          <label htmlFor="signal-reports-field-4" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('screen')}</label>
+          <select id="signal-reports-field-4" value={screenId} onChange={e => setScreenId(e.target.value)}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]">
             <option value="ALL">{t('allScreens')}</option>
             {screens.filter(s => s.streamingType === 'WAYFINDING').map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
-          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+          <label htmlFor="signal-reports-field-5" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
+          <input id="signal-reports-field-5" type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
-          <input type="date" value={untilDate} onChange={e => setUntilDate(e.target.value)}
+          <label htmlFor="signal-reports-field-6" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
+          <input id="signal-reports-field-6" type="date" value={untilDate} onChange={e => setUntilDate(e.target.value)}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <span className="text-xs text-[var(--deck-text-low)] pb-2">{t('sessionCount', { count: sessionCount })}</span>
@@ -323,8 +323,8 @@ export default function ReportsPage() {
   const [tab, setTab] = useState<'proofOfPlay' | 'kiosk'>('proofOfPlay');
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="mb-6">
+    <div className="signal-page signal-workspace-page signal-reports-page space-y-6">
+      <div className="signal-page-heading">
         <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
         <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
       </div>

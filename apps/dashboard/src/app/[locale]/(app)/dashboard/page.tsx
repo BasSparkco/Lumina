@@ -89,8 +89,8 @@ export default function DashboardPage() {
   const screensWithCrashes = Object.values(crashCountByScreen).filter(c => c > 0).length;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <div className="flex items-start justify-between mb-6">
+    <div className="signal-page signal-workspace-page signal-dashboard-page space-y-6">
+      <div className="signal-page-heading">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>

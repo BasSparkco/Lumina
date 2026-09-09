@@ -24,7 +24,7 @@ function TemplatesPageInner() {
   }, [searchParams]);
 
   return (
-    <div>
+    <div className="signal-template-library">
       <LayoutsSection mode="list" />
       <div ref={themesRef}>
         <ThemesSection mode="list" />

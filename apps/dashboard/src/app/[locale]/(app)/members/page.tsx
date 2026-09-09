@@ -1,8 +1,10 @@
 'use client';
+import { SignalQueryError } from '@/components/SignalQueryError';
+import { SignalDialog } from '@/components/SignalDialog';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
-import { Users, UserPlus, Trash2, Mail, Link2, Check, Search } from 'lucide-react';
+import { Users, UserPlus, Trash2, Link2, Check, Search } from 'lucide-react';
 import { membersApi, type Member, type PendingInvite, type UserRole } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -35,8 +37,8 @@ export default function MembersPage() {
 
   const membersKey = ['members', user?.orgId];
   const invitesKey = ['members', 'invites', user?.orgId];
-  const { data: members = [], isLoading: membersLoading } = useQuery({ queryKey: membersKey, queryFn: membersApi.list, enabled: canRender });
-  const { data: invites = [], isLoading: invitesLoading } = useQuery({ queryKey: invitesKey, queryFn: membersApi.listInvites, enabled: canRender });
+  const { data: members = [], isLoading: membersLoading, isError: membersFailed, refetch: retryMembers } = useQuery({ queryKey: membersKey, queryFn: membersApi.list, enabled: canRender });
+  const { data: invites = [], isLoading: invitesLoading, isError: invitesFailed, refetch: retryInvites } = useQuery({ queryKey: invitesKey, queryFn: membersApi.listInvites, enabled: canRender });
   const isLoading = membersLoading || invitesLoading;
 
   const rows: MemberRow[] = [
@@ -102,8 +104,8 @@ export default function MembersPage() {
   if (!canRender) return null;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="signal-page signal-workspace-page signal-members-page space-y-6">
+      <div className="signal-page-heading">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
@@ -116,17 +118,14 @@ export default function MembersPage() {
 
       {/* Invite modal */}
       {showInvite && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="glass-popup rounded-2xl p-6 w-full max-w-sm shadow-xl">
-            <h2 className="font-semibold text-[var(--deck-text-hi)] mb-4 flex items-center gap-2">
-              <Mail className="w-4 h-4 text-[var(--deck-accent)]" /> {t('inviteByEmail')}
-            </h2>
-            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('emailAddress')}</label>
-            <input value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
+        <SignalDialog open title={t('inviteByEmail')} onClose={() => setShowInvite(false)}>
+          <div>
+            <label htmlFor="invite-email" className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('emailAddress')}</label>
+            <input id="invite-email" data-dialog-autofocus dir="ltr" value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
               placeholder={t('emailPlaceholder')} type="email"
               className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-3" />
-            <label className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('role')}</label>
-            <select value={inviteRole} onChange={e => setInviteRole(e.target.value as UserRole)}
+            <label htmlFor="invite-role" className="text-xs text-[var(--deck-text-mid)] block mb-1">{t('role')}</label>
+            <select id="invite-role" value={inviteRole} onChange={e => setInviteRole(e.target.value as UserRole)}
               className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] mb-2">
               {ROLES.filter(r => r !== 'OWNER').map(r => <option key={r} value={r}>{tc(`roles.${r}`)}</option>)}
             </select>
@@ -140,21 +139,22 @@ export default function MembersPage() {
               </button>
             </div>
           </div>
-        </div>
+        </SignalDialog>
       )}
 
       {rows.length > 0 && (
         <div className="relative mb-4 max-w-sm">
           <Search className="w-4 h-4 text-[var(--deck-text-low)] absolute start-2.5 top-1/2 -translate-y-1/2" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input aria-label={tc("search")} value={search} onChange={e => setSearch(e.target.value)}
             placeholder={tc('search')}
             className="w-full border border-[var(--deck-glass-border)] rounded-lg ps-8 pe-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--deck-accent)]" />
         </div>
       )}
 
+      {(membersFailed || invitesFailed) && <SignalQueryError onRetry={() => { void retryMembers(); void retryInvites(); }} />}
       {isLoading && <p className="text-sm text-[var(--deck-text-low)]">{t('loading')}</p>}
 
-      {!isLoading && rows.length === 0 && (
+      {!isLoading && !membersFailed && !invitesFailed && rows.length === 0 && (
         <div className="text-center py-16 text-[var(--deck-text-low)]">
           <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">{t('empty')}</p>
@@ -174,7 +174,7 @@ export default function MembersPage() {
             if (row.kind === 'invite') {
               const { invite } = row;
               return (
-                <div key={`invite-${invite.id}`} className="flex items-center justify-between px-5 py-3.5">
+                <div key={`invite-${invite.id}`} className="signal-member-row flex items-center justify-between px-5 py-3.5">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xs font-semibold shrink-0">
                       {invite.email.slice(0, 1).toUpperCase()}
@@ -209,7 +209,7 @@ export default function MembersPage() {
             const isSelf = member.email === user?.email;
             const isOwner = member.role === 'OWNER';
             return (
-              <div key={member.id} className="flex items-center justify-between px-5 py-3.5">
+              <div key={member.id} className="signal-member-row flex items-center justify-between px-5 py-3.5">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-[var(--deck-accent-soft)] text-[var(--deck-accent)] flex items-center justify-center text-xs font-semibold shrink-0">
                     {member.name.slice(0, 1).toUpperCase()}

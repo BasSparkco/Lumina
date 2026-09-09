@@ -58,16 +58,16 @@ export default function AuditLogPage() {
   if (!canRender) return null;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="mb-6">
+    <div className="signal-page signal-workspace-page signal-audit-log-page space-y-6">
+      <div className="signal-page-heading">
         <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
         <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('resourceType')}</label>
-          <input
+          <label htmlFor="signal-audit-log-field-1" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('resourceType')}</label>
+          <input id="signal-audit-log-field-1"
             value={resourceType}
             onChange={(e) => resetPage(setResourceType)(e.target.value)}
             placeholder={t('resourceTypePlaceholder')}
@@ -75,18 +75,18 @@ export default function AuditLogPage() {
           />
         </div>
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
-          <input type="date" value={fromDate} onChange={e => resetPage(setFromDate)(e.target.value)}
+          <label htmlFor="signal-audit-log-field-2" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('fromDate')}</label>
+          <input id="signal-audit-log-field-2" type="date" value={fromDate} onChange={e => resetPage(setFromDate)(e.target.value)}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <div>
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
-          <input type="date" value={untilDate} onChange={e => resetPage(setUntilDate)(e.target.value)}
+          <label htmlFor="signal-audit-log-field-3" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('untilDate')}</label>
+          <input id="signal-audit-log-field-3" type="date" value={untilDate} onChange={e => resetPage(setUntilDate)(e.target.value)}
             className="border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('user')}</label>
-          <input value={userSearch} onChange={e => resetPage(setUserSearch)(e.target.value)}
+          <label htmlFor="signal-audit-log-field-4" className="text-xs text-[var(--deck-text-mid)] mb-1 block">{t('user')}</label>
+          <input id="signal-audit-log-field-4" value={userSearch} onChange={e => resetPage(setUserSearch)(e.target.value)}
             placeholder={t('searchUser')}
             className="w-full border border-[var(--deck-glass-border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)]" />
         </div>

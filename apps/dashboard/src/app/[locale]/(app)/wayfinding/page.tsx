@@ -1,4 +1,5 @@
 'use client';
+import { SignalDialog } from '@/components/SignalDialog';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
@@ -62,22 +63,7 @@ function parseCsv(text: string): string[][] {
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div
-        className="glass-popup rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-[var(--deck-text-hi)]">{title}</h2>
-          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <SignalDialog open title={title} onClose={onClose}><div className="signal-form-stack">{children}</div></SignalDialog>;
 }
 
 const inputClass =
@@ -236,8 +222,8 @@ export default function WayfindingPage() {
   if (!canRender) return null;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="signal-page signal-workspace-page signal-wayfinding-page space-y-6">
+      <div className="signal-page-heading">
         <div>
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>
@@ -1045,14 +1031,14 @@ function EdgeInspector({
   return (
     <div className="glass-panel rounded-2xl border border-[var(--deck-glass-border)] p-4 space-y-3">
       <div>
-        <label className={labelClass}>{t('routeGraph.edgeType')}</label>
-        <select value={type} onChange={(e) => setType(e.target.value as RouteEdgeType)} disabled={!canEdit} className={inputClass}>
+        <label htmlFor="signal-wayfinding-field-1" className={labelClass}>{t('routeGraph.edgeType')}</label>
+        <select id="signal-wayfinding-field-1" value={type} onChange={(e) => setType(e.target.value as RouteEdgeType)} disabled={!canEdit} className={inputClass}>
           {ROUTE_EDGE_TYPES.map((et) => <option key={et} value={et}>{t(`routeGraph.edgeTypes.${et}`)}</option>)}
         </select>
       </div>
       <div>
-        <label className={labelClass}>{t('routeGraph.edgeWeight')}</label>
-        <input
+        <label htmlFor="signal-wayfinding-field-2" className={labelClass}>{t('routeGraph.edgeWeight')}</label>
+        <input id="signal-wayfinding-field-2"
           type="number" min={0.1} step={0.5} value={weight} disabled={!canEdit}
           onChange={(e) => setWeight(parseFloat(e.target.value) || 0)} className={inputClass}
         />
@@ -1084,10 +1070,10 @@ function BuildingFormModal({
   const [address, setAddress] = useState(building?.address ?? '');
   return (
     <Modal title={building ? tc('edit') : t('newBuilding')} onClose={onClose}>
-      <label className={labelClass}>{t('buildingName')}</label>
-      <input value={name} onChange={(e) => setName(e.target.value)} className={`${inputClass} mb-3`} autoFocus />
-      <label className={labelClass}>{t('buildingAddress')}</label>
-      <input value={address} onChange={(e) => setAddress(e.target.value)} className={`${inputClass} mb-4`} />
+      <label htmlFor="signal-wayfinding-field-3" className={labelClass}>{t('buildingName')}</label>
+      <input id="signal-wayfinding-field-3" value={name} onChange={(e) => setName(e.target.value)} className={`${inputClass} mb-3`} autoFocus />
+      <label htmlFor="signal-wayfinding-field-4" className={labelClass}>{t('buildingAddress')}</label>
+      <input id="signal-wayfinding-field-4" value={address} onChange={(e) => setAddress(e.target.value)} className={`${inputClass} mb-4`} />
       <div className="flex gap-2">
         <button onClick={onClose} className="flex-1 border border-[var(--deck-glass-border)] text-[var(--deck-text-hi)] py-2 rounded-lg text-sm hover:bg-[var(--deck-glass-fill-strong)]">
           {tc('cancel')}
@@ -1115,13 +1101,13 @@ function FloorFormModal({
   const [assetId, setAssetId] = useState<string | null>(floor?.floorPlanAssetId ?? null);
   return (
     <Modal title={floor ? tc('edit') : t('newFloor')} onClose={onClose}>
-      <label className={labelClass} title={t('floorLevelTitle')}>{t('floorLevel')}</label>
-      <input
+      <label htmlFor="signal-wayfinding-field-5" className={labelClass} title={t('floorLevelTitle')}>{t('floorLevel')}</label>
+      <input id="signal-wayfinding-field-5"
         type="number" value={level} onChange={(e) => setLevel(parseInt(e.target.value, 10) || 0)}
         className={`${inputClass} mb-3`}
       />
-      <label className={labelClass}>{t('floorLabel')}</label>
-      <input
+      <label htmlFor="signal-wayfinding-field-6" className={labelClass}>{t('floorLabel')}</label>
+      <input id="signal-wayfinding-field-6"
         value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('floorLabelPlaceholder')}
         className={`${inputClass} mb-3`} autoFocus
       />
@@ -1179,20 +1165,20 @@ function CategoryFormModal({
   const [color, setColor] = useState(category?.color ?? '#2563eb');
   return (
     <Modal title={category ? tc('edit') : t('newCategory')} onClose={onClose}>
-      <label className={labelClass}>{t('categoryLabel')}</label>
-      <input value={label} onChange={(e) => setLabel(e.target.value)} className={`${inputClass} mb-3`} autoFocus />
-      <label className={labelClass}>{t('categoryLabelAr')}</label>
-      <input value={labelAr} onChange={(e) => setLabelAr(e.target.value)} dir="rtl" className={`${inputClass} mb-3`} />
+      <label htmlFor="signal-wayfinding-field-7" className={labelClass}>{t('categoryLabel')}</label>
+      <input id="signal-wayfinding-field-7" value={label} onChange={(e) => setLabel(e.target.value)} className={`${inputClass} mb-3`} autoFocus />
+      <label htmlFor="signal-wayfinding-field-8" className={labelClass}>{t('categoryLabelAr')}</label>
+      <input id="signal-wayfinding-field-8" value={labelAr} onChange={(e) => setLabelAr(e.target.value)} dir="rtl" className={`${inputClass} mb-3`} />
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <label className={labelClass}>{t('categoryIcon')}</label>
-          <select value={icon} onChange={(e) => setIcon(e.target.value)} className={inputClass}>
+          <label htmlFor="signal-wayfinding-field-9" className={labelClass}>{t('categoryIcon')}</label>
+          <select id="signal-wayfinding-field-9" value={icon} onChange={(e) => setIcon(e.target.value)} className={inputClass}>
             {ICON_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelClass}>{t('categoryColor')}</label>
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-[38px] rounded-lg border border-[var(--deck-glass-border)]" />
+          <label htmlFor="signal-wayfinding-field-10" className={labelClass}>{t('categoryColor')}</label>
+          <input id="signal-wayfinding-field-10" type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-[38px] rounded-lg border border-[var(--deck-glass-border)]" />
         </div>
       </div>
       <div className="flex items-center gap-2 mb-4 text-xs text-[var(--deck-text-mid)]">
@@ -1232,36 +1218,36 @@ function PoiFormModal({
     <Modal title={poi ? tc('edit') : t('newPoi')} onClose={onClose}>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <label className={labelClass}>{t('poiName')}</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} autoFocus />
+          <label htmlFor="signal-wayfinding-field-11" className={labelClass}>{t('poiName')}</label>
+          <input id="signal-wayfinding-field-11" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} autoFocus />
         </div>
         <div>
-          <label className={labelClass}>{t('poiNameAr')}</label>
-          <input value={nameAr} onChange={(e) => setNameAr(e.target.value)} dir="rtl" className={inputClass} />
+          <label htmlFor="signal-wayfinding-field-12" className={labelClass}>{t('poiNameAr')}</label>
+          <input id="signal-wayfinding-field-12" value={nameAr} onChange={(e) => setNameAr(e.target.value)} dir="rtl" className={inputClass} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <label className={labelClass}>{t('poiCategory')}</label>
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+          <label htmlFor="signal-wayfinding-field-13" className={labelClass}>{t('poiCategory')}</label>
+          <select id="signal-wayfinding-field-13" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelClass}>{t('poiStatus')}</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value as PoiStatus)} className={inputClass}>
+          <label htmlFor="signal-wayfinding-field-14" className={labelClass}>{t('poiStatus')}</label>
+          <select id="signal-wayfinding-field-14" value={status} onChange={(e) => setStatus(e.target.value as PoiStatus)} className={inputClass}>
             {POI_STATUSES.map((s) => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
           </select>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <label className={labelClass}>{t('poiDescription')}</label>
-          <input value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
+          <label htmlFor="signal-wayfinding-field-15" className={labelClass}>{t('poiDescription')}</label>
+          <input id="signal-wayfinding-field-15" value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>{t('poiDescriptionAr')}</label>
-          <input value={descriptionAr} onChange={(e) => setDescriptionAr(e.target.value)} dir="rtl" className={inputClass} />
+          <label htmlFor="signal-wayfinding-field-16" className={labelClass}>{t('poiDescriptionAr')}</label>
+          <input id="signal-wayfinding-field-16" value={descriptionAr} onChange={(e) => setDescriptionAr(e.target.value)} dir="rtl" className={inputClass} />
         </div>
       </div>
 

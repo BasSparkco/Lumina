@@ -71,8 +71,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <div className="mb-6">
+    <div className="signal-page signal-workspace-page signal-settings-page space-y-6">
+      <div className="signal-page-heading">
         <h1 className="text-2xl font-bold text-[var(--deck-text-hi)] flex items-center gap-2">
           <SettingsIcon className="w-5 h-5 text-[var(--deck-text-low)]" /> {t('title')}
         </h1>

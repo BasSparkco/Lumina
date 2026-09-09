@@ -1,8 +1,9 @@
 'use client';
+import { SignalDialog } from '@/components/SignalDialog';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { Sparkles, Loader2, Trash2, Plus, X, Send } from 'lucide-react';
+import { Sparkles, Loader2, Trash2, Plus, Send } from 'lucide-react';
 import {
   wayfindingAiApi, wayfindingApi,
   type WayfindingAiEligibleScreen, type WayfindingAiScreenConfig, type PoiWithAliases, type WayfindingAiResolutionResult,
@@ -15,22 +16,7 @@ const labelClass = 'text-xs text-[var(--deck-text-mid)] block mb-1';
 const cardClass = 'glass-panel rounded-2xl p-5';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div
-        className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-[var(--deck-text-hi)]">{title}</h2>
-          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <SignalDialog open title={title} onClose={onClose}><div className="signal-form-stack">{children}</div></SignalDialog>;
 }
 
 // docs/modules/ai_wayfinding_module_plan.md §8 — dashboard experience for AI Wayfinding: eligible
@@ -105,8 +91,8 @@ export default function WayfindingAiPage() {
   const avgLatency = requestCount ? Math.round(usage.reduce((sum, u) => sum + u.latencyMs, 0) / requestCount) : 0;
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
-      <div className="flex items-center gap-3">
+    <div className="signal-page signal-workspace-page signal-wayfinding-ai-page space-y-6">
+      <div className="signal-page-heading signal-module-heading">
         <Sparkles className="w-6 h-6 text-[var(--deck-accent)]" />
         <div>
           <h1 className="text-xl font-semibold text-[var(--deck-text-hi)]">{t('title')}</h1>
@@ -150,8 +136,8 @@ export default function WayfindingAiPage() {
       <section className={cardClass}>
         <h2 className="font-semibold text-[var(--deck-text-hi)] mb-3">{t('aliases')}</h2>
         <div className="mb-3">
-          <label className={labelClass}>{t('building')}</label>
-          <select className={inputClass} value={aliasBuildingId ?? ''} onChange={(e) => setAliasBuildingId(e.target.value || null)}>
+          <label htmlFor="signal-wayfinding-ai-field-1" className={labelClass}>{t('building')}</label>
+          <select id="signal-wayfinding-ai-field-1" className={inputClass} value={aliasBuildingId ?? ''} onChange={(e) => setAliasBuildingId(e.target.value || null)}>
             <option value="">{t('selectBuilding')}</option>
             {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
@@ -260,16 +246,16 @@ function ConfigModal({ screen, onClose, onSave, saving }: {
           {t('enableForThisScreen')}
         </label>
         <div>
-          <label className={labelClass}>{t('welcomeMessageEn')}</label>
-          <input className={inputClass} value={welcomeMessage} onChange={(e) => setWelcomeMessage(e.target.value)} />
+          <label htmlFor="signal-wayfinding-ai-field-2" className={labelClass}>{t('welcomeMessageEn')}</label>
+          <input id="signal-wayfinding-ai-field-2" className={inputClass} value={welcomeMessage} onChange={(e) => setWelcomeMessage(e.target.value)} />
         </div>
         <div>
-          <label className={labelClass}>{t('welcomeMessageAr')}</label>
-          <input className={inputClass} dir="rtl" value={welcomeMessageAr} onChange={(e) => setWelcomeMessageAr(e.target.value)} />
+          <label htmlFor="signal-wayfinding-ai-field-3" className={labelClass}>{t('welcomeMessageAr')}</label>
+          <input id="signal-wayfinding-ai-field-3" className={inputClass} dir="rtl" value={welcomeMessageAr} onChange={(e) => setWelcomeMessageAr(e.target.value)} />
         </div>
         <div>
-          <label className={labelClass}>{t('maxTurns')}</label>
-          <input type="number" min={1} max={8} className={inputClass} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
+          <label htmlFor="signal-wayfinding-ai-field-4" className={labelClass}>{t('maxTurns')}</label>
+          <input id="signal-wayfinding-ai-field-4" type="number" min={1} max={8} className={inputClass} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
         </div>
         <button
           className="w-full mt-2 px-3 py-2 bg-[var(--deck-accent)] text-white rounded-lg text-sm font-medium disabled:opacity-50"

@@ -1,7 +1,8 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { SignalDialog } from '@/components/SignalDialog';
 import { useTranslations } from 'next-intl';
-import { X, Sparkles, Shuffle, ImageIcon, Film, FileText } from 'lucide-react';
+import { Sparkles, Shuffle, ImageIcon, Film, FileText } from 'lucide-react';
 import { playlistsApi, TRANSITION_STYLE_OPTIONS, TRANSITION_LABEL_KEYS, type AssetType, type ScaleFitMode, type TransitionStyle, type PlaybackOrder } from '@/lib/api';
 
 interface PlaylistSettingsModalProps {
@@ -50,18 +51,8 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6" onClick={onClose}>
-      <div
-        className="w-full max-w-md max-h-full overflow-y-auto rounded-xl bg-[var(--deck-glass-fill-strong)] p-5"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-6 mb-4">
-          <p className="text-sm font-semibold text-[var(--deck-text-hi)] truncate">{t('title', { name })}</p>
-          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-hi)] shrink-0">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <SignalDialog open title={t('title', { name })} onClose={onClose}>
+      <div className="signal-playlist-settings">
         {isLoading && <p className="text-sm text-[var(--deck-text-low)] py-6 text-center">{td('loading')}</p>}
         {loadFailed && <p className="text-sm text-red-500 py-6 text-center">{td('notFound')}</p>}
 
@@ -77,12 +68,12 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
               <p className="text-xs text-[var(--deck-text-low)] mb-3">{t('scaleSettings.description')}</p>
               <div className="space-y-2">
                 {SCALABLE_TYPES.map(({ type, icon }) => (
-                  <div key={type} className="flex items-center gap-2">
+                  <div key={type} className="flex flex-wrap items-center gap-2">
                     {icon}
-                    <label className="flex-1 text-xs text-[var(--deck-text-mid)]">
+                    <label htmlFor={`scale-${type}`} className="flex-1 text-xs text-[var(--deck-text-mid)]">
                       {t(`scaleSettings.types.${type}`)}
                     </label>
-                    <select
+                    <select id={`scale-${type}`}
                       value={playlist.scaleSettings?.[type] ?? ''}
                       disabled={!canEdit || configMut.isPending}
                       onChange={e => setScale(type, e.target.value as ScaleFitMode | '')}
@@ -103,10 +94,10 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
                 {t('transition.heading')}
               </h3>
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-[var(--deck-text-low)] shrink-0" />
-                  <label className="text-xs text-[var(--deck-text-mid)]">{td('transition.label')}</label>
-                  <select value={playlist.transitionStyle} disabled={!canEdit || configMut.isPending}
+                  <label htmlFor="playlist-transition" className="text-xs text-[var(--deck-text-mid)]">{td('transition.label')}</label>
+                  <select id="playlist-transition" value={playlist.transitionStyle} disabled={!canEdit || configMut.isPending}
                     onChange={e => configMut.mutate({ transitionStyle: e.target.value as TransitionStyle })}
                     className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                     {TRANSITION_STYLE_OPTIONS.map(id => (
@@ -115,7 +106,7 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
                   </select>
                   {playlist.transitionStyle !== 'NONE' && (
                     <>
-                      <input type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
+                      <input aria-label={`${td("transition.label")} (${td("transition.ms")})`} type="number" min={100} max={3000} step={100} value={playlist.transitionDurationMs}
                         disabled={!canEdit || configMut.isPending}
                         onChange={e => configMut.mutate({ transitionDurationMs: Math.min(3000, Math.max(100, Number(e.target.value) || 100)) })}
                         className="w-20 border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50" />
@@ -123,10 +114,10 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
                     </>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Shuffle className="w-3.5 h-3.5 text-[var(--deck-text-low)] shrink-0" />
-                  <label className="text-xs text-[var(--deck-text-mid)]">{td('playbackOrder.label')}</label>
-                  <select value={playlist.playbackOrder} disabled={!canEdit || configMut.isPending}
+                  <label htmlFor="playlist-order" className="text-xs text-[var(--deck-text-mid)]">{td('playbackOrder.label')}</label>
+                  <select id="playlist-order" value={playlist.playbackOrder} disabled={!canEdit || configMut.isPending}
                     onChange={e => configMut.mutate({ playbackOrder: e.target.value as PlaybackOrder })}
                     className="border border-[var(--deck-glass-border)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--deck-accent)] disabled:opacity-50">
                     <option value="SEQUENTIAL">{td('playbackOrder.sequential')}</option>
@@ -138,6 +129,6 @@ export function PlaylistSettingsModal({ id, name, canEdit, onClose }: PlaylistSe
           </div>
         )}
       </div>
-    </div>
+    </SignalDialog>
   );
 }

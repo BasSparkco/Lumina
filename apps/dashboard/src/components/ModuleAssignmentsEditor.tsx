@@ -63,7 +63,7 @@ export function ModuleAssignmentsEditor({
         const violated = violations.has(draft.key);
         return (
           <div key={draft.key} className="rounded-lg border border-[var(--deck-glass-border)] p-2.5">
-            <div className="flex items-center justify-between gap-2">
+            <div className="signal-module-assignment flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-[var(--deck-text-hi)]">{t(`moduleNames.${draft.key}`)}</span>
               <div className="flex items-center gap-2">
                 {draft.status !== 'DISABLED' && (
@@ -76,6 +76,7 @@ export function ModuleAssignmentsEditor({
                   />
                 )}
                 <select
+                  aria-label={`${t(`moduleNames.${draft.key}`)} · ${t("statusLabel")}`}
                   className={selectClass}
                   value={draft.status}
                   onChange={(e) => update(draft.key, { status: e.target.value as TenantModuleStatus })}

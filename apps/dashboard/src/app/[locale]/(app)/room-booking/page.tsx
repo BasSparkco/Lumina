@@ -1,8 +1,9 @@
 'use client';
+import { SignalDialog } from '@/components/SignalDialog';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { DoorOpen, Loader2, Trash2, Plus, X, CalendarDays, Monitor, Link2, HeartPulse } from 'lucide-react';
+import { DoorOpen, Loader2, Trash2, Plus, CalendarDays, Monitor, Link2, HeartPulse } from 'lucide-react';
 import {
   roomBookingApi,
   type Room, type CreateRoomInput, type RoomPrivacyMode, type BookableRoomStatus,
@@ -17,17 +18,7 @@ const labelClass = 'text-xs text-[var(--deck-text-mid)] block mb-1';
 const cardClass = 'glass-panel rounded-2xl p-5';
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="glass-popup rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-[var(--deck-text-hi)]">{title}</h2>
-          <button onClick={onClose} className="text-[var(--deck-text-low)] hover:text-[var(--deck-text-mid)]"><X className="w-4 h-4" /></button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <SignalDialog open title={title} onClose={onClose}><div className="signal-form-stack">{children}</div></SignalDialog>;
 }
 
 function toLocalDayRange(dateStr: string): { from: string; to: string } {
@@ -106,8 +97,8 @@ export default function RoomBookingPage() {
   const calendarRoom = rooms.find((r) => r.id === calendarRoomId) ?? null;
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
-      <div className="flex items-center gap-3">
+    <div className="signal-page signal-workspace-page signal-room-booking-page space-y-6">
+      <div className="signal-page-heading signal-module-heading">
         <DoorOpen className="w-6 h-6 text-[var(--deck-accent)]" />
         <div>
           <h1 className="text-xl font-semibold text-[var(--deck-text-hi)]">{t('title')}</h1>
@@ -313,36 +304,36 @@ function RoomModal({ room, onClose, onSave, saving }: {
     <Modal title={room ? t('rooms.editTitle') : t('rooms.addTitle')} onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className={labelClass}>{t('rooms.name')}</label>
-          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
+          <label htmlFor="signal-room-booking-field-1" className={labelClass}>{t('rooms.name')}</label>
+          <input id="signal-room-booking-field-1" className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
-          <label className={labelClass}>{t('rooms.locationLabel')}</label>
-          <input className={inputClass} value={locationLabel} onChange={(e) => setLocationLabel(e.target.value)} />
+          <label htmlFor="signal-room-booking-field-2" className={labelClass}>{t('rooms.locationLabel')}</label>
+          <input id="signal-room-booking-field-2" className={inputClass} value={locationLabel} onChange={(e) => setLocationLabel(e.target.value)} />
         </div>
         <div>
           <label className={labelClass}>{t('rooms.timezone')}</label>
           <TimezoneSelect value={timezone} onChange={setTimezone} />
         </div>
         <div>
-          <label className={labelClass}>{t('rooms.capacity')}</label>
-          <input type="number" min={0} className={inputClass} value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+          <label htmlFor="signal-room-booking-field-3" className={labelClass}>{t('rooms.capacity')}</label>
+          <input id="signal-room-booking-field-3" type="number" min={0} className={inputClass} value={capacity} onChange={(e) => setCapacity(e.target.value)} />
         </div>
         <div>
-          <label className={labelClass}>{t('rooms.amenities')}</label>
-          <input className={inputClass} placeholder={t('rooms.amenitiesPlaceholder')} value={amenities} onChange={(e) => setAmenities(e.target.value)} />
+          <label htmlFor="signal-room-booking-field-4" className={labelClass}>{t('rooms.amenities')}</label>
+          <input id="signal-room-booking-field-4" className={inputClass} placeholder={t('rooms.amenitiesPlaceholder')} value={amenities} onChange={(e) => setAmenities(e.target.value)} />
         </div>
         <div>
-          <label className={labelClass}>{t('rooms.privacyMode')}</label>
-          <select className={inputClass} value={privacyMode} onChange={(e) => setPrivacyMode(e.target.value as RoomPrivacyMode)}>
+          <label htmlFor="signal-room-booking-field-5" className={labelClass}>{t('rooms.privacyMode')}</label>
+          <select id="signal-room-booking-field-5" className={inputClass} value={privacyMode} onChange={(e) => setPrivacyMode(e.target.value as RoomPrivacyMode)}>
             <option value="BUSY_ONLY">{t('rooms.privacy.BUSY_ONLY')}</option>
             <option value="SHOW_TITLE">{t('rooms.privacy.SHOW_TITLE')}</option>
             <option value="SHOW_ORGANIZER">{t('rooms.privacy.SHOW_ORGANIZER')}</option>
           </select>
         </div>
         <div>
-          <label className={labelClass}>{t('rooms.status')}</label>
-          <select className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as BookableRoomStatus)}>
+          <label htmlFor="signal-room-booking-field-6" className={labelClass}>{t('rooms.status')}</label>
+          <select id="signal-room-booking-field-6" className={inputClass} value={status} onChange={(e) => setStatus(e.target.value as BookableRoomStatus)}>
             <option value="ACTIVE">{t('rooms.statusActive')}</option>
             <option value="OUT_OF_SERVICE">{t('rooms.outOfService')}</option>
           </select>
@@ -383,21 +374,21 @@ function ReservationModal({ date, onClose, onSave, saving }: {
     <Modal title={t('calendar.addReservation')} onClose={onClose}>
       <div className="space-y-3">
         <div>
-          <label className={labelClass}>{t('calendar.reservationTitle')}</label>
-          <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <label htmlFor="signal-room-booking-field-7" className={labelClass}>{t('calendar.reservationTitle')}</label>
+          <input id="signal-room-booking-field-7" className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div>
-          <label className={labelClass}>{t('calendar.organizer')}</label>
-          <input className={inputClass} value={organizerDisplayName} onChange={(e) => setOrganizerDisplayName(e.target.value)} />
+          <label htmlFor="signal-room-booking-field-8" className={labelClass}>{t('calendar.organizer')}</label>
+          <input id="signal-room-booking-field-8" className={inputClass} value={organizerDisplayName} onChange={(e) => setOrganizerDisplayName(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className={labelClass}>{t('calendar.startsAt')}</label>
-            <input type="time" className={inputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <label htmlFor="signal-room-booking-field-9" className={labelClass}>{t('calendar.startsAt')}</label>
+            <input id="signal-room-booking-field-9" type="time" className={inputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           </div>
           <div>
-            <label className={labelClass}>{t('calendar.endsAt')}</label>
-            <input type="time" className={inputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <label htmlFor="signal-room-booking-field-10" className={labelClass}>{t('calendar.endsAt')}</label>
+            <input id="signal-room-booking-field-10" type="time" className={inputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
           </div>
         </div>
         <button

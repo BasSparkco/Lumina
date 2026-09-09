@@ -5,7 +5,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "screens": "Screens",
-    "assets": "Assets",
+    "assets": "Media library",
     "playlists": "Playlists",
     "designer": "Designer",
     "designer2": "Designer 2",
@@ -29,7 +29,10 @@
       "content": "Content",
       "operations": "Operations",
       "management": "Management",
-      "settings": "Settings"
+      "settings": "Settings",
+      "workspace": "Workspace",
+      "design": "Design & templates",
+      "platform": "Platform administration"
     },
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
@@ -97,7 +100,10 @@
       "PENDING": "Pending review",
       "APPROVED": "Approved",
       "REJECTED": "Rejected"
-    }
+    },
+    "all": "All",
+    "loadFailed": "Could not load this information. Please try again.",
+    "retryLoad": "Try again"
   },
   "cropEditor": {
     "title": "Adjust framing",
@@ -365,10 +371,42 @@
         "UNCAUGHT_EXCEPTION": "Crash",
         "WATCHDOG_RECOVERY": "Force-recovered (stalled)"
       }
+    },
+    "overview": {
+      "total": "Total screens",
+      "online": "Online",
+      "offline": "Offline",
+      "caption": "Screens, assigned content and connection status",
+      "screen": "Screen / group",
+      "connection": "Connection",
+      "content": "Assigned content",
+      "lastSeen": "Last seen",
+      "actions": "Actions",
+      "manage": "Manage",
+      "manageScreen": "Manage {name}",
+      "ungrouped": "No group",
+      "unassigned": "No content assigned",
+      "unavailableContent": "Assigned content unavailable",
+      "view": "Screen view",
+      "listView": "Overview",
+      "controlsView": "Controls",
+      "allStatuses": "All statuses",
+      "offlineHint": "Some screens are offline. Cached content may continue playing; connection status is not proof of playback.",
+      "controlsHint": "All existing screen controls are available here. To reorder screens, clear search, group and connection filters.",
+      "pairingCode": "Pairing code",
+      "loadFailed": "Unable to refresh screen data. Use Refresh to try again; any displayed snapshot may be out of date.",
+      "player": "Player",
+      "playerOffline": "Player unreachable",
+      "playerUnknown": "Playback unconfirmed",
+      "playerPaused": "Paused · player reported",
+      "playerPlaying": "Playback advancing",
+      "playerWaiting": "Waiting for progress",
+      "playerProgress": "Reported playback position",
+      "playerUnconfirmed": "No current playback confirmation"
     }
   },
   "assets": {
-    "title": "Assets",
+    "title": "Media library",
     "subtitle": "Images, videos, and audio files",
     "uploading": "Uploading {progress}%",
     "upload": "Upload",
@@ -586,7 +624,24 @@
     "unmute": "Unmute in player",
     "playFullVideo": "Full video",
     "customLength": "Custom length",
-    "videoDuration": "Video length"
+    "videoDuration": "Video length",
+    "dragToReorder": "Drag to reorder",
+    "removeItem": "Remove item",
+    "assetTypes": {
+      "IMAGE": "Image",
+      "VIDEO": "Video",
+      "AUDIO": "Audio",
+      "TEXT": "Text",
+      "DOCUMENT": "Document",
+      "APP": "App"
+    },
+    "assetSort": {
+      "recentlyAdded": "Recently added",
+      "recentlyUsed": "Recently used",
+      "mostUsed": "Most used",
+      "name": "Name"
+    },
+    "sortBy": "Sort by"
   },
   "designer": {
     "title": "Designer",
@@ -1604,5 +1659,89 @@
     "rotateHandleStyleDesc": "How the rotate grip appears on a selected element in the Layouts and Themes editors",
     "rotateHandleCorners": "Corner arrows",
     "rotateHandleSingle": "Single grip"
+  },
+  "shell": {
+    "workspace": "Organization workspace",
+    "platform": "Platform administration",
+    "platformScope": "Across organizations",
+    "navigation": "Main navigation",
+    "skipToContent": "Skip to content",
+    "switchToArabic": "Switch to Arabic",
+    "switchToEnglish": "Switch to English",
+    "lightMode": "Use light mode",
+    "darkMode": "Use dark mode",
+    "pendingApprovals": "{count, plural, one {# playlist awaiting approval} other {# playlists awaiting approval}}",
+    "roles": {
+      "VIEWER": "Viewer",
+      "EDITOR": "Content editor",
+      "ADMIN": "Organization admin",
+      "OWNER": "Organization owner"
+    }
+  },
+  "adminTemplates": {
+    "name": "Name",
+    "description": "Description",
+    "category": "Category",
+    "visibilityLabel": "Visibility",
+    "cancel": "Cancel",
+    "save": "Save",
+    "title": "Design Templates",
+    "newTemplate": "New Template",
+    "statusLabel": "Status",
+    "version": "Version",
+    "clones": "Designs cloned",
+    "loading": "Loading…",
+    "empty": "No templates yet.",
+    "edit": "Edit",
+    "tenants": "Tenants",
+    "unpublish": "Unpublish",
+    "publish": "Publish",
+    "subtitle": "Manage reusable templates, publishing and tenant access.",
+    "accessHint": "Choose the organizations allowed to use this template when visibility is set to selected tenants.",
+    "accessTitle": "Tenant access · {name}",
+    "editTitle": "Edit · {name}",
+    "create": "Create",
+    "editDesign": "Edit design",
+    "archive": "Archive",
+    "archiveConfirm": "Archive \"{name}\"? Customers already using it keep their own copy.",
+    "categories": {
+      "GENERIC": "Generic",
+      "RESTAURANT_MENU": "Restaurant menu",
+      "RETAIL_PROMO": "Retail promotion",
+      "HOTEL_LOBBY": "Hotel lobby",
+      "CLINIC_WAITING": "Clinic waiting room",
+      "MOSQUE": "Mosque"
+    },
+    "visibility": {
+      "HIDDEN": "Hidden",
+      "GLOBAL": "All tenants",
+      "SELECTED_TENANTS": "Selected tenants"
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "PUBLISHED": "Published",
+      "ARCHIVED": "Archived"
+    }
+  },
+  "designer2Media": {
+    "image": "Images",
+    "video": "Video",
+    "imageTitle": "Insert image",
+    "videoTitle": "Insert video",
+    "upload": "Upload",
+    "assets": "Choose from Assets",
+    "cancel": "Cancel",
+    "choose": "Choose media",
+    "search": "Search assets…",
+    "empty": "No ready media found",
+    "chooseFile": "Choose a file",
+    "loading": "Loading assets…",
+    "preparing": "Preparing media…",
+    "uploading": "Uploading {progress}%",
+    "failed": "Could not prepare this media. Please try again.",
+    "timeout": "Media is still processing. Try selecting it from Assets later.",
+    "dimensions": "Could not read the media dimensions. Please try another file.",
+    "wrongType": "Choose a file matching this media type.",
+    "retry": "Try again"
   }
 }

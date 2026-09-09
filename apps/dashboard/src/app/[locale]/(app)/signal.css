@@ -1,0 +1,1092 @@
+/* Signal rollout boundary. Do not move these tokens to :root: editors, authentication
+   and rendered signage continue to use their existing palette and font choices. */
+@font-face {
+  font-family: 'Lumina Inter';
+  src: url('../../../../node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2')
+    format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Lumina Inter';
+  src: url('../../../../node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2')
+    format('woff2');
+  font-weight: 500 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Lumina Arabic';
+  src: url('../../../../node_modules/@fontsource/noto-sans-arabic/files/noto-sans-arabic-arabic-400-normal.woff2')
+    format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Lumina Arabic';
+  src: url('../../../../node_modules/@fontsource/noto-sans-arabic/files/noto-sans-arabic-arabic-600-normal.woff2')
+    format('woff2');
+  font-weight: 500 900;
+  font-display: swap;
+}
+
+.signal-shell {
+  --signal-bg: #f3f5f8;
+  --signal-surface: #ffffff;
+  --signal-raised: #f7f8fa;
+  --signal-ink: #202b3d;
+  --signal-muted: #657186;
+  --signal-line: #dce2ea;
+  --signal-accent: #285bd4;
+  --signal-soft: #eaf0ff;
+  --signal-primary: #285bd4;
+  --signal-primary-ink: #ffffff;
+  --signal-rail: #172337;
+  --signal-rail-line: #344052;
+  --signal-positive: #246b52;
+  --signal-positive-soft: #eaf5ef;
+  --signal-warning: #8c5415;
+  --signal-warning-soft: #fff4e4;
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--signal-bg);
+  color: var(--signal-ink);
+}
+.dark .signal-shell {
+  --signal-bg: #111923;
+  --signal-surface: #192330;
+  --signal-raised: #202c3a;
+  --signal-ink: #e8eef6;
+  --signal-muted: #a4b2c4;
+  --signal-line: #354253;
+  --signal-accent: #99b9ff;
+  --signal-soft: #253b5b;
+  --signal-primary: #a7c4ff;
+  --signal-primary-ink: #12253f;
+  --signal-rail: #101823;
+  --signal-rail-line: #303d4e;
+  --signal-positive: #98ddbb;
+  --signal-positive-soft: #203e34;
+  --signal-warning: #f2c17b;
+  --signal-warning-soft: #3b3024;
+}
+.signal-loading {
+  align-items: center;
+  justify-content: center;
+  color: var(--signal-muted);
+}
+.signal-sidebar,
+.signal-header,
+.signal-management,
+.signal-skip {
+  font-family: 'Lumina Inter', system-ui, sans-serif;
+}
+.signal-shell[dir='rtl']
+  :is(.signal-sidebar, .signal-header, .signal-management, .signal-skip) {
+  font-family: 'Lumina Arabic', 'Lumina Inter', sans-serif;
+  line-height: 1.7;
+}
+.signal-sidebar {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: 40;
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  color: #e8eef7;
+  background: var(--signal-rail);
+  padding: 24px 14px 0;
+  visibility: hidden;
+  transform: translateX(-100%);
+}
+.signal-shell[dir='rtl'] .signal-sidebar {
+  transform: translateX(100%);
+}
+.signal-sidebar.is-open {
+  visibility: visible;
+  transform: none;
+}
+.signal-shell[dir='rtl'] .signal-sidebar.is-open {
+  transform: none;
+}
+.signal-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;
+  padding: 0 8px;
+  margin-bottom: 24px;
+}
+.signal-mark {
+  display: inline-flex;
+  gap: 4px;
+  height: 28px;
+  align-items: flex-end;
+  transform: skew(-10deg);
+  flex-shrink: 0;
+  direction: ltr;
+}
+.signal-mark i {
+  height: 21px;
+  width: 5px;
+  border-radius: 2px;
+  background: #acc8ff;
+}
+.signal-mark i:nth-child(2) {
+  height: 28px;
+}
+.signal-mark i:nth-child(3) {
+  height: 16px;
+}
+.signal-wordmark {
+  color: #fff;
+  font:
+    600 29px/1 'Lumina Inter',
+    sans-serif;
+  letter-spacing: -1.5px;
+}
+.signal-wordmark span {
+  color: #acc8ff;
+}
+.signal-workspace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--signal-rail-line);
+  border-radius: 8px;
+  margin-bottom: 18px;
+  padding: 12px;
+}
+.signal-workspace-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 36px;
+  border-radius: 5px;
+  background: #31435f;
+  color: #dbe7ff;
+  flex-shrink: 0;
+}
+.signal-workspace strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+.signal-workspace small {
+  display: block;
+  color: #adbbce;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.signal-nav {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  padding-bottom: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: #536680 transparent;
+}
+.signal-nav-section + .signal-nav-section {
+  margin-top: 17px;
+}
+.signal-nav-label {
+  color: #a6b7ce;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0 12px 6px;
+  font-weight: 600;
+}
+.signal-shell[dir='rtl'] .signal-nav-label {
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.signal-platform-label {
+  color: #e1bd89;
+}
+.signal-nav-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 43px;
+  padding: 10px 12px;
+  margin: 2px 0;
+  text-align: start;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #bdcadd;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.5;
+  text-decoration: none;
+  cursor: pointer;
+}
+.signal-nav-link svg {
+  flex-shrink: 0;
+}
+.signal-nav-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.signal-nav-link:hover {
+  background: #22334a;
+  color: #fff;
+}
+.signal-nav-link[aria-current='page'] {
+  background: #2c405f;
+  border-color: #3a5377;
+  color: #fff;
+}
+.signal-nav-link[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -1px;
+  inset-block: 11px;
+  width: 3px;
+  border-radius: 2px;
+  background: #adcbff;
+}
+.signal-nav-count {
+  margin-inline-start: auto;
+  background: #425473;
+  color: #ebf2ff;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.signal-count-dot {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  background: #c6d9ff;
+  border-radius: 50%;
+}
+.signal-account {
+  border-top: 1px solid var(--signal-rail-line);
+  padding: 13px 0 12px;
+}
+.signal-account-info {
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px 12px;
+  align-items: center;
+}
+.signal-account-info > div {
+  min-width: 0;
+}
+.signal-account-info strong,
+.signal-account-info small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.signal-account-info strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.signal-account-info small {
+  font-size: 11px;
+  color: #adbbce;
+  margin-top: 3px;
+  text-align: start;
+}
+.signal-avatar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #594936;
+  background: #e6d9c7;
+  font-size: 13px;
+  font-weight: 600;
+}
+.signal-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  gap: 7px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
+  color: var(--signal-muted);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+}
+.signal-icon-button:hover {
+  background: var(--signal-raised);
+  color: var(--signal-ink);
+}
+.signal-sidebar .signal-icon-button {
+  color: #bdcadd;
+}
+.signal-sidebar .signal-icon-button:hover {
+  color: #fff;
+  background: #22334a;
+}
+.signal-brand-row .signal-icon-button {
+  min-width: 30px;
+  width: 30px;
+  padding: 4px;
+  margin-inline-start: auto;
+}
+.signal-collapse {
+  display: none;
+}
+.signal-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.signal-content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  outline: none;
+}
+.signal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-shrink: 0;
+  min-height: 72px;
+  background: var(--signal-surface);
+  border-bottom: 1px solid var(--signal-line);
+  padding: 10px 32px;
+}
+.signal-breadcrumb {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  min-width: 0;
+}
+.signal-breadcrumb-root {
+  color: var(--signal-muted);
+  flex-shrink: 0;
+}
+.signal-page-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.signal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.signal-header-actions .signal-icon-button {
+  font-size: 12px;
+}
+.signal-shell[dir='rtl'] .signal-chevron {
+  transform: scaleX(-1);
+}
+.signal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: #07152588;
+}
+.signal-skip {
+  position: fixed;
+  inset-inline-start: 16px;
+  top: -100px;
+  z-index: 100;
+  background: var(--signal-surface);
+  color: var(--signal-accent);
+  border: 1px solid var(--signal-line);
+  border-radius: 6px;
+  padding: 12px;
+}
+.signal-skip:focus {
+  top: 12px;
+}
+.signal-editor-menu {
+  position: fixed;
+  top: 16px;
+  inset-inline-end: 16px;
+  z-index: 20;
+  background: var(--signal-surface);
+  border-color: var(--signal-line);
+}
+.signal-sidebar :is(a, button):focus-visible {
+  outline: 2px solid #b5cfff;
+  outline-offset: 2px;
+}
+.signal-header :is(a, button):focus-visible,
+.signal-management :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--signal-accent);
+  outline-offset: 3px;
+}
+
+/* Compatibility layer: existing management components receive opaque Signal
+   surfaces without changing their handlers, data queries or permission gates. */
+.signal-management {
+  --deck-bg-base: var(--signal-bg);
+  --deck-bg-base-2: var(--signal-bg);
+  --deck-glass-fill: var(--signal-surface);
+  --deck-glass-fill-strong: var(--signal-raised);
+  --deck-glass-border: var(--signal-line);
+  --deck-glass-border-soft: var(--signal-line);
+  --deck-popup-fill: var(--signal-surface);
+  --deck-text-hi: var(--signal-ink);
+  --deck-text-mid: var(--signal-muted);
+  --deck-text-low: var(--signal-muted);
+  --deck-accent: var(--signal-accent);
+  --deck-accent-soft: var(--signal-soft);
+  --deck-shadow-panel: none;
+  --deck-shadow-popup: 0 20px 64px #06132640;
+  background: var(--signal-bg);
+  color: var(--signal-ink);
+}
+.signal-management :is(.glass-panel, .glass-popup) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.signal-management .glass-panel {
+  border-radius: 9px;
+}
+.signal-management .glass-popup {
+  border-radius: 12px;
+}
+.signal-management .command-deck::before,
+.signal-management .command-deck::after {
+  display: none;
+}
+.signal-management .deck-btn-primary,
+.signal-management .bg-\[var\(--deck-accent\)\] {
+  background: var(--signal-primary);
+  color: var(--signal-primary-ink);
+}
+.signal-management .deck-btn-primary:hover {
+  filter: brightness(0.94);
+}
+.signal-management select,
+.signal-management
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+    [type='color']
+  ),
+.signal-management textarea {
+  color: var(--signal-ink);
+  background-color: var(--signal-surface);
+}
+.signal-management option {
+  color: var(--signal-ink);
+  background: var(--signal-surface);
+}
+.signal-management .signal-page {
+  padding: 28px 32px;
+}
+.signal-page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.signal-page-heading h1 {
+  font-size: 29px;
+  font-weight: 600;
+  letter-spacing: -0.7px;
+}
+.signal-page-heading p {
+  font-size: 14px;
+  color: var(--signal-muted);
+  margin-top: 6px;
+}
+.signal-shell[dir='rtl'] .signal-page-heading h1 {
+  letter-spacing: 0;
+}
+
+@media (min-width: 768px) {
+  .signal-sidebar {
+    position: relative;
+    visibility: visible;
+    transform: none;
+  }
+  .signal-shell[dir='rtl'] .signal-sidebar {
+    transform: none;
+  }
+  .signal-sidebar.is-collapsed {
+    width: 76px;
+    padding-inline: 10px;
+  }
+  .signal-sidebar.is-collapsed .signal-brand-row {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+  }
+  .signal-sidebar.is-collapsed .signal-brand-row .signal-collapse {
+    margin-inline: auto;
+  }
+  .signal-sidebar.is-collapsed .signal-nav-link {
+    justify-content: center;
+    padding-inline: 8px;
+  }
+  .signal-sidebar.is-collapsed .signal-nav-section + .signal-nav-section {
+    border-top: 1px solid var(--signal-rail-line);
+    padding-top: 10px;
+    margin-top: 10px;
+  }
+  .signal-collapse {
+    display: inline-flex;
+  }
+  .signal-menu,
+  .signal-close {
+    display: none;
+  }
+  .signal-editor-shell .signal-sidebar {
+    position: fixed;
+    visibility: hidden;
+    transform: translateX(-100%);
+  }
+  .signal-shell[dir='rtl'].signal-editor-shell .signal-sidebar {
+    transform: translateX(100%);
+  }
+  .signal-editor-shell .signal-sidebar.is-open {
+    visibility: visible;
+    transform: none;
+  }
+  .signal-shell[dir='rtl'].signal-editor-shell .signal-sidebar.is-open {
+    transform: none;
+  }
+  .signal-editor-shell .signal-close {
+    display: inline-flex;
+  }
+}
+@media (max-width: 767px) {
+  .signal-sidebar {
+    width: 270px;
+    max-width: calc(100vw - 32px);
+  }
+  .signal-header {
+    min-height: 62px;
+    padding: 8px 14px;
+    gap: 8px;
+  }
+  .signal-breadcrumb {
+    gap: 6px;
+    font-size: 12px;
+  }
+  .signal-breadcrumb-root {
+    display: none;
+  }
+  .signal-header-actions {
+    gap: 0;
+  }
+  .signal-header-actions .signal-icon-button {
+    padding: 7px;
+    min-width: 38px;
+  }
+  .signal-management .signal-page {
+    padding: 24px 16px;
+  }
+  .signal-page-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .signal-page-heading h1 {
+    font-size: 26px;
+  }
+  .signal-page-heading p {
+    font-size: 13px;
+  }
+}
+
+.signal-dialog {
+  margin: auto;
+  width: 600px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--signal-surface);
+  color: var(--signal-ink);
+  border: 1px solid var(--signal-line);
+  border-radius: 12px;
+  box-shadow: 0 24px 80px #06132640;
+}
+.signal-dialog::backdrop {
+  background: #07152599;
+}
+.signal-dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.signal-dialog-heading h2 {
+  font-size: 21px;
+  font-weight: 600;
+  padding-top: 6px;
+  overflow-wrap: anywhere;
+}
+.signal-dialog .glass-panel {
+  box-shadow: none;
+}
+.signal-screen-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--signal-line);
+  border-radius: 9px;
+  background: var(--signal-surface);
+  padding-block: 19px;
+  margin-bottom: 18px;
+}
+.signal-screen-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding-inline: 22px;
+}
+.signal-screen-summary > div + div {
+  border-inline-start: 1px solid var(--signal-line);
+}
+.signal-screen-summary > div > div > span {
+  display: block;
+  color: var(--signal-muted);
+  font-size: 12px;
+}
+.signal-screen-summary strong {
+  display: block;
+  font-size: 27px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.signal-summary-icon {
+  display: grid;
+  place-items: center;
+  background: var(--signal-raised);
+  color: var(--signal-muted);
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+.signal-summary-icon.online {
+  background: var(--signal-positive-soft);
+  color: var(--signal-positive);
+}
+.signal-summary-icon.offline {
+  background: var(--signal-warning-soft);
+  color: var(--signal-warning);
+}
+.signal-connection-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--signal-warning-soft);
+  color: var(--signal-warning);
+  border: 1px solid
+    color-mix(in srgb, var(--signal-warning) 22%, var(--signal-surface));
+  border-radius: 7px;
+  padding: 12px 14px;
+  font-size: 12px;
+  margin-bottom: 22px;
+}
+.signal-connection-note svg {
+  flex-shrink: 0;
+}
+.signal-screen-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.signal-view-switch {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--signal-line);
+  border-radius: 7px;
+  padding: 4px;
+  background: var(--signal-surface);
+}
+.signal-view-switch button {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--signal-muted);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.signal-view-switch button[aria-pressed='true'] {
+  background: var(--signal-soft);
+  color: var(--signal-accent);
+}
+.signal-status-filter {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--signal-muted);
+}
+.signal-status-filter select {
+  padding: 9px 12px;
+  border: 1px solid var(--signal-line);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.signal-screen-list {
+  border: 1px solid var(--signal-line);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--signal-surface);
+}
+.signal-screen-list table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+  table-layout: fixed;
+}
+.signal-screen-list th {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--signal-muted);
+  text-align: start;
+  padding: 12px 15px;
+  background: var(--signal-raised);
+  border-bottom: 1px solid var(--signal-line);
+}
+.signal-screen-list th:first-child {
+  width: 31%;
+}
+.signal-screen-list th:nth-child(2) {
+  width: 16%;
+}
+.signal-screen-list th:nth-child(3) {
+  width: 22%;
+}
+.signal-screen-list th:nth-child(4) {
+  width: 20%;
+}
+.signal-screen-list th:last-child {
+  width: 11%;
+}
+.signal-screen-list td {
+  padding: 18px 15px;
+  border-bottom: 1px solid var(--signal-line);
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.signal-screen-list tr:last-child td {
+  border-bottom: 0;
+}
+.signal-screen-list tbody tr:hover {
+  background: var(--signal-raised);
+}
+.signal-screen-identity button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+}
+.signal-screen-icon {
+  display: grid;
+  place-items: center;
+  width: 43px;
+  height: 37px;
+  border-radius: 5px;
+  color: var(--signal-muted);
+  background: var(--signal-raised);
+  flex-shrink: 0;
+  border: 1px solid var(--signal-line);
+}
+.signal-screen-identity strong {
+  font-size: 13px;
+  font-weight: 600;
+  display: block;
+}
+.signal-screen-identity small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--signal-muted);
+}
+.signal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.signal-status i {
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 50%;
+}
+.signal-status.online {
+  color: var(--signal-positive);
+  background: var(--signal-positive-soft);
+}
+.signal-status.offline {
+  color: var(--signal-warning);
+  background: var(--signal-warning-soft);
+}
+.signal-operating-state {
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+  color: var(--signal-warning);
+}
+.signal-screen-content strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+}
+.signal-screen-content small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--signal-muted);
+}
+.signal-screen-seen {
+  color: var(--signal-muted);
+  font-size: 11px;
+}
+.signal-screen-action button {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--signal-accent);
+  min-height: 40px;
+  cursor: pointer;
+}
+.signal-mobile-label {
+  display: none;
+}
+.signal-assets-page {
+  max-width: 1600px;
+  margin-inline: auto;
+}
+.signal-assets-page .signal-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.signal-assets-page .signal-asset-grid .aspect-video {
+  aspect-ratio: 16/10;
+}
+.signal-assets-page .signal-asset-grid .glass-panel {
+  overflow: hidden;
+}
+@media (max-width: 1100px) and (min-width: 768px) {
+  .signal-screen-list th,
+  .signal-screen-list td {
+    padding-inline: 10px;
+  }
+  .signal-screen-icon {
+    display: none;
+  }
+  .signal-screen-summary > div {
+    padding-inline: 16px;
+  }
+  .signal-assets-page .signal-asset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .signal-screen-summary {
+    padding-block: 15px;
+  }
+  .signal-screen-summary > div {
+    padding-inline: 12px;
+  }
+  .signal-summary-icon {
+    display: none;
+  }
+  .signal-screen-summary > div > div > span {
+    font-size: 11px;
+  }
+  .signal-screen-summary strong {
+    font-size: 25px;
+  }
+  .signal-dialog {
+    padding: 18px;
+  }
+  .signal-dialog-heading h2 {
+    font-size: 19px;
+  }
+  .signal-connection-note {
+    align-items: flex-start;
+    font-size: 12px;
+  }
+  .signal-connection-note svg {
+    margin-top: 2px;
+  }
+  .signal-screen-list thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .signal-screen-list table,
+  .signal-screen-list tbody {
+    display: block;
+  }
+  .signal-screen-list tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 15px;
+    gap: 10px 8px;
+    border-bottom: 1px solid var(--signal-line);
+  }
+  .signal-screen-list tr:last-child {
+    border: 0;
+  }
+  .signal-screen-list td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .signal-screen-list .signal-screen-identity {
+    grid-column: 1 / -1;
+  }
+  .signal-screen-list .signal-screen-status {
+    grid-column: 1;
+  }
+  .signal-screen-list .signal-screen-content {
+    grid-column: 1 / -1;
+  }
+  .signal-screen-list .signal-screen-seen {
+    grid-column: 1;
+  }
+  .signal-screen-list .signal-screen-action {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .signal-mobile-label {
+    display: inline;
+  }
+  .signal-view-switch button {
+    font-size: 12px;
+  }
+  .signal-assets-page .signal-asset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .signal-assets-page .signal-asset-grid .aspect-video {
+    aspect-ratio: 4/3;
+  }
+}
+@media (max-width: 420px) {
+  .signal-assets-page .signal-asset-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .signal-assets-page .signal-asset-grid .aspect-video {
+    aspect-ratio: 16/10;
+  }
+}
+
+/* Playlist management retains the existing item editor and playback controls. */
+.signal-playlists-page { max-width: 1120px; }
+.signal-playlist-create { display: grid; gap: 10px; }
+.signal-playlist-create label { font-size: 14px; font-weight: 600; }
+.signal-playlist-settings { padding-block: 8px; }
+.signal-playlist-settings select, .signal-playlist-settings input { min-height: 36px; }
+.signal-playlist-row > button { min-width: 32px; min-height: 36px; }
+.signal-playlist-detail { overflow-x: auto; }
+@media (max-width: 600px) {
+  .signal-playlist-row { flex-wrap: wrap; gap: 8px; }
+  .signal-playlist-row > div { flex-basis: calc(100% - 80px); }
+  .signal-playlists-page .bg-amber-50\/60 > .flex { flex-wrap: wrap; }
+}
+.signal-playlist-create button {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--signal-line);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Remaining management routes: shared rhythm without touching editor canvases. */
+.signal-workspace-page { max-width: 1320px; }
+.signal-workspace-page.signal-settings-page { max-width: 900px; }
+.signal-module-heading { justify-content: flex-start; }
+.signal-form-stack { display: flex; flex-direction: column; gap: 16px; }
+.signal-workspace-page input:not([type='checkbox']):not([type='radio']),
+.signal-workspace-page select, .signal-form-stack select,
+.signal-form-stack input:not([type='checkbox']):not([type='radio']) { min-height: 36px; max-width: 100%; }
+.signal-workspace-page table { font-size: 13px; }
+.signal-workspace-page th { padding-block: 12px; font-weight: 600; }
+.signal-workspace-page td { padding-block: 14px; }
+.signal-workspace-page h2 { line-height: 1.5; }
+.signal-member-row { gap: 16px; }
+.signal-playlist-item { flex-wrap: wrap; }
+.signal-playlist-item input, .signal-playlist-item select,
+.signal-playlist-item button { min-height: 32px; }
+.signal-playlist-picker { display: flex; flex-direction: column; max-height: 70dvh; }
+.signal-playlist-detail > div > .flex { flex-wrap: wrap; }
+.signal-playlist-detail > div > .flex > .flex { flex-wrap: wrap; }
+.signal-template-library > div,
+.signal-template-library > div > div { max-width: 1320px; }
+.signal-template-library > div:first-child,
+.signal-template-library > div > div { padding: 28px 32px; }
+.signal-template-library h1 { font-size: 26px; letter-spacing: -.025em; }
+.signal-template-library [class*='justify-between'] { flex-wrap: wrap; gap: 12px; }
+@media (max-width: 700px) {
+  .signal-workspace-page .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+  .signal-workspace-page .flex.items-center.justify-between,
+  .signal-workspace-page .flex.items-start.justify-between { flex-wrap: wrap; gap: 12px; }
+  .signal-member-row > div { max-width: 100%; }
+  .signal-playlist-item > .flex-1 { flex-basis: calc(100% - 144px); }
+  .signal-playlist-item > select { max-width: 100%; }
+  .signal-template-library > div:first-child,
+  .signal-template-library > div > div { padding: 20px 16px; }
+  .signal-template-library .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+}
+.signal-page-heading:has(> h1) { display: block; }
+.signal-query-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border: 1px solid var(--signal-line); border-radius: 10px; background: var(--signal-surface); font-size: 14px; }
+.signal-query-error button { color: var(--signal-accent); font-weight: 600; padding: 8px 12px; border: 1px solid var(--signal-line); border-radius: 8px; }
+
+.signal-module-assignment, .signal-module-assignment > div { flex-wrap: wrap; }
+.signal-module-assignment > div { max-width: 100%; }
+.signal-schedules-page .flex.gap-1,
+.signal-power-schedule-page .flex.gap-1 { flex-wrap: wrap; }
+
+/* Fleet connection and reported playback are separate signals. */
+.signal-screen-identity-inner { display: flex; align-items: center; gap: 6px; }
+.signal-screen-identity button.signal-screen-drag { width: 24px; flex-shrink: 0; touch-action: none; cursor: grab; color: var(--signal-muted); }
+.signal-screen-icon.online { color: #16834b; background: #16834b12; border-color: #16834b40; }
+.dark .signal-screen-icon.online { color: #65d99a; }
+.signal-player-state strong { display: block; font-size: 12px; font-weight: 500; }
+.signal-player-state small { display: block; font-size: 11px; color: var(--signal-muted); margin-top: 4px; }
+.signal-player-state progress { display: block; width: 100%; max-width: 150px; height: 4px; margin-top: 7px; accent-color: var(--signal-accent); }
+@media (min-width: 768px) {
+  .signal-screen-list th:first-child { width: 28%; }
+  .signal-screen-list th:nth-child(2) { width: 23%; }
+  .signal-screen-list th:nth-child(3) { width: 22%; }
+  .signal-screen-list th:nth-child(4) { width: 17%; }
+  .signal-screen-list th:last-child { width: 10%; }
+}
+@media (max-width: 767px) {
+  .signal-screen-list .signal-screen-player { grid-column: 1 / -1; }
+  .signal-screen-list .signal-screen-action { grid-row: 4; }
+}

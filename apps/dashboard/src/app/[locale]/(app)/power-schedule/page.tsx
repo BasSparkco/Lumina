@@ -175,8 +175,8 @@ export default function PowerSchedulePage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="signal-page signal-workspace-page signal-power-schedule-page space-y-6">
+      <div className="signal-page-heading">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-[var(--deck-text-hi)]">{t('title')}</h1>
           <p className="text-sm text-[var(--deck-text-mid)] mt-1">{t('subtitle')}</p>

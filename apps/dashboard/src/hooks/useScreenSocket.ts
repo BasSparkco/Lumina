@@ -23,9 +23,14 @@ export interface PlaybackProgress {
   rate: number;
 }
 
+export interface LivePlaybackProgress extends PlaybackProgress {
+  receivedAt: number;
+  advancing: boolean;
+}
+
 export function useScreenSocket() {
   const [statuses, setStatuses] = useState<Record<string, 'ONLINE' | 'OFFLINE'>>({});
-  const [playbackProgress, setPlaybackProgress] = useState<Record<string, PlaybackProgress>>({});
+  const [playbackProgress, setPlaybackProgress] = useState<Record<string, LivePlaybackProgress>>({});
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -40,11 +45,28 @@ export function useScreenSocket() {
 
     socket.on('screen-status', (event: ScreenStatusEvent) => {
       setStatuses(prev => ({ ...prev, [event.screenId]: event.status }));
+      if (event.status === 'OFFLINE') setPlaybackProgress(prev => {
+        const next = { ...prev };
+        delete next[event.screenId];
+        return next;
+      });
     });
 
     socket.on('playback-progress', (event: PlaybackProgress) => {
-      setPlaybackProgress(prev => ({ ...prev, [event.screenId]: event }));
+      if (!Number.isFinite(event.currentTime) || !Number.isFinite(event.duration) || event.currentTime < 0 || event.duration <= 0) return;
+      const receivedAt = Date.now();
+      setPlaybackProgress(prev => ({
+        ...prev,
+        [event.screenId]: {
+          ...event, receivedAt,
+          advancing: !event.paused && !!prev[event.screenId] &&
+            receivedAt - (prev[event.screenId]?.receivedAt ?? 0) < 5000 &&
+            event.currentTime !== prev[event.screenId]?.currentTime,
+        },
+      }));
     });
+
+    socket.on('disconnect', () => setPlaybackProgress({}));
 
     // A screen just left the paired fleet — pushed by ScreensService.unpair regardless of which
     // side triggered it. The dashboard's own Unpair button already invalidates ['screens'] itself
