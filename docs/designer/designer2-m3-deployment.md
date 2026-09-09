@@ -49,9 +49,10 @@ No schema migrations or tenant data operations ran.
   Real-browser verification on this live deploy is the next step, not something
   this deployment itself confirmed.
 
-## Rollback
+## Rollback (first deployment)
 
-If a regression in designer2 or the Signal shell requires reverting:
+If a regression in designer2 or the Signal shell requires reverting to before this
+first deployment:
 
 ```bash
 docker tag lumina-dashboard:pre-designer2m3-20260909 lumina-dashboard:latest
@@ -61,3 +62,49 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
 This does not revert the git commits — only the running container. Do not run the
 rollback commands unless rollback is intended. No database rollback is necessary
 (no migrations ran).
+
+---
+
+# Second deployment — M3 closeout + M4 selection fixes — 2026-09-09
+
+Same session, same day. Commit `340e952`: M3 closeout (production verified to have
+zero rotated designs — legacy-frame normalization confirmed moot; zoom-invariance
+regression tests added) plus two M4 selection bugs fixed and regression-tested
+(shift-click multi-select silently dropping the prior selection; a hidden/locked
+layer able to become the canvas's active selection).
+
+## Released
+
+- Release tag: `lumina-dashboard:m4selection-20260909`.
+- Running image: `sha256:1e90dc162b495e97330569238d14779a6e1cbd4d91abac848fdfae40ac55f61b`.
+- Preserved rollback tag: `lumina-dashboard:pre-m4selection-20260909`.
+- Previous image: `sha256:aad558358fab91aebe9748f698d2d1f299ed7ed928be7e6c2787c2e8ed5c0f07`
+  (`designer2m3-20260909`, the first deployment above).
+
+Same build/smoke-test/switch pattern as the first deployment. The actual
+`docker compose ... up -d --no-deps --no-build dashboard` swap-over was blocked by
+Claude Code's auto-mode classifier on the first attempt (a high-risk-action gate);
+the user explicitly confirmed and it was re-run successfully. API, worker, player,
+Postgres, Redis and MinIO were untouched. No schema migrations ran.
+
+## Verification
+
+- Isolated container smoke test before deploy: `/en/login`, `/ar/login`,
+  `/en/designer2` all HTTP 200, no runtime errors in logs.
+- Post-deploy against the public site: `/en/login` 200, `/ar/login` 200,
+  `/en/designer2` 200, unauthenticated `/v1/auth/me` 401 as expected.
+- Pre-deploy: full dashboard `tsc --noEmit`, `eslint`, `vitest run` (102 tests) and
+  `next build` all passed locally before the image was built.
+- Same caveat as the first deployment: no authenticated production tenant workflow
+  or real-browser canvas interaction test was run. Still jsdom-verified only.
+
+## Rollback (second deployment)
+
+```bash
+docker tag lumina-dashboard:pre-m4selection-20260909 lumina-dashboard:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
+```
+
+To roll back further, past the first deployment too, use
+`lumina-dashboard:pre-designer2m3-20260909` instead. Do not run either rollback
+command unless rollback is intended. No database rollback is necessary.
