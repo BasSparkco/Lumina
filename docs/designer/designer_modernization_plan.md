@@ -7,8 +7,9 @@ Reviewed: 2026-09-09. Scope: the current working tree, including the recent inli
 - **M0 — architecture audit: complete at source-review level.** Existing adapter regression tests were run; full application performance measurements remain M1/M8 work.
 - **M1 — persistent synchronization: implemented (2026-09-09).** See the implementation record below.
 - **M2 — direct media insertion: implemented (2026-09-09).**
-- **M3 — coordinate/rotation contract: partially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization and the skew/flip decision are done; crop/fit was verified unaffected; the fixture library, DPR/zoom-pan tests and legacy-design normalization remain open. See the two implementation records below.
-- **M4–M8: planned.**
+- **M3 — coordinate/rotation contract: substantially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization, skew/flip decision, and zoom-invariance tests are done; production's designs were checked directly (8 designs, 22 elements, 0 templates) and contain zero rotated elements, so the legacy-frame normalization task is currently moot — nothing to migrate. Only DPR/retina pixel-rendering tests (need a real browser canvas rasterizer, not achievable in jsdom) remain open. See the implementation records below.
+- **M4 — layers/selection: started (2026-09-09).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection). Layer panel action completeness and server-side permission enforcement remain open.
+- **M5–M8: planned.**
 - **Approach A, with the synchronization foundation refactored first.** Keep Fabric, the adapter boundary, Zustand, Lumina Design JSON, tenant Asset storage, published Template snapshots, and the DOM Player. Replace whole-scene reconstruction during ordinary editing. Do not replace the editor framework or persistence model.
 - The initial M0 review stopped at the milestone plan as requested by [improve designer2.md §28](../../improve%20designer2.md). The user subsequently authorized M1 and M2, then M3. Their implementation records are below; the rest of M3 is next, with permission constraints carried into every command from the outset.
 - `status.md` is a frozen archive; this document tracks modernization instead. Existing unrelated working-tree changes are outside this task.
@@ -452,3 +453,52 @@ Second slice, same day, picking up the remaining M3 task list the first record l
   visual tests; and the explicit, undoable legacy-frame normalization for existing rotated v1
   designs called for in M3's compatibility section.
 - No schema change, no new dependency, no production deploy in this slice.
+
+
+## M3 closeout note — 2026-09-09
+
+Queried production directly (read-only) rather than assuming: `DesignAsset` (8 rows, 22 elements
+across all scenes) and `DesignTemplateVersion` (0 rows) both checked via
+`jsonb_path_query(... '$.scenes[*].elements[*] ? (@.rotation != 0)')` — zero elements with
+non-zero rotation exist anywhere in production. The "legacy-frame normalization for existing
+rotated v1 designs" compatibility task in M3's own write-up is therefore not currently live risk:
+there is nothing rotated to reinterpret. This doesn't retire the task permanently — it should be
+re-checked if this finding is ever relied on again after further production usage — but it means
+M3's coordinate-contract fix could ship without a migration step, which it already has (see the
+deployment record). Added zoom-invariance regression tests (`it.each([0.25, 1, 2, 3])`) confirming
+committed geometry is unaffected by the canvas's current zoom level, closing part of the
+DPR/zoom-pan testing gap; true DPR/retina pixel-rendering tests still need a real browser.
+
+
+## M4 implementation record (partial) — 2026-09-09
+
+Two bugs from the M0 audit's finding #8 fixed, both with empirically-verified regression tests
+(each confirmed to fail without its fix, not just pass with it):
+
+- **Selection reporting used Fabric's raw event delta, not the full selection.**
+  `bindSelectionEvents`' `selection:updated` handler read `e.selected` directly — confirmed
+  empirically (installed Fabric 7.4.0) that this event's `e.selected` contains only the
+  newly-added object when a user shift-clicks to extend an existing multi-select, not the full
+  current selection. The store would have received just the one newly-clicked id, silently
+  dropping every previously-selected element from `selectedElementIds`. Fixed by reading
+  `canvas.getActiveObjects()` (the authoritative full selection) in both `selection:created` and
+  `selection:updated` handlers instead of trusting either event's own payload.
+- **`selectElements` could make a hidden or locked element the canvas's active object.** The
+  Layers panel can select a hidden/non-selectable row for management purposes (rename, toggle
+  visibility back on, etc.) without that translating into an on-canvas interactive selection box
+  around content that isn't actually visible or draggable. `selectElements` now filters
+  `visible !== false && selectable !== false` before building the Fabric active
+  object/`ActiveSelection`, while leaving the store's own `selectedElementIds` (and therefore the
+  Properties panel) untouched — layer management keeps working for hidden/locked rows, only the
+  canvas-level selection visualization is suppressed.
+- Tests: `Designer2 selection reporting (M4)` — full-selection-after-shift-click-add, and
+  hidden/locked-then-mixed-selection resolving to only the valid member. Both temporarily reverted
+  and re-verified to fail without their respective fix. Full suite: 59 passing (up from 56).
+  `tsc --noEmit` and `eslint` clean.
+- Not done (remaining M4 scope): full Shift/Cmd interactive multi-select wiring beyond what
+  already exists, row rename/duplicate/delete/reorder discoverability directly in the Layers
+  panel (currently scattered across properties/context menu per the M0 audit — a UX
+  consolidation, not a correctness bug), keyboard-accessible DnD/context menu, and — the largest
+  remaining piece — enforcing source Template content/style/geometry restrictions server-side
+  (`apps/api`), not just via disabled UI controls. That last item is security-relevant and touches
+  the backend; it wasn't started this session.

@@ -637,7 +637,15 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     // feeding straight back into the store in a loop.
     if (currentIds.length === ids.length && currentIds.every((id) => ids.includes(id))) return;
 
-    const targets = ids.map((id) => this.objects.get(id)).filter((o): o is DesignerFabricObject => Boolean(o));
+    // Layer management (rename, reorder, toggle visibility/lock) must keep working for a
+    // hidden/locked element — the store's own selectedElementIds is untouched by this filter, so
+    // the Properties panel still shows it. Only the *canvas's* interactive active-selection
+    // visualization is suppressed: a hidden element has no visible box to draw handles around,
+    // and `selectable: false` already means Fabric shouldn't treat it as an interaction target.
+    const targets = ids
+      .map((id) => this.objects.get(id))
+      .filter((o): o is DesignerFabricObject => o !== undefined)
+      .filter((o) => o.visible !== false && o.selectable !== false);
     if (ids.length === 0) {
       this.clearSelection();
       return;

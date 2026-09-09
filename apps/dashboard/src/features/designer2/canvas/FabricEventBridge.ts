@@ -17,22 +17,26 @@ export interface Guides {
 }
 
 export function bindSelectionEvents(canvas: Canvas, onSelectionChange: (ids: string[]) => void): () => void {
-  const idsFromSelection = (objects: FabricObject[] | undefined): string[] =>
-    (objects ?? [])
+  const idsFromSelection = (objects: FabricObject[]): string[] =>
+    objects
       .map((o) => (o as DesignerFabricObject).elementId)
       .filter((id): id is string => Boolean(id));
 
-  const onCreated = (e: { selected: FabricObject[] }) => onSelectionChange(idsFromSelection(e.selected));
-  const onUpdated = (e: { selected: FabricObject[] }) => onSelectionChange(idsFromSelection(e.selected));
+  // `selection:updated`'s own `e.selected` is only the newly-added delta (confirmed empirically:
+  // shift-clicking to add one object to an existing two-object selection fires it with
+  // `e.selected` containing just that one new object), not the full current selection — using it
+  // directly would report the selection as shrinking to whatever was last clicked. Read the
+  // authoritative full selection from the canvas itself instead, for both events.
+  const onChanged = () => onSelectionChange(idsFromSelection(canvas.getActiveObjects()));
   const onCleared = () => onSelectionChange([]);
 
-  canvas.on('selection:created', onCreated);
-  canvas.on('selection:updated', onUpdated);
+  canvas.on('selection:created', onChanged);
+  canvas.on('selection:updated', onChanged);
   canvas.on('selection:cleared', onCleared);
 
   return () => {
-    canvas.off('selection:created', onCreated);
-    canvas.off('selection:updated', onUpdated);
+    canvas.off('selection:created', onChanged);
+    canvas.off('selection:updated', onChanged);
     canvas.off('selection:cleared', onCleared);
   };
 }

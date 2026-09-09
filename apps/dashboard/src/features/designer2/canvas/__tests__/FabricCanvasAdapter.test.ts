@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignElement, DesignScene } from '@lumina/design-schema';
-import { FabricImage, Group, Rect, type ActiveSelection } from 'fabric';
+import { ActiveSelection, FabricImage, Group, Rect } from 'fabric';
 import type { Asset } from '@/lib/api';
 import * as factory from '../FabricObjectFactory';
 import { FabricCanvasAdapter } from '../FabricCanvasAdapter';
@@ -40,8 +40,9 @@ function setup(resolveAssetUrl: (id: string) => string | undefined = () => undef
   const onTextChanged = vi.fn();
   const onElementModified = vi.fn();
   const onElementsModified = vi.fn();
+  const onSelectionChange = vi.fn();
   const adapter = new FabricCanvasAdapter(canvas, stack, {
-    onSelectionChange: vi.fn(), onElementModified, onElementsModified, onTextChanged,
+    onSelectionChange, onElementModified, onElementsModified, onTextChanged,
     onGuidesChange: vi.fn(), onContextMenu: vi.fn(), onZoomChange: vi.fn(),
     onEmptyDoubleClick: vi.fn(), resolveAssetUrl, getViewportRect,
   });
@@ -51,7 +52,7 @@ function setup(resolveAssetUrl: (id: string) => string | undefined = () => undef
   const doubleClick = () => host.querySelector('.upper-canvas')!.dispatchEvent(
     new MouseEvent('dblclick', { clientX: 30, clientY: 30, bubbles: true }),
   );
-  return { adapter, host, stack, onTextChanged, onElementModified, onElementsModified, doubleClick };
+  return { adapter, host, stack, onTextChanged, onElementModified, onElementsModified, onSelectionChange, doubleClick };
 }
 
 function textElement(): DesignElement {
@@ -313,6 +314,34 @@ describe('Designer2 rotation/position contract (M3)', () => {
     expect(object.getCenterPoint().y).toBeCloseTo(shape.y + shape.height / 2, 6);
   });
 
+  it.each([0.25, 1, 2, 3])('places and extracts rotated geometry identically regardless of canvas zoom (%sx)', async (zoom) => {
+    // element x/y/width/height/rotation is a design-space (canvas/model) contract, independent of
+    // the viewport zoom a particular editing session happens to be at — the same design must
+    // produce the same JSON whether a user is zoomed in or out. geometryContract.ts's position
+    // math never reads canvas.getZoom(); this exercises that invariant through the real adapter,
+    // including whatever `zoom`-dependent CSS overlay math sits alongside it (applyOverlayGeometry
+    // multiplies the DOM matrix by zoom for on-screen rendering — that must stay purely cosmetic
+    // and never feed back into committed geometry).
+    const { adapter, onElementModified } = setup();
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const shape = { ...createShapeElement('rectangle', size, []), x: 40, y: 20, width: 200, height: 100, rotation: 45 };
+    adapter.setZoom(zoom);
+    await adapter.syncScene(scene([shape]));
+    const object = await create.mock.results[0]!.value;
+    expect(object.getCenterPoint().x).toBeCloseTo(shape.x + shape.width / 2, 6);
+    expect(object.getCenterPoint().y).toBeCloseTo(shape.y + shape.height / 2, 6);
+
+    object.set('angle', 60);
+    applyElementPosition(object, shape);
+    object.setCoords();
+    object.canvas!.fire('object:modified', { target: object });
+
+    const [, patch] = onElementModified.mock.calls[0]!;
+    expect(patch.x).toBeCloseTo(shape.x, 3);
+    expect(patch.y).toBeCloseTo(shape.y, 3);
+    expect(patch.rotation).toBeCloseTo(60, 5);
+  });
+
   it('extracts rotated geometry through object:modified back to the declared unrotated box', async () => {
     const { adapter, onElementModified } = setup();
     const create = vi.spyOn(factory, 'createFabricObject');
@@ -399,5 +428,59 @@ describe('Designer2 rotation/position contract (M3)', () => {
     // The committed width must match what's now actually rendered (base width × 1, since scale
     // was folded away), not a stale pre-fold value.
     expect(patch.width).toBeCloseTo(widthBefore * 1.5, 3);
+  });
+});
+
+// M4 — selection reporting must reflect the full current canvas selection, not Fabric's raw
+// event delta.
+describe('Designer2 selection reporting (M4)', () => {
+  const scene = (elements: DesignElement[]): DesignScene => ({
+    id: 'scene', name: 'Scene', durationMs: 10000, background: { type: 'color', color: '#000' }, elements,
+  });
+
+  it('reports the full multi-select, not just the newly shift-clicked object', async () => {
+    const { adapter, onSelectionChange } = setup();
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const shapeA = createShapeElement('rectangle', size, []);
+    const shapeB = createShapeElement('rectangle', size, []);
+    await adapter.syncScene(scene([shapeA, shapeB]));
+    const objectA = await create.mock.results[0]!.value;
+    const objectB = await create.mock.results[1]!.value;
+    const canvas = objectA.canvas!;
+
+    canvas.setActiveObject(objectA);
+    onSelectionChange.mockClear();
+
+    // Fabric's own shift-click-to-add-to-selection path: replacing the active object with a new
+    // ActiveSelection containing the previously-selected object plus the newly clicked one. This
+    // is exactly the scenario where Fabric's `selection:updated` event payload's own `e.selected`
+    // contains only the newly added object (verified empirically against the installed Fabric
+    // 7.4.0), not the full selection — the bug the audit flagged.
+    const selection = new ActiveSelection([objectA, objectB], { canvas });
+    canvas.setActiveObject(selection);
+
+    expect(onSelectionChange).toHaveBeenCalled();
+    const reported = onSelectionChange.mock.calls.at(-1)![0] as string[];
+    expect(new Set(reported)).toEqual(new Set([shapeA.id, shapeB.id]));
+  });
+
+  it.each([
+    ['hidden', { visible: false }],
+    ['locked/non-selectable', { selectable: false }],
+  ])('does not make a %s element the canvas active object, but still resolves a mixed selection to the rest', async (_label, override) => {
+    const { adapter } = setup();
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const hidden = { ...createShapeElement('rectangle', size, []), ...override };
+    const visible = createShapeElement('rectangle', size, []);
+    await adapter.syncScene(scene([hidden, visible]));
+    const hiddenObject = await create.mock.results[0]!.value;
+    const visibleObject = await create.mock.results[1]!.value;
+    const canvas = hiddenObject.canvas!;
+
+    adapter.selectElements([hidden.id]);
+    expect(canvas.getActiveObjects()).toHaveLength(0);
+
+    adapter.selectElements([hidden.id, visible.id]);
+    expect(canvas.getActiveObjects()).toEqual([visibleObject]);
   });
 });
