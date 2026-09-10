@@ -108,3 +108,64 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
 To roll back further, past the first deployment too, use
 `lumina-dashboard:pre-designer2m3-20260909` instead. Do not run either rollback
 command unless rollback is intended. No database rollback is necessary.
+
+---
+
+# Third deployment — API server-side Template policy enforcement — 2026-09-10
+
+Different service from the first two: `apps/api`, not the dashboard. Commit
+`b41c4f5`: `DesignsService.assertTemplatePolicyRespected`, enforced on every
+manual save of a design cloned from a Template, checked against the immutable
+`DesignTemplateVersion`.
+
+## Released
+
+- Service: `lumina-api-1` only.
+- Release tag: `lumina-api:m4policy-20260910`.
+- Running image: `sha256:d31370e85e92e69787b5b84d7481bb2d9dbcd9529211da99b3afde91ccb71847`.
+- Preserved rollback tag: `lumina-api:pre-m4policy-20260910`.
+- Previous image: `sha256:6153a0aa5ed4951d8e2ae04843df16253e43e22516d4b07b09c8cbb6bf64a010`.
+
+Built via `docker compose -f docker-compose.prod.yml build api`, recreated with
+`docker compose -f docker-compose.prod.yml up -d --no-deps --no-build api`.
+Dashboard, worker, player, Postgres, Redis and MinIO were untouched (confirmed
+unchanged uptime after deploy). No schema migrations ran.
+
+## Broader blast radius than the dashboard deploys
+
+Unlike the dashboard (only reached by admin/browser users), the API is also called
+directly by `lumina-player-1` — the actual kiosk/signage displays. A restart briefly
+interrupts anything mid-request against it, though it reconnects automatically like
+any container restart. The user was told this explicitly before confirming.
+
+## Verification
+
+- Smoke test before deploy used `docker compose run --rm --no-deps` (not a bare
+  `docker run`) so it got the exact same env/network wiring as the real service —
+  including the live Postgres/Redis/MinIO — without touching the running container.
+  Booted clean, all routes mapped (including the modified `PATCH /designs/:id`),
+  `/v1/auth/me` and `/v1/designs` both 401 unauthenticated as expected, no
+  exceptions in logs.
+- Checked production directly beforehand: 0 of the 8 existing `DesignAsset` rows
+  have a `sourceTemplateId` set, so the new enforcement branch is a complete no-op
+  for all current traffic — it only activates the first time a tenant actually
+  clones a design from a Template.
+- Post-deploy against the public site: `/v1/auth/me` 401, `/v1/designs` 401,
+  player domain reachable, dashboard `/en/login` still 200, no errors in API logs
+  in the 30s after restart.
+- Pre-deploy: full API `tsc --noEmit`, `eslint`, `jest` (284 tests, 26 suites,
+  including 8 new policy-enforcement tests each confirmed to depend on the fix),
+  and `nest build` all passed locally before the image was built.
+- Same caveat as the other deployments: no authenticated end-to-end exercise of
+  the new enforcement path against a real cloned-from-template design was run
+  (none currently exist in production to test against). Unit-test coverage only.
+
+## Rollback (third deployment)
+
+```bash
+docker tag lumina-api:pre-m4policy-20260910 lumina-api:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build api
+```
+
+Do not run this unless rollback is intended. No database rollback is necessary
+(no migrations ran).
