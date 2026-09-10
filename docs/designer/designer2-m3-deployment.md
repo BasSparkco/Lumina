@@ -169,3 +169,57 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --no-build api
 
 Do not run this unless rollback is intended. No database rollback is necessary
 (no migrations ran).
+
+---
+
+# Fourth deployment — Layers panel action discoverability — 2026-09-10
+
+Back to the dashboard. Commit `4e61f6b`: rename/visibility/lock/duplicate/delete/
+reorder made directly reachable from a Layers-panel row (previously only reachable
+via the Properties panel expansion or canvas right-click), plus keyboard-accessible
+drag reorder. This closes designer_modernization_plan.md's M4 task list in full.
+
+**Note on image tags**: by this deployment, the tags from the first and second
+dashboard deployments (`designer2m3-20260909`, `pre-designer2m3-20260909`,
+`screens-20260908-9ojx`) were no longer present on this host — likely pruned
+between sessions. Only `m4selection-20260909` (the second deployment's release)
+remained, so that's what this deployment's rollback tag was taken from. The
+rollback chain effectively now only reaches back to the second deployment, not
+further. If deeper rollback is ever needed, check `docker images` for what's
+actually still present before assuming any tag below still exists.
+
+## Released
+
+- Release tag: `lumina-dashboard:m4layers-20260910`.
+- Running image: `sha256:0a0e5c1376c9bfe8711eaf3988c72763548b4b371d3ca9e4175bbdfe47528b1a`.
+- Preserved rollback tag: `lumina-dashboard:pre-m4layers-20260910` (= the second
+  deployment's `m4selection-20260909` image).
+- Previous image: `sha256:1e90dc162b495e97330569238d14779a6e1cbd4d91abac848fdfae40ac55f61b`.
+
+Same build/smoke-test/switch pattern as every dashboard deployment above. Only
+`lumina-dashboard-1` was recreated; api/worker/player/Postgres/Redis/MinIO kept
+their original uptime. No schema migrations ran.
+
+## Verification
+
+- Isolated container smoke test before deploy: `/en/login`, `/ar/login`,
+  `/en/designer2` all HTTP 200, no errors in logs.
+- Post-deploy against the public site: `/en/login` 200, `/ar/login` 200,
+  `/en/designer2` 200, unauthenticated `/v1/auth/me` 401 as expected, no errors
+  in logs.
+- Pre-deploy: full dashboard `tsc --noEmit`, `eslint` (0 errors), `vitest run`
+  (110 tests, including 8 new Layers-panel tests), and `next build` all passed
+  locally before the image was built.
+- Same caveat as every other deployment this session: no real-browser interactive
+  test of the new rename/toggle/actions-menu UI was run against the live site
+  (jsdom + React Testing Library only). Worth a manual click-through on the live
+  dashboard given this is UI a real user directly interacts with.
+
+## Rollback (fourth deployment)
+
+```bash
+docker tag lumina-dashboard:pre-m4layers-20260910 lumina-dashboard:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
+```
+
+Do not run this unless rollback is intended. No database rollback is necessary.
