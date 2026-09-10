@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { buildBlankDesignDocument } from '@lumina/design-schema';
 import { DesignsService } from './designs.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
@@ -146,5 +146,149 @@ describe('DesignsService — stale revision conflict', () => {
       service.update(MY_ORG, DESIGN_ID, { revision: 5, designJson: blankDoc }),
     ).resolves.toBeDefined();
     expect(prisma.designAssetVersion.create).toHaveBeenCalled();
+  });
+});
+
+// M4 — a design cloned from a Template carries per-element templatePolicy/movable/resizable/
+// deletable restrictions; the client only ever *hid* controls for them. These confirm the server
+// itself now rejects a forged PATCH that would bypass that — the actual security boundary, not
+// just a UI nicety — using the immutable DesignTemplateVersion as the ground truth.
+describe('DesignsService — server-side Template layer policy enforcement', () => {
+  const MY_ORG = 'org_mine';
+  const DESIGN_ID = 'design_1';
+  const TEMPLATE_ID = 'tmpl_1';
+  const TEMPLATE_VERSION = 3;
+
+  function lockedTextElement(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'el_locked', name: 'Headline', type: 'text',
+      x: 10, y: 10, width: 200, height: 60, rotation: 0, opacity: 1, zIndex: 0,
+      selectable: true, movable: false, resizable: false, deletable: false, editable: true,
+      templatePolicy: { contentEditable: false, styleEditable: false },
+      text: 'Original headline', fontFamily: 'inter', fontSize: 24, fontWeight: 400,
+      fill: '#000000', textAlign: 'left', direction: 'ltr',
+      ...overrides,
+    };
+  }
+
+  function docWith(...elements: Record<string, unknown>[]) {
+    const doc = buildBlankDesignDocument('Test Design');
+    doc.scenes[0]!.elements.push(...(elements as never[]));
+    return doc;
+  }
+
+  function makeService(sourceElements: Record<string, unknown>[]) {
+    const sourceDesignJson = docWith(...sourceElements);
+    const prisma = {
+      designAsset: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: DESIGN_ID, organizationId: MY_ORG, revision: 1, name: 'Test', deletedAt: null,
+          sourceTemplateId: TEMPLATE_ID, sourceTemplateVersion: TEMPLATE_VERSION,
+        }),
+        update: jest.fn().mockResolvedValue({ id: DESIGN_ID, revision: 2 }),
+      },
+      designTemplateVersion: {
+        findUnique: jest.fn().mockResolvedValue({ designJson: sourceDesignJson }),
+      },
+      designAssetVersion: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
+      designDraft: { deleteMany: jest.fn() },
+      asset: { findMany: jest.fn().mockResolvedValue([]) },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
+    } as unknown as PrismaService;
+    const orgScoped = new OrgScopedService();
+    return { service: new DesignsService(prisma, orgScoped), prisma };
+  }
+
+  it('rejects moving a movable:false element', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const attempt = docWith(lockedTextElement({ x: 999 }));
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects changing the text content of a contentEditable:false element', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const attempt = docWith(lockedTextElement({ text: 'Hacked headline' }));
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects changing the fill color of a styleEditable:false element', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const attempt = docWith(lockedTextElement({ fill: '#ff0000' }));
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects flipping templatePolicy.contentEditable from false to true (an unlock attempt)', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const attempt = docWith(lockedTextElement({ templatePolicy: { contentEditable: true, styleEditable: false } }));
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects deleting a deletable:false element', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const attempt = buildBlankDesignDocument('Test Design'); // element simply absent
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects swapping a locked element to a different type under the same id', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const attempt = docWith({
+      id: 'el_locked', name: 'Headline', type: 'shape',
+      x: 10, y: 10, width: 200, height: 60, rotation: 0, opacity: 1, zIndex: 0,
+      selectable: true, movable: false, resizable: false, deletable: false, editable: true,
+      templatePolicy: { contentEditable: false, styleEditable: false },
+      shape: 'rectangle',
+    });
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+  });
+
+  it('allows an unchanged locked element through (no false positive on a legitimate no-op save)', async () => {
+    const { service, prisma } = makeService([lockedTextElement()]);
+    const unchanged = docWith(lockedTextElement());
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: unchanged }),
+    ).resolves.toBeDefined();
+    expect(prisma.designAsset.update).toHaveBeenCalled();
+  });
+
+  it('allows freely editing a customer\'s own element alongside an untouched locked one', async () => {
+    const ownElement = {
+      id: 'el_own', name: 'My text', type: 'text',
+      x: 300, y: 300, width: 100, height: 40, rotation: 0, opacity: 1, zIndex: 1,
+      selectable: true, movable: true, resizable: true, deletable: true, editable: true,
+      text: 'anything', fontFamily: 'inter', fontSize: 16, fontWeight: 400,
+      fill: '#000000', textAlign: 'left', direction: 'ltr',
+    };
+    const { service, prisma } = makeService([lockedTextElement(), ownElement]);
+    const edited = docWith(lockedTextElement(), { ...ownElement, x: 500, text: 'edited freely' });
+
+    await expect(
+      service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: edited }),
+    ).resolves.toBeDefined();
+    expect(prisma.designAsset.update).toHaveBeenCalled();
   });
 });

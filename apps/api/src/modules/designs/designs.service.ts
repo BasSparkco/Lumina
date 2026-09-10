@@ -1,9 +1,50 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@lumina/db';
-import { buildBlankDesignDocument, DesignDocumentSchema, type DesignDocument } from '@lumina/design-schema';
+import { buildBlankDesignDocument, DesignDocumentSchema, type DesignDocument, type DesignElement } from '@lumina/design-schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import type { DesignDto } from './dto/design.dto';
+
+// M4 server-side policy enforcement — the client-side Properties panel/canvas only *hides*
+// controls for a locked element; nothing stopped a forged PATCH /designs/:id request (or a bug
+// in the client) from changing a Template-locked layer's content, style or geometry anyway. This
+// partitions each element type's own fields (from packages/design-schema/src/element.schema.ts)
+// into "content" (what is shown) vs "style" (how it looks), matching TemplateLayerPolicy's own
+// two axes — geometry (x/y/width/height/rotation) is separately gated by movable/resizable,
+// which every element already carries regardless of type.
+const CONTENT_PROPS_BY_TYPE: Record<DesignElement['type'], readonly string[]> = {
+  text: ['text'],
+  image: ['assetId'],
+  shape: ['shape'],
+  video: ['assetId', 'posterAssetId'],
+  qr: ['value'],
+};
+const STYLE_PROPS_BY_TYPE: Record<DesignElement['type'], readonly string[]> = {
+  text: ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fill', 'textAlign', 'direction', 'lineHeight', 'charSpacing'],
+  image: ['cropZoom', 'cropOffsetX', 'cropOffsetY', 'fit', 'adjustments', 'borderRadius', 'flipX', 'flipY'],
+  shape: ['fill', 'stroke', 'strokeWidth', 'radius'],
+  video: ['startOffsetMs', 'endOffsetMs', 'muted', 'volume', 'loop', 'fit', 'autoplay'],
+  qr: ['foregroundColor', 'backgroundColor', 'errorCorrection'],
+};
+
+function numbersEqual(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.01; // sub-pixel — tolerates editor round-trip float noise, not a real edit
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (typeof a === 'number' && typeof b === 'number') return numbersEqual(a, b);
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    // Canonical (key-sorted) JSON compare — good enough for the plain adjustment/animation
+    // objects these fields ever hold; key order differing is not a real content/style change.
+    const canon = (v: unknown): unknown => Array.isArray(v)
+      ? v.map(canon)
+      : v && typeof v === 'object'
+        ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y)).map(([k, val]) => [k, canon(val)]))
+        : v;
+    return JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+  }
+  return a === b;
+}
 
 @Injectable()
 export class DesignsService {
@@ -57,6 +98,85 @@ export class DesignsService {
       const ownedIds = new Set(owned.map((a) => a.id));
       const missing = assetIds.filter((id) => !ownedIds.has(id));
       throw new BadRequestException(`Design references assets not owned by this tenant: ${missing.join(', ')}`);
+    }
+  }
+
+  // designer.md §11 amendment — the *actual* enforcement point for source-Template layer
+  // restrictions. `sourceDocument` is the immutable DesignTemplateVersion's own designJson
+  // (authoritative — never the live, still-editable DesignTemplate row), so an admin's later
+  // template edit can't retroactively tighten or loosen a design a tenant already cloned. Only
+  // elements that exist in BOTH documents (by id) and were governed in the source (a
+  // templatePolicy, or movable/resizable/deletable turned off) are checked; a customer's own,
+  // never-template-managed elements are untouched. A customer may always make their *own*
+  // capability flags stricter than the template allowed (self-restricting is harmless) but never
+  // less restrictive than the template granted, and may never swap a governed element's `type`.
+  private assertTemplatePolicyRespected(sourceDocument: DesignDocument, incomingDocument: DesignDocument): void {
+    const sourceElements = new Map<string, DesignElement>();
+    for (const scene of sourceDocument.scenes) for (const element of scene.elements) sourceElements.set(element.id, element);
+    const incomingElements = new Map<string, DesignElement>();
+    for (const scene of incomingDocument.scenes) for (const element of scene.elements) incomingElements.set(element.id, element);
+
+    for (const [id, source] of sourceElements) {
+      const governed = source.templatePolicy !== undefined
+        || source.movable === false || source.resizable === false || source.deletable === false;
+      if (!governed) continue;
+
+      const label = `"${source.name}"`;
+      const incoming = incomingElements.get(id);
+      if (!incoming) {
+        if (source.deletable === false) {
+          throw new ForbiddenException(`Element ${label} is locked by its source Template and cannot be deleted.`);
+        }
+        continue; // deletable and genuinely removed — allowed
+      }
+
+      if (incoming.type !== source.type) {
+        throw new ForbiddenException(`Element ${label} is locked by its source Template and cannot change type.`);
+      }
+      // Governance flags: only ever allowed to move *toward* stricter than the template granted.
+      if (source.movable === false && incoming.movable !== false) {
+        throw new ForbiddenException(`Element ${label}'s position is locked by its source Template.`);
+      }
+      if (source.resizable === false && incoming.resizable !== false) {
+        throw new ForbiddenException(`Element ${label}'s size is locked by its source Template.`);
+      }
+      if (source.deletable === false && incoming.deletable !== false) {
+        throw new ForbiddenException(`Element ${label} is locked by its source Template and cannot become deletable.`);
+      }
+      if (source.templatePolicy?.contentEditable === false && incoming.templatePolicy?.contentEditable !== false) {
+        throw new ForbiddenException(`Element ${label}'s content is locked by its source Template.`);
+      }
+      if (source.templatePolicy?.styleEditable === false && incoming.templatePolicy?.styleEditable !== false) {
+        throw new ForbiddenException(`Element ${label}'s style is locked by its source Template.`);
+      }
+
+      // Geometry
+      if (source.movable === false && (!numbersEqual(source.x, incoming.x) || !numbersEqual(source.y, incoming.y))) {
+        throw new ForbiddenException(`Element ${label}'s position is locked by its source Template.`);
+      }
+      if (source.resizable === false && (!numbersEqual(source.width, incoming.width)
+        || !numbersEqual(source.height, incoming.height) || !numbersEqual(source.rotation, incoming.rotation))) {
+        throw new ForbiddenException(`Element ${label}'s size is locked by its source Template.`);
+      }
+
+      // Content / style — checked against the *source* element's own field set, not incoming's,
+      // so a type-narrowed field a customer might have added can't hide a real change elsewhere.
+      const s = source as unknown as Record<string, unknown>;
+      const i = incoming as unknown as Record<string, unknown>;
+      if (source.templatePolicy?.contentEditable === false) {
+        for (const field of [...CONTENT_PROPS_BY_TYPE[source.type], 'dynamicBindings']) {
+          if (!valuesEqual(s[field], i[field])) {
+            throw new ForbiddenException(`Element ${label}'s content is locked by its source Template.`);
+          }
+        }
+      }
+      if (source.templatePolicy?.styleEditable === false) {
+        for (const field of [...STYLE_PROPS_BY_TYPE[source.type], 'opacity', 'animation']) {
+          if (!valuesEqual(s[field], i[field])) {
+            throw new ForbiddenException(`Element ${label}'s style is locked by its source Template.`);
+          }
+        }
+      }
     }
   }
 
@@ -132,6 +252,17 @@ export class DesignsService {
     }
     const designJson = this.validateDesignJson(dto.designJson);
     await this.assertAssetsOwned(orgId, designJson);
+    if (existing.sourceTemplateId && existing.sourceTemplateVersion) {
+      const sourceVersion = await this.prisma.designTemplateVersion.findUnique({
+        where: { templateId_versionNumber: { templateId: existing.sourceTemplateId, versionNumber: existing.sourceTemplateVersion } },
+        select: { designJson: true },
+      });
+      // A missing source version (template/version deleted after cloning) has nothing left to
+      // enforce against — fail open on the policy check specifically, not on the save itself.
+      if (sourceVersion) {
+        this.assertTemplatePolicyRespected(this.validateDesignJson(sourceVersion.designJson), designJson);
+      }
+    }
 
     const lastVersion = await this.prisma.designAssetVersion.findFirst({
       where: { designAssetId: id },

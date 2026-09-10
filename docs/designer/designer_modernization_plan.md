@@ -8,7 +8,7 @@ Reviewed: 2026-09-09. Scope: the current working tree, including the recent inli
 - **M1 — persistent synchronization: implemented (2026-09-09).** See the implementation record below.
 - **M2 — direct media insertion: implemented (2026-09-09).**
 - **M3 — coordinate/rotation contract: substantially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization, skew/flip decision, and zoom-invariance tests are done; production's designs were checked directly (8 designs, 22 elements, 0 templates) and contain zero rotated elements, so the legacy-frame normalization task is currently moot — nothing to migrate. Only DPR/retina pixel-rendering tests (need a real browser canvas rasterizer, not achievable in jsdom) remain open. See the implementation records below.
-- **M4 — layers/selection: started (2026-09-09).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection). Layer panel action completeness and server-side permission enforcement remain open.
+- **M4 — layers/selection: substantially implemented (2026-09-10).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection) plus server-side Template policy enforcement in `apps/api` (not yet deployed). Layer panel action discoverability (a UX consolidation, not a bug) remains open.
 - **M5–M8: planned.**
 - **Approach A, with the synchronization foundation refactored first.** Keep Fabric, the adapter boundary, Zustand, Lumina Design JSON, tenant Asset storage, published Template snapshots, and the DOM Player. Replace whole-scene reconstruction during ordinary editing. Do not replace the editor framework or persistence model.
 - The initial M0 review stopped at the milestone plan as requested by [improve designer2.md §28](../../improve%20designer2.md). The user subsequently authorized M1 and M2, then M3. Their implementation records are below; the rest of M3 is next, with permission constraints carried into every command from the outset.
@@ -495,10 +495,46 @@ Two bugs from the M0 audit's finding #8 fixed, both with empirically-verified re
   hidden/locked-then-mixed-selection resolving to only the valid member. Both temporarily reverted
   and re-verified to fail without their respective fix. Full suite: 59 passing (up from 56).
   `tsc --noEmit` and `eslint` clean.
-- Not done (remaining M4 scope): full Shift/Cmd interactive multi-select wiring beyond what
-  already exists, row rename/duplicate/delete/reorder discoverability directly in the Layers
-  panel (currently scattered across properties/context menu per the M0 audit — a UX
-  consolidation, not a correctness bug), keyboard-accessible DnD/context menu, and — the largest
-  remaining piece — enforcing source Template content/style/geometry restrictions server-side
-  (`apps/api`), not just via disabled UI controls. That last item is security-relevant and touches
-  the backend; it wasn't started this session.
+- Not done at the time of the record above: row rename/duplicate/delete/reorder discoverability
+  directly in the Layers panel (currently scattered across properties/context menu per the M0
+  audit — a UX consolidation, not a correctness bug), and keyboard-accessible DnD/context menu.
+
+
+## M4 implementation record, continued — server-side Template policy enforcement — 2026-09-10
+
+The largest remaining M4 item from the record above: source Template content/style/geometry
+restrictions were enforced only via disabled UI controls — nothing stopped a forged
+`PATCH /designs/:id` request (or a client bug) from changing a Template-locked layer anyway.
+
+- Added `DesignsService.assertTemplatePolicyRespected` (`apps/api/src/modules/designs/
+  designs.service.ts`), called from `update()` (the manual-save path) whenever the design being
+  saved has a `sourceTemplateId`/`sourceTemplateVersion`. Fetches the *immutable*
+  `DesignTemplateVersion` row (never the live, still-editable `DesignTemplate`) as the
+  authoritative ground truth, so a later admin edit to the template can't retroactively tighten or
+  loosen a design a tenant already cloned.
+- Partitioned each element type's own fields (read directly from
+  `packages/design-schema/src/element.schema.ts`, not guessed) into content (`text`, `assetId`,
+  `shape`, `value`, `posterAssetId`) vs style (fonts/fill/crop/adjustments/playback settings/QR
+  colors/opacity/animation) — matching `TemplateLayerPolicy`'s own two axes. Geometry
+  (x/y/width/height/rotation) is separately gated by the existing `movable`/`resizable` flags
+  every element already carries.
+- For each element that exists in both the source template and the incoming document and was
+  governed in the source (a `templatePolicy`, or `movable`/`resizable`/`deletable` off): rejects
+  (`ForbiddenException`) an attempt to move/resize/delete it, change its `type`, change any
+  content/style field a `false` policy locks, or loosen any governance flag itself (a customer can
+  always self-restrict further, never relax what the template granted). A customer's own,
+  never-template-managed elements are completely untouched by this.
+- Numeric comparisons use a sub-pixel epsilon (not exact equality) to tolerate legitimate
+  editor round-trip float noise without false-positive rejections; object fields (`adjustments`,
+  `animation`) compare via canonical key-sorted JSON so key-order alone isn't treated as a change.
+- Tests (`designs.service.spec.ts`, Jest): 8 new cases — move/content/style/unlock-attempt/
+  delete/type-swap all rejected; an unchanged locked element and a customer's own free edits
+  alongside an untouched locked one both still succeed (no false positives). All 8 confirmed to
+  actually depend on the fix (temporarily disabled it, watched 6 of 8 fail as expected, restored
+  it). Full API suite: 284 passing (26 suites, up from 276/25). `tsc --noEmit`, `eslint`, and
+  `nest build` all clean.
+- Not done: the same enforcement on the autosave draft path (`putDraft`) — drafts never become
+  canonical without a real `update()` call, which is now protected, so this is lower-priority
+  defense-in-depth rather than a live gap. Also not done: this is the first change in this session
+  that touches `apps/api`, a separate deployable service from the dashboard everything else this
+  session shipped to — it has not been deployed.
