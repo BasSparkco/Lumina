@@ -1,9 +1,11 @@
 'use client';
-import { X, GripVertical } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { X, GripVertical, Eye, EyeOff, Lock, LockOpen, MoreVertical } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -11,6 +13,7 @@ import {
 } from '@dnd-kit/core';
 import {
   SortableContext,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
   arrayMove,
@@ -22,6 +25,10 @@ export interface LayerItem {
   zIndex: number;
   label: string;
   icon?: LucideIcon;
+  // Row-level state for the optional visibility/lock toggles below — undefined (the legacy
+  // Themes/Layouts modal usages) simply renders no toggle for that row.
+  visible?: boolean;
+  locked?: boolean;
 }
 
 interface LayersPanelProps {
@@ -48,6 +55,16 @@ interface LayersPanelProps {
   // legacy Themes/Layouts modal usages, so they're unaffected.
   expandedId?: string | null;
   renderExpanded?: (item: LayerItem) => React.ReactNode;
+  // M4 layer-panel discoverability (designer_modernization_plan.md) — each is independently
+  // optional; the legacy Themes/Layouts modal usages pass none of these and render exactly as
+  // before (drag handle, icon, label, zIndex — no toggle/rename/actions affordances at all).
+  onToggleVisibility?: (id: string) => void;
+  onToggleLock?: (id: string) => void;
+  onRename?: (id: string, name: string) => void;
+  // Anchored at the clicked button's own position — the caller owns wherever it renders its
+  // actions popup (e.g. the shared ContextMenu also used for canvas right-click), this only
+  // reports "open it here for this row".
+  onOpenActions?: (id: string, anchor: DOMRect) => void;
 }
 
 function LayerRow({
@@ -55,22 +72,45 @@ function LayerRow({
   selected,
   expanded,
   onSelect,
+  onToggleVisibility,
+  onToggleLock,
+  onRename,
+  onOpenActions,
 }: {
   item: LayerItem;
   selected: boolean;
   expanded?: boolean;
   onSelect: () => void;
+  onToggleVisibility?: (id: string) => void;
+  onToggleLock?: (id: string) => void;
+  onRename?: (id: string, name: string) => void;
+  onOpenActions?: (id: string, anchor: DOMRect) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
   const Icon = item.icon;
+  const [renaming, setRenaming] = useState<string | null>(null);
+  // A stable (useCallback, empty deps) ref callback, not a `useEffect` keyed on `renaming`'s own
+  // value — that value changes on every keystroke (it's also the input's controlled value), so an
+  // effect depending on it would re-select-all on every keystroke too, replacing each newly typed
+  // character instead of appending it. React re-invokes a ref *callback* whenever its identity
+  // changes, not only on mount — an inline (non-memoized) function is a new identity every
+  // render, which would reproduce the exact same per-keystroke bug through a different path;
+  // `useCallback` keeps this one identity stable so React only calls it once, on mount.
+  const focusAndSelectOnMount = useCallback((el: HTMLInputElement | null) => el?.select(), []);
+
+  function commitRename() {
+    const trimmed = renaming?.trim();
+    if (trimmed && trimmed !== item.label) onRename?.(item.id, trimmed);
+    setRenaming(null);
+  }
 
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${
+      className={`flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
         isDragging ? 'z-10 opacity-70 shadow-lg' : ''
       } ${
         selected
@@ -82,17 +122,67 @@ function LayerRow({
         type="button"
         {...attributes}
         {...listeners}
+        aria-label="Drag to reorder — arrow keys also work when focused"
         className="cursor-grab touch-none text-[var(--deck-text-low)] active:cursor-grabbing"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
-      <button type="button" onClick={onSelect} aria-expanded={expanded} className="flex flex-1 items-center gap-2 truncate text-left">
-        {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
-        <span className="flex-1 truncate">{item.label}</span>
-        <span className="shrink-0 font-mono text-[10px] text-[var(--deck-text-low)]">
-          {item.zIndex}
-        </span>
-      </button>
+      {renaming !== null ? (
+        <input
+          ref={focusAndSelectOnMount}
+          value={renaming}
+          onChange={(e) => setRenaming(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') commitRename();
+            else if (e.key === 'Escape') setRenaming(null);
+          }}
+          className="flex-1 rounded border border-[var(--deck-accent)] bg-[var(--deck-glass-fill-strong)] px-1 py-0.5 text-xs text-[var(--deck-text-hi)] outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={onSelect}
+          onDoubleClick={() => onRename && setRenaming(item.label)}
+          aria-expanded={expanded}
+          className="flex flex-1 items-center gap-2 truncate text-left"
+        >
+          {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+          <span className="flex-1 truncate">{item.label}</span>
+        </button>
+      )}
+      {onToggleVisibility && (
+        <button
+          type="button"
+          title={item.visible === false ? 'Show' : 'Hide'}
+          onClick={() => onToggleVisibility(item.id)}
+          className="shrink-0 rounded p-0.5 text-[var(--deck-text-low)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)]"
+        >
+          {item.visible === false ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        </button>
+      )}
+      {onToggleLock && (
+        <button
+          type="button"
+          title={item.locked ? 'Unlock' : 'Lock'}
+          onClick={() => onToggleLock(item.id)}
+          className="shrink-0 rounded p-0.5 text-[var(--deck-text-low)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)]"
+        >
+          {item.locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+        </button>
+      )}
+      {onOpenActions && (
+        <button
+          type="button"
+          title="More actions"
+          onClick={(e) => onOpenActions(item.id, e.currentTarget.getBoundingClientRect())}
+          className="shrink-0 rounded p-0.5 text-[var(--deck-text-low)] hover:bg-[var(--deck-glass-fill-strong)] hover:text-[var(--deck-text-hi)]"
+        >
+          <MoreVertical className="h-3.5 w-3.5" />
+        </button>
+      )}
+      <span className="shrink-0 font-mono text-[10px] text-[var(--deck-text-low)]">{item.zIndex}</span>
     </div>
   );
 }
@@ -113,8 +203,17 @@ export function LayersPanel({
   variant = 'modal',
   expandedId,
   renderExpanded,
+  onToggleVisibility,
+  onToggleLock,
+  onRename,
+  onOpenActions,
 }: LayersPanelProps) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  // KeyboardSensor: with a row's drag handle focused, Space picks it up and arrow keys move it —
+  // dnd-kit's own standard keyboard-DnD pattern, so reordering isn't mouse/touch-only.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
   const orderedIds = items.map((i) => i.id);
 
   function handleDragEnd(e: DragEndEvent) {
@@ -142,6 +241,10 @@ export function LayersPanel({
                 selected={item.id === selectedId}
                 expanded={renderExpanded ? item.id === expandedId : undefined}
                 onSelect={() => onSelect(item.id)}
+                onToggleVisibility={onToggleVisibility}
+                onToggleLock={onToggleLock}
+                onRename={onRename}
+                onOpenActions={onOpenActions}
               />
               {renderExpanded && (
                 // CSS grid-rows accordion trick: animating a 0fr <-> 1fr track (rather than

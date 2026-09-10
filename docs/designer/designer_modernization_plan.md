@@ -8,7 +8,7 @@ Reviewed: 2026-09-09. Scope: the current working tree, including the recent inli
 - **M1 — persistent synchronization: implemented (2026-09-09).** See the implementation record below.
 - **M2 — direct media insertion: implemented (2026-09-09).**
 - **M3 — coordinate/rotation contract: substantially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization, skew/flip decision, and zoom-invariance tests are done; production's designs were checked directly (8 designs, 22 elements, 0 templates) and contain zero rotated elements, so the legacy-frame normalization task is currently moot — nothing to migrate. Only DPR/retina pixel-rendering tests (need a real browser canvas rasterizer, not achievable in jsdom) remain open. See the implementation records below.
-- **M4 — layers/selection: substantially implemented (2026-09-10).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection) plus server-side Template policy enforcement in `apps/api` (not yet deployed). Layer panel action discoverability (a UX consolidation, not a bug) remains open.
+- **M4 — layers/selection: complete (2026-09-10).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection), server-side Template policy enforcement in `apps/api` (deployed), and Layers-panel action discoverability (rename/visibility/lock/duplicate/delete/reorder/keyboard DnD) all shipped.
 - **M5–M8: planned.**
 - **Approach A, with the synchronization foundation refactored first.** Keep Fabric, the adapter boundary, Zustand, Lumina Design JSON, tenant Asset storage, published Template snapshots, and the DOM Player. Replace whole-scene reconstruction during ordinary editing. Do not replace the editor framework or persistence model.
 - The initial M0 review stopped at the milestone plan as requested by [improve designer2.md §28](../../improve%20designer2.md). The user subsequently authorized M1 and M2, then M3. Their implementation records are below; the rest of M3 is next, with permission constraints carried into every command from the outset.
@@ -535,6 +535,48 @@ restrictions were enforced only via disabled UI controls — nothing stopped a f
   `nest build` all clean.
 - Not done: the same enforcement on the autosave draft path (`putDraft`) — drafts never become
   canonical without a real `update()` call, which is now protected, so this is lower-priority
-  defense-in-depth rather than a live gap. Also not done: this is the first change in this session
-  that touches `apps/api`, a separate deployable service from the dashboard everything else this
-  session shipped to — it has not been deployed.
+  defense-in-depth rather than a live gap.
+- Deployed 2026-09-10 (`lumina-api:m4policy-20260910`) — see designer2-m3-deployment.md's third
+  deployment section.
+
+
+## M4 implementation record, continued — Layers panel action discoverability — 2026-09-10
+
+The last open M4 item: rename/visibility/lock/duplicate/delete/four-reorder actions all already
+worked (via the Properties panel's inline expansion or the canvas right-click menu), but none of
+them were reachable directly from a Layers-panel row — exactly the audit's complaint.
+
+- `components/LayersPanel.tsx` (shared by designer2's ObjectsPanel and the legacy Themes/Layouts
+  editors) gained, all as independently optional props so the legacy usages are unaffected:
+  double-click-to-rename on the row label (inline `<input>`, Enter commits/Escape cancels),
+  visibility and lock toggle icons, and a "more actions" button whose anchor position the caller
+  controls (so it can reuse whatever popup it already has). Added `KeyboardSensor` (dnd-kit's own
+  `sortableKeyboardCoordinates`) alongside the existing `PointerSensor` — Space-to-pick-up,
+  arrow-keys-to-move on a focused row's drag handle — closing the "keyboard-accessible DnD" task.
+- `ObjectsPanel.tsx` wires these to the same store methods (`updateElement`, `duplicateElements`,
+  `removeElements`, `reorderElement`) and the same `useConfirmBeforeDelete` confirmation the
+  canvas right-click menu already uses, and reuses the existing shared `ContextMenu` component
+  (not a new popup implementation) for the "more actions" list — front/forward/backward/back,
+  duplicate, show/hide, lock/unlock, delete — matching `CanvasViewport`'s `buildContextMenuActions`
+  action set exactly, so the two surfaces (right-click a canvas element vs. the panel row for the
+  same element) offer the identical set with identical semantics.
+- Two real bugs caught by writing tests, not by reading the code — both were "looks correct on
+  inspection" cases:
+  - A test-setup bug: two shape elements built independently both got `zIndex: 0` because each
+    call passed an empty `elements` array to `createShapeElement` instead of threading the
+    growing list through, so a "Send Backward" reorder test showed no observable change. Fixed
+    in the test, not the product.
+  - A real product bug this session's own code introduced while fixing it: the rename input's
+    "select all text so typing overwrites the placeholder" behavior was implemented as a
+    `useEffect` keyed on the input's own controlled value — which changes on every keystroke — so
+    it re-selected the entire current value after each character, meaning every new keystroke
+    replaced the whole string instead of extending it. Typing "Renamed" would have persisted just
+    "d". Switching to a `useCallback`-stabilized ref callback (invoked once, on mount, rather than
+    on every value change) fixed it. Caught only because the test typed a full word and asserted
+    the final value, not because the bug was visible in a code read.
+- Tests: 8 new (`ObjectsPanel.test.tsx`) covering rename commit/cancel, visibility toggle, lock
+  toggle (both flags), duplicate via the actions menu, delete via the actions menu, reorder via
+  the actions menu, and that every row action is wrapped in `commit()` (one undo step, matching
+  every other mutation path in this feature). Full suite: 110 passing (up from 102).
+  `tsc --noEmit`, `eslint` (0 errors), and `next build` all clean.
+- This closes out M4's stated task list in full. Not deployed yet.
