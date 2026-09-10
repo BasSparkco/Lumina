@@ -25,6 +25,24 @@ section just orients a fresh session fast; the plan doc is the source of truth.
   just designer2 — do not re-attempt that exact approach; the record explains
   why).
 - **M6 (history/save/recovery) through M8 (perf hardening): not started.**
+- **Same-day M5 production regression, found and fixed 2026-09-10**: the user
+  reported that inserting an image then just moving it made the image jump
+  down-right within its box, showing only ~25% of it. Root cause:
+  `applyImageStylePatch`'s reuse of `positionImageInBox`'s left/top formula on
+  an already-Fabric-grouped image — that formula is only correct once, at
+  Group construction, where Fabric's own layout pass unconditionally
+  overrides it anyway (crop panning is actually done by the clipPath moving,
+  not the image). Fixed via a `repositionInBox` option; see the plan doc's
+  M5 "continued — image position-drag bugfix" record and
+  designer2-m3-deployment.md's sixth deployment for the full writeup,
+  including how the wrong first hypothesis was tested and ruled out before
+  reading Fabric's actual source. **Notably, this shipped with 100% of M5's
+  own test suite passing** — none of the 32 new M5 tests asserted the image's
+  actual on-screen position after a live/commit update, only that the Fabric
+  object wasn't *recreated*. A new regression test now covers this
+  specifically, but it's a reminder that "tests pass" and "visually correct"
+  are not the same claim for canvas/geometry code — see the real-browser gap
+  below, which this bug is a concrete example of.
 
 ## What to tell a new Claude session picking this up
 
@@ -34,26 +52,27 @@ and its own "M0–M5" implementation records document exactly what shipped, with
 file paths, root causes, and what was deliberately left out and why. Don't
 re-derive the audit — it's already done and still accurate as of 2026-09-10.
 
-## Five production deployments so far — see `docs/designer/designer2-m3-deployment.md`
+## Six production deployments so far — see `docs/designer/designer2-m3-deployment.md`
 
 Every deploy in this effort used the same pattern (`docker compose -f
 docker-compose.prod.yml build <service>` → tag a rollback point → isolated
 `docker compose run --rm --no-deps` smoke test → `docker compose -f
 docker-compose.prod.yml up -d --no-deps --no-build <service>` → verify public
-routes + logs). That file has all five, in order, each with its release tag,
+routes + logs). That file has all six, in order, each with its release tag,
 rollback command, and what was actually verified. Currently running:
 
-- `lumina-dashboard-1`: image tag `m5props-20260910`
-- `lumina-api-1`: image tag `m5props-20260910`
+- `lumina-dashboard-1`: image tag `m5imgfix-20260910`
+- `lumina-api-1`: image tag `m5props-20260910` (untouched by the sixth deploy)
 
 **Known gotcha**: Docker image tags from the *first two* dashboard deployments
 got pruned between sessions (cause unknown — not something any session did
 deliberately). Always run `docker images | grep lumina-` before trusting any
 tag name mentioned in the deployment doc still exists; the rollback chain may
-be shorter than the doc implies. As of this deployment the chain reaches back
-to `pre-m5props-20260910` (dashboard) / `pre-m5props-20260910` (api), each the
-prior deployment's release image — check `docker images` for what's actually
-still present before assuming further back.
+be shorter than the doc implies. As of the sixth deployment the chain reaches
+back to `pre-m5imgfix-20260910` (dashboard, = the fifth deployment's
+`m5props-20260910` image) / `pre-m5props-20260910` (api, unchanged since the
+fifth deployment) — check `docker images` for what's actually still present
+before assuming further back.
 
 ## The single biggest gap across all of M0–M5
 
@@ -95,10 +114,10 @@ trusting M5's live-editing UI beyond what jsdom/RTL already confirmed.
   it via its built `dist/`, not source. Run `pnpm --filter @lumina/design-schema
   build` after any change there before a dashboard/api dev server or Docker
   build will actually pick it up.
-- Git commits for this whole effort (newest first, on `main`, already pushed):
-  `3c093c7`, `50cb488`, `4f6979f`, `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`,
-  `76496b6`, `340e952`, `621e545`, `3625079`, `45fcaf5`. `git log --oneline`
-  from there for full messages.
+- Git commits for this whole effort (newest first, on `main`):
+  `9f34107`, `2f1a22b`, `3c093c7`, `50cb488`, `4f6979f`, `f1b5b21`, `4e61f6b`,
+  `9ddbe28`, `b41c4f5`, `76496b6`, `340e952`, `621e545`, `3625079`, `45fcaf5`.
+  `git log --oneline` from there for full messages.
 
 ---
 

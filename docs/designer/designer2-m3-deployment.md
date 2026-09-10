@@ -304,4 +304,74 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --no-build api
 Do not run this unless rollback is intended. No database rollback is necessary
 (no migrations ran).
 
+---
+
+# Sixth deployment — image position-drag bugfix (dashboard only) — 2026-09-10
+
+Commit `9f34107`, reported by the user directly: inserting an image then just
+moving it made the image visibly jump down-right within its box, showing only
+~25% of it — a regression from the fifth deployment (M5). Root cause: the new
+`applyImageStylePatch` (added in M5 so image style edits patch in place
+instead of recreating the object) reused `positionImageInBox`'s left/top
+formula on an image that was *already* inside its Fabric Group. That formula
+is only correct once, at Group construction — Fabric's own one-time
+initialization layout pass unconditionally lands a single centered-origin
+child back at local (0,0) regardless of what left/top it's given (all crop
+panning actually happens via the clipPath Rect moving instead, since a
+clipPath isn't a group child and isn't subject to that pass). Applying the
+same formula a second time, after that pass has already run, has no such
+correction behind it — the value stuck, shifting the image by half its box in
+each dimension on every subsequent property update, including a plain
+position change. Confirmed by reproducing it directly (a throwaway debug
+test, deleted afterward — not part of the shipped test suite) and reading
+Fabric's actual `Group`/`LayoutManager` source rather than guessing further.
+Fix: `positionImageInBox` gained a `repositionInBox` option (default true,
+unchanged for the creation path); the already-grouped-image update path now
+passes `false`, so it only recomputes scale and the clip-pan offset and
+leaves the image's already-correct position alone. See
+`docs/designer/designer_modernization_plan.md`'s M5 implementation record,
+amended with this fix, for the full technical detail.
+
+## Released
+
+- Service: `lumina-dashboard-1` only. `apps/api` untouched this deployment.
+- Release tag: `lumina-dashboard:m5imgfix-20260910`.
+  Running image: `sha256:d60a1a757d6048865c0a90f3cf60dc413aeb1dc04591d76808cf94a5828d9b91`.
+  Preserved rollback tag: `lumina-dashboard:pre-m5imgfix-20260910` (= the
+  fifth deployment's `m5props-20260910` image).
+
+Built via `docker compose -f docker-compose.prod.yml build dashboard`,
+recreated with `docker compose -f docker-compose.prod.yml up -d --no-deps
+--no-build dashboard`. API, worker, player, Postgres, Redis and MinIO kept
+their original uptime. No schema migrations ran.
+
+## Verification
+
+- Isolated container smoke test before deploy (`docker compose run --rm
+  --no-deps`): `/en/login`, `/ar/login`, `/en/designer2` all HTTP 200, no
+  errors in logs.
+- Post-deploy against the public site: `/en/login` 200, `/ar/login` 200,
+  `/en/designer2` 200, no errors in logs in the minute after restart.
+- Pre-deploy: full dashboard `tsc --noEmit`, `eslint` (0 errors), `vitest run`
+  (143 tests, up from 142 — one new regression test asserting the image never
+  moves within its box on a position-only change, live or commit, and that a
+  genuine crop-offset change still moves the clip window by the correct
+  amount), and `next build` all passed locally.
+- Reproduced the exact reported bug first (position-only update shifting
+  `img.left`/`img.top` away from their established (0,0)), confirmed the fix
+  resolves it, then wrote the regression test against the fixed code — not
+  written blind.
+- Same caveat as every deployment in this effort: no real-browser interactive
+  verification against the live site was performed (jsdom + a targeted
+  reproduction test only). Worth a manual check on the live dashboard —
+  insert an image, drag it, confirm it stays fully visible and correctly
+  positioned — given this is the exact symptom that was reported live.
+
+## Rollback (sixth deployment)
+
+```bash
+docker tag lumina-dashboard:pre-m5imgfix-20260910 lumina-dashboard:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
+```
+
 Do not run this unless rollback is intended. No database rollback is necessary.

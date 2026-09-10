@@ -691,5 +691,38 @@ Fabric object, the bound-text inline-editor overwrite bug, and font-ready text m
   scope/UX tradeoff, not an oversight). QR live color preview (documented above). The
   `Object.hasOwn(patch, 'posterAssetId')`-style "key present vs. undefined value" distinction is
   only needed/used for video posters today; no other optional field currently needs it.
-- No production implementation deployed as part of this milestone — see the deployment doc for
-  when M5 actually ships.
+- Deployed 2026-09-10 (`lumina-dashboard:m5props-20260910`, `lumina-api:m5props-20260910`) — see
+  designer2-m3-deployment.md's fifth deployment section. A real regression was found in production
+  immediately after (see the follow-up record directly below) and fixed same-day.
+
+## M5 implementation record, continued — image position-drag bugfix — 2026-09-10
+
+User-reported production bug, found immediately after the fifth deployment: inserting an image
+then just moving it made the image visibly jump down-right within its box, showing only ~25% of
+it. Root cause traced to this milestone's own `applyImageStylePatch` (see above) — full detail in
+`designer2-m3-deployment.md`'s sixth deployment section (the deployment doc has the complete
+root-cause writeup; not duplicated here). Summary: `positionImageInBox`'s left/top formula is only
+correct once, at Fabric `Group` construction time, where Fabric's own one-time initialization
+layout pass unconditionally overrides it anyway (a single centered-origin child always lands at
+local (0,0), regardless of what's set — all crop panning is actually implemented by the clipPath
+Rect moving instead). `applyImageStylePatch` reapplied that same formula to an *already-grouped*
+image (no recreate, by design — that's the whole point of this milestone's image style-patch
+path), where there's no such correction behind it, so the value stuck and visibly shifted the
+image on every subsequent property update, including a plain position change.
+
+- Fix: `positionImageInBox` gained a `repositionInBox` option (`FabricObjectFactory.ts`, default
+  `true`, so `createImageObject`'s creation-time call is unchanged); `applyImageStylePatch` passes
+  `false`, so the already-grouped-image update path only recomputes scale and the clip-pan offset,
+  leaving the image's already-correct (0,0) position untouched.
+- Found by direct reproduction (a throwaway debug test constructing the exact reported scenario,
+  deleted once the root cause was confirmed — not part of the shipped suite) and reading Fabric
+  7.4.0's actual `Group`/`LayoutManager` source (`node_modules/fabric/dist/index.mjs`) to find the
+  real mechanism, after an initial hypothesis (a different, plausible-sounding Fabric coordinate
+  conversion) was tested and empirically disproven before landing on the actual cause.
+- New regression test in `FabricCanvasAdapter.test.ts`: asserts the image's position stays at
+  Fabric's own established (0,0) across a live position-only update and its commit-path
+  equivalent, and that a genuine crop-offset change still moves the *clip window* by the correct
+  amount (confirming the fix didn't also silently break crop panning). Full dashboard suite: 143
+  passing (up from 142). `tsc --noEmit`, `eslint`, `next build` all clean.
+- Deployed 2026-09-10 (`lumina-dashboard:m5imgfix-20260910`, dashboard only — this fix never
+  touched `apps/api`) — see designer2-m3-deployment.md's sixth deployment section.
