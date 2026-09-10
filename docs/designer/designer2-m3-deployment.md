@@ -375,3 +375,73 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
 ```
 
 Do not run this unless rollback is intended. No database rollback is necessary.
+
+---
+
+# Seventh deployment — M6 history, save and recovery correctness (both services) — 2026-09-10
+
+Commit `4740d33`: closes M6's full task list — undo/redo restores via a new `restoreSnapshot`
+action instead of reusing the initial-document-load action (scene/selection preserved instead of
+every undo forcing a jump back to scene 0), a bounded (100-entry) and structurally-correct
+no-op-suppressed history, autosave cancel-on-save + stale-ack rejection + org-scoped local
+recovery, an atomic server-side manual-save revision guard, and template-clone document-id
+regeneration. See `docs/designer/designer_modernization_plan.md`'s M6 implementation record for
+full technical detail, including one deliberately-deferred item (server-side draft-sequence
+ordering — documented, not built).
+
+## Released
+
+- Services: `lumina-dashboard-1` and `lumina-api-1`.
+- Dashboard release tag: `lumina-dashboard:m6history-20260910`.
+  Running image: `sha256:301e96b88dfeae9f33adf230bd6dd4d745d409eea69fb09b4df8587a25dd9e4d`.
+  Preserved rollback tag: `lumina-dashboard:pre-m6history-20260910` (= the sixth deployment's
+  `m5imgfix-20260910` image).
+- API release tag: `lumina-api:m6history-20260910`.
+  Running image: `sha256:6cdc91e0f3bad93a4971be43d6cab115f35f63bbe22a777d698830906fd2ebee`.
+  Preserved rollback tag: `lumina-api:pre-m6history-20260910` (= the fifth deployment's
+  `m5props-20260910` image — the API side was untouched by the sixth, dashboard-only deployment).
+
+Built via `docker compose -f docker-compose.prod.yml build dashboard` and `... build api`,
+recreated with `docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard`
+then `... api` (two separate recreates). Worker, player, Postgres, Redis and MinIO kept their
+original uptime. No schema migrations ran — this milestone deliberately avoided any Prisma
+migration (the revision guard reuses the existing `revision` column with a different query shape;
+the clone-id fix only changes what's written into the existing `designJson` JSON column). Same
+broader blast-radius note as prior API deployments: `lumina-player-1` calls this API directly and
+briefly reconnects across the restart.
+
+## Verification
+
+- Isolated container smoke tests before deploy (`docker compose run --rm --no-deps`): dashboard —
+  `/en/login`, `/ar/login`, `/en/designer2` all HTTP 200, no errors in logs; API — `/v1/auth/me`
+  and `/v1/designs` both 401 unauthenticated as expected, no errors in logs.
+- Post-deploy against the public site: `/en/login` 200, `/ar/login` 200, `/en/designer2` 200,
+  `/v1/auth/me` 401, player domain reachable (200), no errors in either service's logs in the two
+  minutes after restart.
+- Pre-deploy: full dashboard `tsc --noEmit`, `eslint` (0 errors), `vitest run` (175 tests, up from
+  143 — 33 new: history/restore-snapshot, autosave coordination and org-scoped local-draft
+  recovery, CanvasViewport reconstruction-avoidance, and a legacy-editor-calling-shape smoke test
+  for the shared `useEditorHistory` hook), and `next build` all passed locally. Full API
+  `tsc --noEmit`, `eslint` (0 errors), `jest` (286 tests, up from 284 — a true concurrent-update
+  409/single-version-row test and a template-clone-id-uniqueness test; the existing mock harness
+  was upgraded to support Prisma's interactive-transaction callback form), and `nest build` all
+  passed locally.
+- Same caveat as every prior deployment: no real-browser interactive test of undo/redo, multi-tab
+  save conflicts, or autosave timing was run against the live site — jsdom/Vitest fake-timer tests
+  prove the ordering/cancellation *logic*, not real network timing. Worth a manual check on the
+  live dashboard: edit on a non-first scene, undo, confirm the view stays on that scene with
+  selection intact; edit then Save quickly, confirm no stray draft reappears.
+
+## Rollback (seventh deployment)
+
+```bash
+# Dashboard
+docker tag lumina-dashboard:pre-m6history-20260910 lumina-dashboard:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
+
+# API
+docker tag lumina-api:pre-m6history-20260910 lumina-api:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build api
+```
+
+Do not run this unless rollback is intended. No database rollback is necessary (no migrations ran).

@@ -10,7 +10,7 @@ Reviewed: 2026-09-09. Scope: the current working tree, including the recent inli
 - **M3 — coordinate/rotation contract: substantially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization, skew/flip decision, and zoom-invariance tests are done; production's designs were checked directly (8 designs, 22 elements, 0 templates) and contain zero rotated elements, so the legacy-frame normalization task is currently moot — nothing to migrate. Only DPR/retina pixel-rendering tests (need a real browser canvas rasterizer, not achievable in jsdom) remain open. See the implementation records below.
 - **M4 — layers/selection: complete (2026-09-10).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection), server-side Template policy enforcement in `apps/api` (deployed), and Layers-panel action discoverability (rename/visibility/lock/duplicate/delete/reorder/keyboard DnD) all shipped.
 - **M5 — property updates/text editing: complete and deployed (2026-09-10).** Full live-property adapter mapping, image style edits patch in place instead of recreating the Fabric object, `useEditSession` begin/preview/commit/cancel hook, color-drag/no-op history fixes, bound-text read-only fix, font-ready measurement, template-policy field gating. See the implementation record below — including a caught-in-development regression (a hook-level no-op safety net that would have broken Undo everywhere) that was reverted rather than shipped, and a same-day production regression (image position drag) found and fixed after the first deploy.
-- **M6 — history, save and recovery correctness: implemented (2026-09-10), not deployed.** Undo/redo no longer reuses the initial-load action (scene/selection now preserved), a bounded+no-op-suppressed history, autosave/manual-save race coordination (cancel-on-save, stale-ack rejection, org-scoped local recovery), an atomic server-side revision guard closing a real concurrent-save race, and the template-clone document-id collision bug fixed. See the implementation record below.
+- **M6 — history, save and recovery correctness: complete and deployed (2026-09-10).** Undo/redo no longer reuses the initial-load action (scene/selection now preserved), a bounded+no-op-suppressed history, autosave/manual-save race coordination (cancel-on-save, stale-ack rejection, org-scoped local recovery), an atomic server-side revision guard closing a real concurrent-save race, and the template-clone document-id collision bug fixed. See the implementation record below.
 - **M7–M8: planned.**
 - **Approach A, with the synchronization foundation refactored first.** Keep Fabric, the adapter boundary, Zustand, Lumina Design JSON, tenant Asset storage, published Template snapshots, and the DOM Player. Replace whole-scene reconstruction during ordinary editing. Do not replace the editor framework or persistence model.
 - The initial M0 review stopped at the milestone plan as requested by [improve designer2.md §28](../../improve%20designer2.md). The user subsequently authorized M1 and M2, then M3. Their implementation records are below; the rest of M3 is next, with permission constraints carried into every command from the outset.
@@ -209,7 +209,7 @@ Each milestone is a reviewable change set with its own passing checks. No global
 - Acceptance: preview and committed appearance match; one meaningful history action per interaction; unrelated objects retain identity.
 - Compatibility: reuse existing fields and adjustment contracts. Approximate Fabric filters versus exact Player filters require documented parity tests, not silently dropping stored values.
 
-### M6 — History, save and recovery correctness (implemented 2026-09-10, not deployed)
+### M6 — History, save and recovery correctness (implemented and deployed 2026-09-10)
 
 - Problem/root cause: undo uses initial load action, unrestricted snapshot count, draft races, clone document-ID reuse and non-atomic manual revision checks.
 - Files: designer/history stores, `useEditorHistory.ts` (avoid legacy regression), autosave, shell/page save paths, designs service/schema as required, recovery tests.
@@ -847,5 +847,5 @@ an atomic server-side revision guard, and the template-clone document-id collisi
   were upgraded to support Prisma's interactive-transaction callback form, not just the array
   form). Full `tsc --noEmit`, `eslint` (0 errors), `next build`, and `nest build` all clean on both
   apps.
-- Not deployed as part of this milestone — implementation and verification only, per this effort's
-  established pattern of a separate deploy decision.
+- Deployed 2026-09-10 (`lumina-dashboard:m6history-20260910`, `lumina-api:m6history-20260910`) —
+  see designer2-m3-deployment.md's seventh deployment section.

@@ -12,7 +12,8 @@ section just orients a fresh session fast; the plan doc is the source of truth.
 
 - **M0 (audit), M1 (persistent sync), M2 (direct media insertion), M3
   (coordinate/rotation contract), M4 (layers/selection), M5 (complete property
-  updates/text editing): all done and deployed to production (2026-09-10).**
+  updates/text editing), M6 (history/save/recovery correctness): all done and
+  deployed to production (2026-09-10).**
   M5: full adapter live-property mapping (color/stroke/radius/fit/crop/
   adjustments/flip/video playback), image edits patch in place instead of
   recreating the Fabric object, `useEditSession` begin/preview/commit/cancel
@@ -24,8 +25,8 @@ section just orients a fresh session fast; the plan doc is the source of truth.
   would have silently broken Undo for every editor sharing that hook, not
   just designer2 — do not re-attempt that exact approach; the record explains
   why).
-- **M6 (history/save/recovery correctness): implemented 2026-09-10, not yet
-  deployed.** Undo/redo restores via a new `restoreSnapshot` action instead of
+- **M6 (history/save/recovery correctness): implemented and deployed
+  2026-09-10.** Undo/redo restores via a new `restoreSnapshot` action instead of
   reusing the initial-document-load action — scene/selection are now
   preserved instead of every undo forcing a jump back to scene 0 (which used
   to fully reconstruct the canvas as a side effect). History is capped at 100
@@ -74,47 +75,52 @@ and its own "M0–M6" implementation records document exactly what shipped, with
 file paths, root causes, and what was deliberately left out and why. Don't
 re-derive the audit — it's already done and still accurate as of 2026-09-10.
 
-## Six production deployments so far — see `docs/designer/designer2-m3-deployment.md`
+## Seven production deployments so far — see `docs/designer/designer2-m3-deployment.md`
 
 Every deploy in this effort used the same pattern (`docker compose -f
 docker-compose.prod.yml build <service>` → tag a rollback point → isolated
 `docker compose run --rm --no-deps` smoke test → `docker compose -f
 docker-compose.prod.yml up -d --no-deps --no-build <service>` → verify public
-routes + logs). That file has all six, in order, each with its release tag,
+routes + logs). That file has all seven, in order, each with its release tag,
 rollback command, and what was actually verified. Currently running:
 
-- `lumina-dashboard-1`: image tag `m5imgfix-20260910`
-- `lumina-api-1`: image tag `m5props-20260910` (untouched by the sixth deploy)
+- `lumina-dashboard-1`: image tag `m6history-20260910`
+- `lumina-api-1`: image tag `m6history-20260910`
 
 **Known gotcha**: Docker image tags from the *first two* dashboard deployments
 got pruned between sessions (cause unknown — not something any session did
 deliberately). Always run `docker images | grep lumina-` before trusting any
 tag name mentioned in the deployment doc still exists; the rollback chain may
-be shorter than the doc implies. As of the sixth deployment the chain reaches
-back to `pre-m5imgfix-20260910` (dashboard, = the fifth deployment's
-`m5props-20260910` image) / `pre-m5props-20260910` (api, unchanged since the
-fifth deployment) — check `docker images` for what's actually still present
-before assuming further back.
+be shorter than the doc implies. As of the seventh deployment the chain
+reaches back to `pre-m6history-20260910` (dashboard, = the sixth deployment's
+`m5imgfix-20260910` image) / `pre-m6history-20260910` (api, = the fifth
+deployment's `m5props-20260910` image, since the sixth deploy never touched
+the API) — check `docker images` for what's actually still present before
+assuming further back.
 
 ## The single biggest gap across all of M0–M6
 
 **Every verification has been `jsdom`/Vitest (dashboard) or Jest (api) only.
 No real-browser end-to-end test of the canvas — drag, rotate, multi-select,
-text resize, the Layers-panel rename/toggle UI, or M5's live color/number-drag
-Properties panel — has been run against a live browser.** The unit-test
-coverage is genuinely thorough (multiple bugs were caught only by writing real
-tests, documented in the plan doc's records — M5 alone caught a real
-history/Undo regression this way), but "does this look and feel right when a
-person actually drags something" has never been checked. A local
-Playwright/Chromium binary is already cached on this host (`npx playwright
---version` works, ~1.63.0) but a full local dev backend stack was not set up —
-the standard `pnpm docker:dev` ports (5434/6381 for Postgres/Redis) collide
-with another tenant's dev containers on this shared host, so that needs a
-different port mapping or another approach before it can run. Setting this up
-and actually driving the live canvas through a real browser is probably the
-highest-value thing to do before M3 can be called fully done (it's currently
-"substantially implemented" specifically because of this gap) or before fully
-trusting M5's live-editing UI beyond what jsdom/RTL already confirmed.
+text resize, the Layers-panel rename/toggle UI, M5's live color/number-drag
+Properties panel, or M6's undo/redo scene-preservation and multi-tab save/
+autosave timing — has been run against a live browser or real concurrent
+network requests.** The unit-test coverage is genuinely thorough (multiple
+bugs were caught only by writing real tests, documented in the plan doc's
+records — M5 alone caught a real history/Undo regression this way, and M6's
+jsdom fake-timer tests prove ordering/cancellation logic but not real network
+race timing), but "does this look and feel right when a person actually drags
+something" has never been checked. A local Playwright/Chromium binary is
+already cached on this host (`npx playwright --version` works, ~1.63.0) but a
+full local dev backend stack was not set up — the standard `pnpm docker:dev`
+ports (5434/6381 for Postgres/Redis) collide with another tenant's dev
+containers on this shared host, so that needs a different port mapping or
+another approach before it can run. Setting this up and actually driving the
+live canvas through a real browser is probably the highest-value thing to do
+before M3 can be called fully done (it's currently "substantially
+implemented" specifically because of this gap) or before fully trusting M5's
+live-editing UI or M6's save/history correctness beyond what jsdom/RTL/Jest
+already confirmed.
 
 ## Other things worth knowing before continuing
 
@@ -137,9 +143,9 @@ trusting M5's live-editing UI beyond what jsdom/RTL already confirmed.
   build` after any change there before a dashboard/api dev server or Docker
   build will actually pick it up.
 - Git commits for this whole effort (newest first, on `main`):
-  `9f34107`, `2f1a22b`, `3c093c7`, `50cb488`, `4f6979f`, `f1b5b21`, `4e61f6b`,
-  `9ddbe28`, `b41c4f5`, `76496b6`, `340e952`, `621e545`, `3625079`, `45fcaf5`.
-  `git log --oneline` from there for full messages.
+  `4740d33`, `905c9a5`, `9f34107`, `2f1a22b`, `3c093c7`, `50cb488`, `4f6979f`,
+  `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`, `76496b6`, `340e952`, `621e545`,
+  `3625079`, `45fcaf5`. `git log --oneline` from there for full messages.
 
 ---
 
