@@ -222,4 +222,86 @@ docker tag lumina-dashboard:pre-m4layers-20260910 lumina-dashboard:latest
 docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
 ```
 
+---
+
+# Fifth deployment — M5 property updates and text editing (both services) — 2026-09-10
+
+Commit `50cb488`: closes M5's full task list — full live-property adapter mapping,
+image style edits patch in place instead of recreating the Fabric object,
+`useEditSession` begin/preview/commit/cancel hook, color-drag/no-op history fixes,
+bound-text read-only fix, font-ready measurement, template-policy field gating in
+the Properties panel. Touches both `apps/dashboard` (the bulk of the work) and
+`apps/api` (a behavior-preserving refactor: `designs.service.ts`'s
+`CONTENT_PROPS_BY_TYPE`/`STYLE_PROPS_BY_TYPE` tables moved to a new shared
+`packages/design-schema/src/templatePolicyFields.ts` module, now also consumed by
+the dashboard's adapter). See `docs/designer/designer_modernization_plan.md`'s M5
+implementation record for the full technical detail, including a regression caught
+and reverted mid-session (a hook-level history no-op safety net that would have
+silently broken Undo for every editor sharing `useEditorHistory`, not just
+designer2 — never shipped).
+
+## Released
+
+- Services: `lumina-dashboard-1` and `lumina-api-1`.
+- Dashboard release tag: `lumina-dashboard:m5props-20260910`.
+  Running image: `sha256:87f54677b3b5664c71b5ab3bd15db2f43850e96c1dd2aa4b66e52fa36bf7ec51`.
+  Preserved rollback tag: `lumina-dashboard:pre-m5props-20260910` (= the fourth
+  deployment's `m4layers-20260910` image).
+- API release tag: `lumina-api:m5props-20260910`.
+  Running image: `sha256:92629052aabfdb492234eeaf215e4bf5f6f0654748c21cae3d4177044b12de19`.
+  Preserved rollback tag: `lumina-api:pre-m5props-20260910` (= the third
+  deployment's `m4policy-20260910` image).
+
+Built via `docker compose -f docker-compose.prod.yml build dashboard` and
+`... build api`, recreated with `docker compose -f docker-compose.prod.yml up -d
+--no-deps --no-build dashboard` then `... api` (two separate recreates, not
+simultaneous). Worker, player, Postgres, Redis and MinIO kept their original
+uptime (confirmed unchanged before/after). No schema migrations ran. Same broader
+blast-radius note as the third deployment applies to the API half: `lumina-player-1`
+(the kiosk/signage displays) calls this API directly and briefly reconnects across
+the restart.
+
+## Verification
+
+- Isolated container smoke tests before deploy (`docker compose run --rm
+  --no-deps`, same env/network wiring as the real services, no host container
+  touched): dashboard — `/en/login`, `/ar/login`, `/en/designer2` all HTTP 200, no
+  errors in logs; API — every route mapped (including `PATCH /designs/:id`),
+  `/v1/auth/me` and `/v1/designs` both 401 unauthenticated as expected, no
+  exceptions in logs.
+- Post-deploy against the public site: `/en/login` 200, `/ar/login` 200,
+  `/en/designer2` 200, `/v1/auth/me` 401, player domain reachable (200), no
+  errors in either service's logs in the first two minutes after restart.
+- Pre-deploy: full dashboard `tsc --noEmit`, `eslint` (0 errors), `vitest run`
+  (142 tests, up from 110 — 32 new: 10 `useLiveField`/`useEditSession`, 12
+  `PropertiesPanel`, 10 extended `FabricCanvasAdapter`), and `next build` all
+  passed locally. Full API `tsc --noEmit`, `eslint` (0 errors), `jest` (284
+  tests, unchanged — the `designs.service.ts` refactor is behavior-preserving,
+  re-verified directly), and `nest build` all passed locally. `pnpm --filter
+  @lumina/design-schema build` run first so both apps picked up the new shared
+  module (neither app is in `transpilePackages` for this workspace package —
+  Next.js/Nest both resolve it via its built `dist/`, not source).
+- Same caveat as every prior deployment: no real-browser interactive test of the
+  Properties panel's live-drag/color-picker/crop/adjust UI was run against the
+  live site (jsdom + React Testing Library only). This is the exact "live-editing
+  feel" work the plan doc's HANDOFF NOTES flagged as the single biggest
+  verification gap across the whole M0-M5 effort — worth a manual click-through
+  on the live dashboard, or setting up the Playwright/Chromium harness mentioned
+  there, before trusting this beyond what jsdom can confirm.
+
+## Rollback (fifth deployment)
+
+```bash
+# Dashboard
+docker tag lumina-dashboard:pre-m5props-20260910 lumina-dashboard:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build dashboard
+
+# API
+docker tag lumina-api:pre-m5props-20260910 lumina-api:latest
+docker compose -f docker-compose.prod.yml up -d --no-deps --no-build api
+```
+
+Do not run this unless rollback is intended. No database rollback is necessary
+(no migrations ran).
+
 Do not run this unless rollback is intended. No database rollback is necessary.

@@ -11,66 +11,72 @@ section just orients a fresh session fast; the plan doc is the source of truth.
 ## Where things actually stand
 
 - **M0 (audit), M1 (persistent sync), M2 (direct media insertion), M3
-  (coordinate/rotation contract), M4 (layers/selection): all done and deployed
-  to production.**
-- **M5 (complete property updates/text editing): implemented 2026-09-10, not
-  yet deployed.** Full task list done: adapter live-property mapping (color/
-  stroke/radius/fit/crop/adjustments/flip/video playback), image edits patch
-  in place instead of recreating the Fabric object, `useEditSession` begin/
-  preview/commit/cancel hook, color-drag-is-one-commit, Escape rollback,
-  bound-text read-only fix (was silently overwriting the authored token with
-  today's resolved value), font-ready text measurement, template-policy field
-  gating. See the plan doc's M5 implementation record for the full list,
-  including a regression caught and reverted mid-session (a hook-level no-op
-  history safety net that would have silently broken Undo for every editor
-  sharing that hook, not just designer2 — do not re-attempt that exact
-  approach; the record explains why).
+  (coordinate/rotation contract), M4 (layers/selection), M5 (complete property
+  updates/text editing): all done and deployed to production (2026-09-10).**
+  M5: full adapter live-property mapping (color/stroke/radius/fit/crop/
+  adjustments/flip/video playback), image edits patch in place instead of
+  recreating the Fabric object, `useEditSession` begin/preview/commit/cancel
+  hook, color-drag-is-one-commit, Escape rollback, bound-text read-only fix
+  (was silently overwriting the authored token with today's resolved value),
+  font-ready text measurement, template-policy field gating. See the plan
+  doc's M5 implementation record for the full list, including a regression
+  caught and reverted mid-session (a hook-level no-op history safety net that
+  would have silently broken Undo for every editor sharing that hook, not
+  just designer2 — do not re-attempt that exact approach; the record explains
+  why).
 - **M6 (history/save/recovery) through M8 (perf hardening): not started.**
+- **Commit `50cb488` (M5) is on local `main` but has not been pushed to
+  `origin` yet** — unlike every earlier commit in this effort. Push it (or
+  confirm with the user first) before assuming a fresh clone/CI has this work.
 
 ## What to tell a new Claude session picking this up
 
 Point it at `docs/designer/designer_modernization_plan.md` first, then this
 file. The plan doc's "Milestones" section has the full task list per milestone
-and its own "M0–M4" implementation records document exactly what shipped, with
+and its own "M0–M5" implementation records document exactly what shipped, with
 file paths, root causes, and what was deliberately left out and why. Don't
 re-derive the audit — it's already done and still accurate as of 2026-09-10.
 
-## Four production deployments so far — see `docs/designer/designer2-m3-deployment.md`
+## Five production deployments so far — see `docs/designer/designer2-m3-deployment.md`
 
 Every deploy in this effort used the same pattern (`docker compose -f
 docker-compose.prod.yml build <service>` → tag a rollback point → isolated
 `docker compose run --rm --no-deps` smoke test → `docker compose -f
 docker-compose.prod.yml up -d --no-deps --no-build <service>` → verify public
-routes + logs). That file has all four, in order, each with its release tag,
+routes + logs). That file has all five, in order, each with its release tag,
 rollback command, and what was actually verified. Currently running:
 
-- `lumina-dashboard-1`: image tag `m4layers-20260910`
-- `lumina-api-1`: image tag `m4policy-20260910`
+- `lumina-dashboard-1`: image tag `m5props-20260910`
+- `lumina-api-1`: image tag `m5props-20260910`
 
 **Known gotcha**: Docker image tags from the *first two* dashboard deployments
-got pruned between sessions (cause unknown — not something this session did
+got pruned between sessions (cause unknown — not something any session did
 deliberately). Always run `docker images | grep lumina-` before trusting any
 tag name mentioned in the deployment doc still exists; the rollback chain may
-be shorter than the doc implies.
+be shorter than the doc implies. As of this deployment the chain reaches back
+to `pre-m5props-20260910` (dashboard) / `pre-m5props-20260910` (api), each the
+prior deployment's release image — check `docker images` for what's actually
+still present before assuming further back.
 
-## The single biggest gap across all of M0–M4
+## The single biggest gap across all of M0–M5
 
 **Every verification has been `jsdom`/Vitest (dashboard) or Jest (api) only.
 No real-browser end-to-end test of the canvas — drag, rotate, multi-select,
-text resize, the new Layers-panel rename/toggle UI — has been run against a
-live browser.** The unit-test coverage is genuinely thorough (multiple bugs
-were caught only by writing real tests, documented in the plan doc's records),
-but "does this look and feel right when a person actually drags something" has
-never been checked. A local Playwright/Chromium binary is already cached on
-this host (`npx playwright --version` works, ~1.63.0) but a full local
-dev backend stack was not set up — the standard `pnpm docker:dev` ports
-(5434/6381 for Postgres/Redis) collide with another tenant's dev containers on
-this shared host, so that needs a different port mapping or another approach
-before it can run. Setting this up and actually driving the live canvas
-through a real browser is probably the highest-value thing to do before M3 can
-be called fully done (it's currently "substantially implemented" specifically
-because of this gap) or before trusting M5's upcoming property-editing UI work
-without a visual check.
+text resize, the Layers-panel rename/toggle UI, or M5's live color/number-drag
+Properties panel — has been run against a live browser.** The unit-test
+coverage is genuinely thorough (multiple bugs were caught only by writing real
+tests, documented in the plan doc's records — M5 alone caught a real
+history/Undo regression this way), but "does this look and feel right when a
+person actually drags something" has never been checked. A local
+Playwright/Chromium binary is already cached on this host (`npx playwright
+--version` works, ~1.63.0) but a full local dev backend stack was not set up —
+the standard `pnpm docker:dev` ports (5434/6381 for Postgres/Redis) collide
+with another tenant's dev containers on this shared host, so that needs a
+different port mapping or another approach before it can run. Setting this up
+and actually driving the live canvas through a real browser is probably the
+highest-value thing to do before M3 can be called fully done (it's currently
+"substantially implemented" specifically because of this gap) or before fully
+trusting M5's live-editing UI beyond what jsdom/RTL already confirmed.
 
 ## Other things worth knowing before continuing
 
@@ -87,9 +93,15 @@ without a visual check.
   restart there also briefly affects `lumina-player-1` (the actual kiosk/
   signage displays), not just admin dashboard users. Different blast radius
   than a dashboard-only deploy.
-- Git commits for this whole effort (newest first, on `main`, already pushed):
-  `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`, `76496b6`, `340e952`, `621e545`,
-  `3625079`, `45fcaf5`. `git log --oneline` from there for full messages.
+- `packages/design-schema` (and any other workspace `packages/*`) is not in
+  `apps/dashboard`'s Next.js `transpilePackages` — Next.js/Nest both resolve
+  it via its built `dist/`, not source. Run `pnpm --filter @lumina/design-schema
+  build` after any change there before a dashboard/api dev server or Docker
+  build will actually pick it up.
+- Git commits for this whole effort (newest first, on local `main`):
+  `50cb488` (**not yet pushed**), `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`,
+  `76496b6`, `340e952`, `621e545`, `3625079`, `45fcaf5` (these nine already
+  pushed). `git log --oneline` from there for full messages.
 
 ---
 
