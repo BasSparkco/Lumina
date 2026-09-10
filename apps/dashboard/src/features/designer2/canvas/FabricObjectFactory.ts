@@ -139,7 +139,31 @@ export function buildPreviewFilters(adjustments: ImageElement['adjustments']): f
 // Returns the crop pan in box-pixel units so the caller can build the *group's* clipPath from it.
 // The image itself is intentionally left unclipped here — see buildImageClipPath's comment for why
 // clipping `img` directly is wrong once it's wrapped in createImageObject's fixed-size Group.
-export function positionImageInBox(img: FabricImage, element: ImageElement): { offsetX: number; offsetY: number } {
+//
+// M5 bugfix note — `img.left`/`img.top` set here are NOT what ends up controlling the image's
+// visible position. `createImageObject` passes `img` directly into `new Group([img], {width,
+// height, layoutManager: fixedSizeLayoutManager()})`; Fabric's `Group` constructor always runs one
+// `LAYOUT_TYPE_INITIALIZATION` layout pass on its children — for a *single* child with a centered
+// origin, that pass computes an offset of exactly `-(the child's own current center)` and applies
+// it, which unconditionally lands the child back at local `(0, 0)` **regardless of what left/top
+// were set to beforehand** (confirmed empirically: cropOffsetX/Y ≠ 0 still produces `img.left ===
+// img.top === 0` after construction). So the `left`/`top` this function sets are immediately
+// overwritten by that layout pass and never actually reach the screen — all of the crop pan is
+// really implemented by `buildImageClipPath`'s Rect (a `group.clipPath`, not a group *child*, so
+// it's untouched by that layout pass) moving instead. That one-time layout pass only runs inside
+// `new Group(...)`, never again — so calling this same left/top-setting code a *second* time on an
+// already-grouped image (which is exactly what a live/commit style-patch update does, with no
+// recreate) has no such correction behind it: the value actually sticks, visibly shifting the image
+// away from its established (0,0) position — the "image drags itself down-right, only ~25% visible"
+// production bug. `repositionInBox: false` (passed only by `applyImageStylePatch` below, for an
+// already-grouped image) skips the left/top assignment entirely, leaving Fabric's original (0,0)
+// alone; scale and the returned clip-pan offset are unaffected either way.
+export function positionImageInBox(
+  img: FabricImage,
+  element: ImageElement,
+  options: { repositionInBox?: boolean } = {},
+): { offsetX: number; offsetY: number } {
+  const { repositionInBox = true } = options;
   const naturalW = img.width || element.width;
   const naturalH = img.height || element.height;
   const { width, height, fit, cropZoom, cropOffsetX, cropOffsetY } = element;
@@ -161,12 +185,14 @@ export function positionImageInBox(img: FabricImage, element: ImageElement): { o
   const offsetX = fit === 'fill' ? 0 : ((cropOffsetX ?? 0) / 100) * width;
   const offsetY = fit === 'fill' ? 0 : ((cropOffsetY ?? 0) / 100) * height;
 
-  img.set({
-    originX: 'center',
-    originY: 'center',
-    left: width / 2 + offsetX,
-    top: height / 2 + offsetY,
-  });
+  if (repositionInBox) {
+    img.set({
+      originX: 'center',
+      originY: 'center',
+      left: width / 2 + offsetX,
+      top: height / 2 + offsetY,
+    });
+  }
 
   return { offsetX, offsetY };
 }
@@ -206,7 +232,7 @@ export function applyImageStylePatch(group: Group, element: ImageElement): void 
   if (!img) return;
   img.flipX = Boolean(element.flipX);
   img.flipY = Boolean(element.flipY);
-  const { offsetX, offsetY } = positionImageInBox(img, element);
+  const { offsetX, offsetY } = positionImageInBox(img, element, { repositionInBox: false });
   img.filters = buildPreviewFilters(element.adjustments);
   img.applyFilters();
   group.clipPath = buildImageClipPath(element, offsetX, offsetY);

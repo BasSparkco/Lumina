@@ -547,6 +547,55 @@ describe('Designer2 live property updates (M5)', () => {
     expect(inner.flipX).toBe(true);
   });
 
+  // Regression — a position-only change (live drag or its commit) must never move the inner
+  // FabricImage within its Group. Fabric's own `Group` constructor runs one `initialization`
+  // layout pass on its children that — for this single centered-origin child — always lands it
+  // back at local (0, 0), *regardless* of what left/top positionImageInBox set beforehand (all
+  // crop-pan is actually implemented by the clipPath Rect moving instead, since a clipPath isn't a
+  // group child and isn't subject to that pass). That layout pass only ever runs once, at
+  // construction — reapplying positionImageInBox's box-relative left/top formula a *second* time
+  // via plain `img.set({left, top})` on an already-grouped image (which the M5 live/commit
+  // style-patch paths do) has no such correction behind it, so the value actually sticks and
+  // visibly shifts the image away from (0, 0) — reported in production as "changing position drags
+  // the image itself down-right, showing only ~25% of it."
+  it('never shifts the inner image away from its post-construction position on a position-only change (live or commit)', async () => {
+    const source = document.createElement('canvas');
+    source.width = 1200;
+    source.height = 600;
+    vi.spyOn(FabricImage, 'fromURL').mockResolvedValue(new FabricImage(source));
+    const { adapter } = setup(() => 'https://example.test/img.png');
+    const image = { ...createMediaElement(size, [], { asset: { id: 'img', name: 'Img', type: 'IMAGE' } as Asset, width: 1200, height: 600 }), cropOffsetX: 20, cropOffsetY: -10 } as DesignElement;
+    await adapter.addElement(image);
+    const group = (adapter as unknown as { objects: Map<string, Group> }).objects.get(image.id)! as unknown as Group;
+    const img = group.getObjects()[0] as FabricImage;
+    // Fabric's construction-time layout pass always lands a single centered-origin child at
+    // local (0, 0) — asserted here so this test fails loudly if that Fabric behavior ever changes,
+    // rather than silently validating against whatever the (possibly wrong) current value is.
+    expect(img.left).toBeCloseTo(0, 5);
+    expect(img.top).toBeCloseTo(0, 5);
+
+    // Live position-only update (Properties panel X/Y drag) — must leave the image's own
+    // within-box position untouched.
+    adapter.updateElement(image.id, { x: 120 });
+    expect(img.left).toBeCloseTo(0, 5);
+    expect(img.top).toBeCloseTo(0, 5);
+
+    // Commit-path position-only change (native canvas drag release -> store -> syncScene) — same
+    // invariant, through the other code path.
+    await adapter.syncScene(scene([{ ...image, x: 150, y: 80 } as DesignElement]));
+    const groupAfterCommit = (adapter as unknown as { objects: Map<string, Group> }).objects.get(image.id)! as unknown as Group;
+    const imgAfterCommit = groupAfterCommit.getObjects()[0] as FabricImage;
+    expect(imgAfterCommit.left).toBeCloseTo(0, 5);
+    expect(imgAfterCommit.top).toBeCloseTo(0, 5);
+
+    // A genuine crop-offset change must still move the *clip window* by the correct amount — the
+    // actual mechanism behind crop panning (see the comment above) — confirming the fix didn't
+    // also break that.
+    adapter.updateElement(image.id, { cropOffsetX: 50 });
+    const cp = groupAfterCommit.clipPath as unknown as { left: number } | undefined;
+    expect(cp?.left).toBeCloseTo((50 / 100) * image.width, 5);
+  });
+
   it('updateElement patches video volume/muted/loop/fit on the live <video> node in place', async () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
