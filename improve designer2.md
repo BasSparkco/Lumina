@@ -25,9 +25,6 @@ section just orients a fresh session fast; the plan doc is the source of truth.
   just designer2 — do not re-attempt that exact approach; the record explains
   why).
 - **M6 (history/save/recovery) through M8 (perf hardening): not started.**
-- **Commit `50cb488` (M5) is on local `main` but has not been pushed to
-  `origin` yet** — unlike every earlier commit in this effort. Push it (or
-  confirm with the user first) before assuming a fresh clone/CI has this work.
 
 ## What to tell a new Claude session picking this up
 
@@ -98,10 +95,10 @@ trusting M5's live-editing UI beyond what jsdom/RTL already confirmed.
   it via its built `dist/`, not source. Run `pnpm --filter @lumina/design-schema
   build` after any change there before a dashboard/api dev server or Docker
   build will actually pick it up.
-- Git commits for this whole effort (newest first, on local `main`):
-  `50cb488` (**not yet pushed**), `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`,
-  `76496b6`, `340e952`, `621e545`, `3625079`, `45fcaf5` (these nine already
-  pushed). `git log --oneline` from there for full messages.
+- Git commits for this whole effort (newest first, on `main`, already pushed):
+  `3c093c7`, `50cb488`, `4f6979f`, `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`,
+  `76496b6`, `340e952`, `621e545`, `3625079`, `45fcaf5`. `git log --oneline`
+  from there for full messages.
 
 ---
 
