@@ -1,3 +1,90 @@
+---
+
+# HANDOFF NOTES — read this first (last updated 2026-09-10)
+
+This file below is the *original* task brief. It is not the live status — read
+**`docs/designer/designer_modernization_plan.md`** for that: full architecture
+audit, the ten review-question answers with code-level evidence, the milestone
+plan, and a dated implementation record for every change actually made. This
+section just orients a fresh session fast; the plan doc is the source of truth.
+
+## Where things actually stand
+
+- **M0 (audit), M1 (persistent sync), M2 (direct media insertion), M3
+  (coordinate/rotation contract), M4 (layers/selection): all done and deployed
+  to production.**
+- **M5 (complete property updates/text editing) through M8 (perf hardening):
+  not started.** M5 is the natural next milestone — see its task list in the
+  plan doc (typed per-element preview/apply, begin/preview/commit/cancel edit
+  sessions, `useLiveField.ts`, color-drag-is-one-commit, Escape rollback, font
+  loading before text measurement, etc.).
+
+## What to tell a new Claude session picking this up
+
+Point it at `docs/designer/designer_modernization_plan.md` first, then this
+file. The plan doc's "Milestones" section has the full task list per milestone
+and its own "M0–M4" implementation records document exactly what shipped, with
+file paths, root causes, and what was deliberately left out and why. Don't
+re-derive the audit — it's already done and still accurate as of 2026-09-10.
+
+## Four production deployments so far — see `docs/designer/designer2-m3-deployment.md`
+
+Every deploy in this effort used the same pattern (`docker compose -f
+docker-compose.prod.yml build <service>` → tag a rollback point → isolated
+`docker compose run --rm --no-deps` smoke test → `docker compose -f
+docker-compose.prod.yml up -d --no-deps --no-build <service>` → verify public
+routes + logs). That file has all four, in order, each with its release tag,
+rollback command, and what was actually verified. Currently running:
+
+- `lumina-dashboard-1`: image tag `m4layers-20260910`
+- `lumina-api-1`: image tag `m4policy-20260910`
+
+**Known gotcha**: Docker image tags from the *first two* dashboard deployments
+got pruned between sessions (cause unknown — not something this session did
+deliberately). Always run `docker images | grep lumina-` before trusting any
+tag name mentioned in the deployment doc still exists; the rollback chain may
+be shorter than the doc implies.
+
+## The single biggest gap across all of M0–M4
+
+**Every verification has been `jsdom`/Vitest (dashboard) or Jest (api) only.
+No real-browser end-to-end test of the canvas — drag, rotate, multi-select,
+text resize, the new Layers-panel rename/toggle UI — has been run against a
+live browser.** The unit-test coverage is genuinely thorough (multiple bugs
+were caught only by writing real tests, documented in the plan doc's records),
+but "does this look and feel right when a person actually drags something" has
+never been checked. A local Playwright/Chromium binary is already cached on
+this host (`npx playwright --version` works, ~1.63.0) but a full local
+dev backend stack was not set up — the standard `pnpm docker:dev` ports
+(5434/6381 for Postgres/Redis) collide with another tenant's dev containers on
+this shared host, so that needs a different port mapping or another approach
+before it can run. Setting this up and actually driving the live canvas
+through a real browser is probably the highest-value thing to do before M3 can
+be called fully done (it's currently "substantially implemented" specifically
+because of this gap) or before trusting M5's upcoming property-editing UI work
+without a visual check.
+
+## Other things worth knowing before continuing
+
+- Production has 8 `DesignAsset` rows / 22 elements total (checked directly,
+  2026-09-10) — this is a very early-stage product with little real content,
+  which is why some verification (e.g. "does anyone actually use rotation or
+  Template cloning yet") came back "no live risk" rather than "verified safe
+  against real usage."
+- This is a **shared host** running several other companies' production
+  services alongside Lumina (confirmed via `docker ps` — gym-*, sparkco-*,
+  comm-*, legal-*, silkroadtec-* containers all present). Never assume a
+  `docker`/`kill`/port operation only affects Lumina.
+- `apps/api` is a separate deployable service from `apps/dashboard` — a
+  restart there also briefly affects `lumina-player-1` (the actual kiosk/
+  signage displays), not just admin dashboard users. Different blast radius
+  than a dashboard-only deploy.
+- Git commits for this whole effort (newest first, on `main`, already pushed):
+  `f1b5b21`, `4e61f6b`, `9ddbe28`, `b41c4f5`, `76496b6`, `340e952`, `621e545`,
+  `3625079`, `45fcaf5`. `git log --oneline` from there for full messages.
+
+---
+
 I need you to perform a complete technical and UX review of the existing **Lumina Designer** implementation and then upgrade it from its current basic state into a modern, smooth, production-quality commercial digital-signage designer.
 
 Do not treat this as a small bug-fix task.
