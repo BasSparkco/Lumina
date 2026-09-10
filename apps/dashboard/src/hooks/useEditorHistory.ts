@@ -23,7 +23,24 @@ interface HistoryState<T> { past: T[]; future: T[]; }
 // No-op suppression instead lives at each call site that can cheaply know its own before/after
 // value without an external re-read — e.g. designer2's useEditSession (dirty-tracking + baseline
 // comparison, self-contained in local state) and PropertiesPanel's own inline blur-value checks.
-export function useEditorHistory<T>(sessionKey: unknown, getSnapshot: () => T, applySnapshot: (s: T) => void) {
+// designer_modernization_plan.md M6 — designer2's own `history.store.ts` wraps `commit` one level
+// up with exactly this kind of external-getter no-op check (`useDesignerStore.getState()`, a live
+// accessor unaffected by React's render timing — the structural difference from the reverted
+// approach above), and needs a way to drop a capture it decided was a no-op without pushing it;
+// `discardCaptured` is that primitive. Legacy callers simply never call it.
+//
+// `options.maxHistory` (M6) — bounds `past` so a long editing session doesn't grow this array
+// without limit. Optional and defaulting to 100 (this milestone's own starting budget) so the
+// existing 3-arg legacy call sites (Theme/Layout editors) keep compiling and behaving exactly as
+// before — they stay effectively uncapped only in the sense that 100 is generous for their
+// short-lived sessions, not because the cap doesn't apply to them.
+export function useEditorHistory<T>(
+  sessionKey: unknown,
+  getSnapshot: () => T,
+  applySnapshot: (s: T) => void,
+  options?: { maxHistory?: number },
+) {
+  const maxHistory = options?.maxHistory ?? 100;
   const [history, setHistory] = useState<HistoryState<T>>({ past: [], future: [] });
   const pendingCaptureRef = useRef<T | null>(null);
 
@@ -47,7 +64,13 @@ export function useEditorHistory<T>(sessionKey: unknown, getSnapshot: () => T, a
     const captured = pendingCaptureRef.current;
     pendingCaptureRef.current = null;
     if (!captured) return;
-    setHistory(h => ({ past: [...h.past, captured], future: [] }));
+    setHistory(h => ({ past: [...h.past, captured].slice(-maxHistory), future: [] }));
+  }
+  // M6 — the discard half of the captureForHistory/commitCaptured pair: drops a pending capture
+  // without pushing it to `past`, for a caller (designer2's `history.store.ts`) that determined,
+  // via its own live post-mutation check, that the bracketed mutation was a no-op.
+  function discardCaptured() {
+    pendingCaptureRef.current = null;
   }
   function commit(mutator: () => void) {
     captureForHistory();
@@ -94,6 +117,6 @@ export function useEditorHistory<T>(sessionKey: unknown, getSnapshot: () => T, a
   return {
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,
-    undo, redo, commit, captureForHistory, commitCaptured,
+    undo, redo, commit, captureForHistory, commitCaptured, discardCaptured,
   };
 }

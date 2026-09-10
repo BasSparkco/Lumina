@@ -87,4 +87,56 @@ describe('persistent viewport synchronization', () => {
     expect(mock.initialize).toHaveBeenCalledTimes(1);
     expect(mock.fitToViewport).toHaveBeenCalledTimes(1);
   });
+
+  // M6 — restoreSnapshot (undo/redo, VersionsPanel restore) must not force a scene switch when the
+  // restored document still has the currently-active scene; only loadDocument (a genuine fresh
+  // load) resets to scene 0. This is what stops an undo on a non-first scene from fully
+  // reconstructing the canvas (adapter.clear() + rebuild + restarted scene-enter animations) purely
+  // because the old `loadDocument`-based restore unconditionally reset activeSceneId.
+  it('restoreSnapshot does not reconstruct the canvas when the restored document keeps the active scene', async () => {
+    const state = useDesignerStore.getState();
+    const scene1 = state.document!.scenes[0]!;
+    state.addScene({ ...scene1, id: 'scene_2', elements: [] });
+    state.setActiveScene('scene_2');
+    mount();
+    await waitFor(() => expect(mock.syncScene).toHaveBeenCalledTimes(1));
+    const clearCalls = mock.clear.mock.calls.length;
+    const syncCalls = mock.syncScene.mock.calls.length;
+
+    await act(async () => {
+      const doc = useDesignerStore.getState().document!;
+      const restoredElement = createShapeElement('rectangle', doc.canvas, []);
+      // A realistic undo/redo restore: the active scene's *content* changed (an element was
+      // added/removed by the undone edit), producing a new scene object at the same id — not a
+      // no-op restore.
+      useDesignerStore.getState().restoreSnapshot({
+        ...doc,
+        scenes: doc.scenes.map((s) => s.id === 'scene_2' ? { ...s, elements: [restoredElement] } : s),
+      });
+    });
+
+    expect(useDesignerStore.getState().activeSceneId).toBe('scene_2');
+    expect(mock.clear).toHaveBeenCalledTimes(clearCalls); // no extra clear — same scene
+    expect(mock.syncScene.mock.calls.length).toBeGreaterThan(syncCalls); // content still reconciled
+  });
+
+  it('restoreSnapshot does reconstruct when the restored document no longer has the active scene', async () => {
+    const state = useDesignerStore.getState();
+    const scene1 = state.document!.scenes[0]!;
+    state.addScene({ ...scene1, id: 'scene_2', elements: [] });
+    state.setActiveScene('scene_2');
+    mount();
+    await waitFor(() => expect(mock.syncScene).toHaveBeenCalledTimes(1));
+    const clearCalls = mock.clear.mock.calls.length;
+
+    await act(async () => {
+      const doc = useDesignerStore.getState().document!;
+      // scene_2 no longer present — restoreSnapshot's own fallback lands on scenes[0], which is a
+      // genuine scene-identity change CanvasViewport must still treat as one.
+      useDesignerStore.getState().restoreSnapshot({ ...doc, scenes: [doc.scenes[0]!] });
+    });
+
+    expect(useDesignerStore.getState().activeSceneId).toBe(scene1.id);
+    expect(mock.clear.mock.calls.length).toBeGreaterThan(clearCalls);
+  });
 });

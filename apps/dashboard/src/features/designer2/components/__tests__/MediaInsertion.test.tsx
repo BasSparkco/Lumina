@@ -11,7 +11,7 @@ import { DesignerShell } from '../DesignerShell';
 import { useDesignerStore } from '../../state/designer.store';
 
 vi.mock('@/lib/api', () => ({ assetsApi: { list: vi.fn(), get: vi.fn(), upload: vi.fn(), touch: vi.fn(async () => {}) } }));
-vi.mock('../../hooks/useAutosave', () => ({ useAutosave: () => 'idle', clearLocalDraft: vi.fn() }));
+vi.mock('../../hooks/useAutosave', () => ({ useAutosave: () => ({ status: 'idle', cancelPending: vi.fn() }), clearLocalDraft: vi.fn() }));
 vi.mock('@/hooks/useConfirmBeforeDelete', () => ({ useConfirmBeforeDelete: () => ({ confirmDelete: () => true }) }));
 vi.mock('../CanvasViewport', () => ({ CanvasViewport: () => null }));
 vi.mock('../InspectorPanel', () => ({ InspectorPanel: () => null }));

@@ -24,7 +24,29 @@ section just orients a fresh session fast; the plan doc is the source of truth.
   would have silently broken Undo for every editor sharing that hook, not
   just designer2 — do not re-attempt that exact approach; the record explains
   why).
-- **M6 (history/save/recovery) through M8 (perf hardening): not started.**
+- **M6 (history/save/recovery correctness): implemented 2026-09-10, not yet
+  deployed.** Undo/redo restores via a new `restoreSnapshot` action instead of
+  reusing the initial-document-load action — scene/selection are now
+  preserved instead of every undo forcing a jump back to scene 0 (which used
+  to fully reconstruct the canvas as a side effect). History is capped at 100
+  entries and gained a structurally-correct no-op suppression (a prior
+  session's hook-level attempt at this was already known-broken and reverted
+  — this one uses a live store accessor, not a React-render-time snapshot;
+  see the plan doc for exactly why that distinction matters). Autosave now
+  cancels its own pending timers when a manual Save starts (was: a delayed
+  autosave could resurrect a `DesignDraft` row the save just deleted), rejects
+  stale out-of-order responses, and scopes local-storage recovery by org (was:
+  unscoped, so a stale draft could leak across tenants or template clones
+  sharing a document id). The server's manual-save revision check is now a
+  real atomic guard (`updateMany` inside an interactive transaction) — closes
+  a genuine race where two concurrent saves could both pass the old app-level
+  check and both write, with no 409 to either caller. Template cloning now
+  gives every clone its own document id (was: cloning the same template twice
+  produced two designs sharing one id, colliding their drafts/local-recovery
+  keys). See the plan doc's M6 implementation record for full detail,
+  including one deliberately-deferred item (server-side draft-sequence
+  ordering — judged unnecessary given the other fixes; documented, not built).
+- **M7 (editing UX/snapping/preview), M8 (perf hardening): not started.**
 - **Same-day M5 production regression, found and fixed 2026-09-10**: the user
   reported that inserting an image then just moving it made the image jump
   down-right within its box, showing only ~25% of it. Root cause:
@@ -48,7 +70,7 @@ section just orients a fresh session fast; the plan doc is the source of truth.
 
 Point it at `docs/designer/designer_modernization_plan.md` first, then this
 file. The plan doc's "Milestones" section has the full task list per milestone
-and its own "M0–M5" implementation records document exactly what shipped, with
+and its own "M0–M6" implementation records document exactly what shipped, with
 file paths, root causes, and what was deliberately left out and why. Don't
 re-derive the audit — it's already done and still accurate as of 2026-09-10.
 
@@ -74,7 +96,7 @@ back to `pre-m5imgfix-20260910` (dashboard, = the fifth deployment's
 fifth deployment) — check `docker images` for what's actually still present
 before assuming further back.
 
-## The single biggest gap across all of M0–M5
+## The single biggest gap across all of M0–M6
 
 **Every verification has been `jsdom`/Vitest (dashboard) or Jest (api) only.
 No real-browser end-to-end test of the canvas — drag, rotate, multi-select,

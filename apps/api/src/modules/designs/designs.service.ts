@@ -198,15 +198,34 @@ export class DesignsService {
   // customer-facing "clone any template id" endpoint. That designJson is already-trusted
   // Super-Admin content, not re-validated for asset ownership here — a Template's own media is
   // platform-shared rather than tenant-owned by design.
+  // designer_modernization_plan.md M6 — the embedded `designJson.id` (minted once, when the
+  // Template itself was authored — see buildBlankDesignDocument) used to be copied verbatim into
+  // every clone. Cloning the same Template twice (same org or different orgs) produced two
+  // DesignAsset rows whose `designJson.id` was byte-identical — colliding DesignDraft's own
+  // `@@unique([organizationId, documentId])` key between two logically-independent designs (a
+  // same-org double-clone's autosave upsert would cross-contaminate the two), and colliding their
+  // `localStorage` recovery keys in the same browser. Regenerated here, on every clone, using the
+  // exact same minting convention buildBlankDesignDocument uses. Deliberately only the *top-level*
+  // document id, via a plain structural spread — not `validateDesignJson`, which would additionally
+  // re-parse/normalize (and silently strip any field not in the current schema) the whole document;
+  // this class's own existing comment on `source` is deliberate about not re-validating already-
+  // trusted Super-Admin template content here, and this fix shouldn't change that. Nested
+  // `scenes[].id`/`elements[].id` are never regenerated — they're never compared across documents
+  // (DesignDraft's key and the localStorage key are both top-level-documentId-only; scene/element
+  // ids only need to be unique within one open document), so regenerating them would be
+  // unnecessary churn with no correctness benefit. No schema migration (designJson is a plain JSON
+  // column) and no backfill of existing clones — only new clones going forward are affected, per
+  // this effort's own "do not indiscriminately re-ID saved designs" compatibility rule.
   async createFromTemplate(
     orgId: string,
     source: { id: string; name: string; designJson: Prisma.JsonValue; schemaVersion: number; versionNumber: number },
   ) {
+    const designJson = { ...(source.designJson as object), id: `design_${crypto.randomUUID()}` };
     return this.prisma.designAsset.create({
       data: {
         organizationId: orgId,
         name: source.name,
-        designJson: source.designJson as Prisma.InputJsonValue,
+        designJson,
         schemaVersion: source.schemaVersion,
         sourceTemplateId: source.id,
         sourceTemplateVersion: source.versionNumber,
@@ -238,13 +257,23 @@ export class DesignsService {
   // DesignAssetVersion — "do not create a version row for every mouse movement" is satisfied by
   // this being the *manual* save path only; autosave writes to DesignDraft instead and never
   // reaches here.
+  //
+  // designer_modernization_plan.md M6 — the revision check used to be an app-level compare
+  // (`dto.revision !== existing.revision`) against a value read by a *separate*, earlier query,
+  // followed by an unconditional `designAsset.update({where:{id}})` with no revision guard on the
+  // write itself. Two concurrent PATCH requests that both read the same `existing.revision` before
+  // either wrote would both pass that check and both write — `revision:{increment:1}` (a relative
+  // op) silently double-incremented the row and created two DesignAssetVersion rows for what the
+  // client believed were two independently-serialized saves, with no 409 to either caller. Fixed
+  // by folding the revision check into the write itself (`updateMany`'s `WHERE`, which takes a row
+  // lock) inside an *interactive* transaction — the array form of `$transaction` doesn't roll back
+  // when `updateMany` matches zero rows (that's not an error to Prisma, just an empty result), so
+  // this must be the callback form, which lets `count === 0` explicitly `throw` and roll back the
+  // whole transaction (version-create and draft-delete included) before anything is written.
   async update(orgId: string, id: string, dto: DesignDto) {
     const existing = await this.findOne(orgId, id);
     if (dto.revision === undefined) throw new BadRequestException('revision is required');
     if (dto.designJson === undefined) throw new BadRequestException('designJson is required');
-    if (dto.revision !== existing.revision) {
-      throw new ConflictException('This design was saved elsewhere — reload to see the latest version.');
-    }
     const designJson = this.validateDesignJson(dto.designJson);
     await this.assertAssetsOwned(orgId, designJson);
     if (existing.sourceTemplateId && existing.sourceTemplateVersion) {
@@ -259,34 +288,44 @@ export class DesignsService {
       }
     }
 
-    const lastVersion = await this.prisma.designAssetVersion.findFirst({
-      where: { designAssetId: id },
-      orderBy: { versionNumber: 'desc' },
-      select: { versionNumber: true },
-    });
-    const nextVersionNumber = (lastVersion?.versionNumber ?? 0) + 1;
-
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.designAsset.update({
-        where: { id },
+    return this.prisma.$transaction(async (tx) => {
+      // The atomic guard: only matches (and only then increments) if the row's revision still
+      // equals what the client last saw. A concurrent racer's transaction blocks on this row's
+      // lock until this one commits or rolls back, then re-evaluates against the now-current
+      // revision — so at most one of two simultaneous requests for the same stale revision can
+      // ever match.
+      const { count } = await tx.designAsset.updateMany({
+        where: { id, organizationId: orgId, revision: dto.revision },
         data: {
           name: dto.name ?? existing.name,
           designJson: designJson,
           schemaVersion: designJson.schemaVersion,
           revision: { increment: 1 },
         },
-      }),
-      this.prisma.designAssetVersion.create({
+      });
+      if (count === 0) {
+        throw new ConflictException('This design was saved elsewhere — reload to see the latest version.');
+      }
+      // Read *after* the count check, inside the same transaction — the row lock `updateMany`
+      // took above means a concurrent racer's version-number read can't interleave with this one
+      // and collide on DesignAssetVersion's own @@unique([designAssetId, versionNumber]).
+      const lastVersion = await tx.designAssetVersion.findFirst({
+        where: { designAssetId: id },
+        orderBy: { versionNumber: 'desc' },
+        select: { versionNumber: true },
+      });
+      await tx.designAssetVersion.create({
         data: {
           designAssetId: id,
-          versionNumber: nextVersionNumber,
+          versionNumber: (lastVersion?.versionNumber ?? 0) + 1,
           designJson: designJson,
           schemaVersion: designJson.schemaVersion,
         },
-      }),
-      this.prisma.designDraft.deleteMany({ where: { documentId: designJson.id, organizationId: orgId } }),
-    ]);
-    return updated;
+      });
+      await tx.designDraft.deleteMany({ where: { documentId: designJson.id, organizationId: orgId } });
+      // updateMany doesn't return the updated row itself — one extra read on the success path.
+      return tx.designAsset.findUniqueOrThrow({ where: { id } });
+    });
   }
 
   // PUT /designs/:id/name — a lightweight rename, deliberately separate from update() (the manual-

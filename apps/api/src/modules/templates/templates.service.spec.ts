@@ -165,4 +165,37 @@ describe('TemplatesService — customer resolution reads the immutable published
       }),
     );
   });
+
+  // designer_modernization_plan.md M6 — the embedded designJson.id used to be copied verbatim
+  // from the source template's published version into every clone, so cloning the same template
+  // twice produced two DesignAsset rows sharing the same document id — colliding DesignDraft's
+  // (organizationId, documentId) unique key and the dashboard's localStorage recovery key between
+  // two logically-independent designs. Confirms each clone now gets its own fresh id.
+  it('createDesign gives each clone of the same Template a distinct embedded document id', async () => {
+    const sharedPublishedDesignJson = docWithImage('asset_published');
+    const { service, prisma } = makeService({
+      id: 'tmpl_1',
+      name: 'Template',
+      description: null,
+      category: 'GENERIC',
+      thumbnailAssetId: null,
+      publishedAt: new Date('2026-09-01'),
+      designJson: docWithImage('asset_live_draft_only'),
+      publishedVersion: { versionNumber: 5, designJson: sharedPublishedDesignJson, schemaVersion: 1 },
+    });
+
+    await service.createDesign('org_1', 'tmpl_1');
+    await service.createDesign('org_1', 'tmpl_1');
+
+    const create = prisma.designAsset.create as jest.Mock;
+    expect(create).toHaveBeenCalledTimes(2);
+    const firstDesignJson = create.mock.calls[0]![0].data.designJson as { id: string };
+    const secondDesignJson = create.mock.calls[1]![0].data.designJson as { id: string };
+    expect(firstDesignJson.id).not.toBe(secondDesignJson.id);
+    expect(firstDesignJson.id).not.toBe(sharedPublishedDesignJson.id);
+    // Every other field of the cloned document is untouched — only the top-level id changes.
+    expect(firstDesignJson).toMatchObject({ name: sharedPublishedDesignJson.name, scenes: sharedPublishedDesignJson.scenes });
+    // Regression-guard the existing provenance assertions alongside the new id-uniqueness check.
+    expect(create.mock.calls[0]![0].data).toMatchObject({ organizationId: 'org_1', sourceTemplateId: 'tmpl_1', sourceTemplateVersion: 5 });
+  });
 });

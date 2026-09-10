@@ -9,8 +9,9 @@ Reviewed: 2026-09-09. Scope: the current working tree, including the recent inli
 - **M2 — direct media insertion: implemented (2026-09-09).**
 - **M3 — coordinate/rotation contract: substantially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization, skew/flip decision, and zoom-invariance tests are done; production's designs were checked directly (8 designs, 22 elements, 0 templates) and contain zero rotated elements, so the legacy-frame normalization task is currently moot — nothing to migrate. Only DPR/retina pixel-rendering tests (need a real browser canvas rasterizer, not achievable in jsdom) remain open. See the implementation records below.
 - **M4 — layers/selection: complete (2026-09-10).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection), server-side Template policy enforcement in `apps/api` (deployed), and Layers-panel action discoverability (rename/visibility/lock/duplicate/delete/reorder/keyboard DnD) all shipped.
-- **M5 — property updates/text editing: implemented (2026-09-10), not deployed.** Full live-property adapter mapping, image style edits patch in place instead of recreating the Fabric object, `useEditSession` begin/preview/commit/cancel hook, color-drag/no-op history fixes, bound-text read-only fix, font-ready measurement, template-policy field gating. See the implementation record below — including a caught-in-development regression (a hook-level no-op safety net that would have broken Undo everywhere) that was reverted rather than shipped.
-- **M6–M8: planned.**
+- **M5 — property updates/text editing: complete and deployed (2026-09-10).** Full live-property adapter mapping, image style edits patch in place instead of recreating the Fabric object, `useEditSession` begin/preview/commit/cancel hook, color-drag/no-op history fixes, bound-text read-only fix, font-ready measurement, template-policy field gating. See the implementation record below — including a caught-in-development regression (a hook-level no-op safety net that would have broken Undo everywhere) that was reverted rather than shipped, and a same-day production regression (image position drag) found and fixed after the first deploy.
+- **M6 — history, save and recovery correctness: implemented (2026-09-10), not deployed.** Undo/redo no longer reuses the initial-load action (scene/selection now preserved), a bounded+no-op-suppressed history, autosave/manual-save race coordination (cancel-on-save, stale-ack rejection, org-scoped local recovery), an atomic server-side revision guard closing a real concurrent-save race, and the template-clone document-id collision bug fixed. See the implementation record below.
+- **M7–M8: planned.**
 - **Approach A, with the synchronization foundation refactored first.** Keep Fabric, the adapter boundary, Zustand, Lumina Design JSON, tenant Asset storage, published Template snapshots, and the DOM Player. Replace whole-scene reconstruction during ordinary editing. Do not replace the editor framework or persistence model.
 - The initial M0 review stopped at the milestone plan as requested by [improve designer2.md §28](../../improve%20designer2.md). The user subsequently authorized M1 and M2, then M3. Their implementation records are below; the rest of M3 is next, with permission constraints carried into every command from the outset.
 - `status.md` is a frozen archive; this document tracks modernization instead. Existing unrelated working-tree changes are outside this task.
@@ -208,7 +209,7 @@ Each milestone is a reviewable change set with its own passing checks. No global
 - Acceptance: preview and committed appearance match; one meaningful history action per interaction; unrelated objects retain identity.
 - Compatibility: reuse existing fields and adjustment contracts. Approximate Fabric filters versus exact Player filters require documented parity tests, not silently dropping stored values.
 
-### M6 — History, save and recovery correctness
+### M6 — History, save and recovery correctness (implemented 2026-09-10, not deployed)
 
 - Problem/root cause: undo uses initial load action, unrestricted snapshot count, draft races, clone document-ID reuse and non-atomic manual revision checks.
 - Files: designer/history stores, `useEditorHistory.ts` (avoid legacy regression), autosave, shell/page save paths, designs service/schema as required, recovery tests.
@@ -726,3 +727,125 @@ image on every subsequent property update, including a plain position change.
   passing (up from 142). `tsc --noEmit`, `eslint`, `next build` all clean.
 - Deployed 2026-09-10 (`lumina-dashboard:m5imgfix-20260910`, dashboard only — this fix never
   touched `apps/api`) — see designer2-m3-deployment.md's sixth deployment section.
+
+
+## M6 implementation record — History, save and recovery correctness — 2026-09-10
+
+Closes M6's stated task list: undo/redo no longer reuses the initial-load action, a bounded
+history with a structurally-correct no-op suppression, autosave/manual-save race coordination,
+an atomic server-side revision guard, and the template-clone document-id collision bug.
+
+- **Distinct restore vs. load** (`designer.store.ts`, `history.store.ts`): confirmed by direct
+  trace that undo/redo's `applySnapshot` called the exact same `loadDocument` action used for a
+  genuine first load, which unconditionally reset `activeSceneId` to `scenes[0]` and cleared
+  `selectedElementIds` on every undo — forcing `CanvasViewport`'s scene-sync effect to treat any
+  undo on a non-first scene as a full scene switch (adapter `clear()` + rebuild + restarted
+  scene-enter animations), even when the undone edit was local to the active scene. Added
+  `restoreSnapshot` (preserves `activeSceneId`/`selectedElementIds` when they still exist in the
+  restored document, falling back to scene 0 / a narrowed selection when they don't); `loadDocument`
+  stays exactly as-is for genuine first-load call sites. `DesignerShell.handleRestored`
+  (VersionsPanel restore) switched to `restoreSnapshot` too — it's semantically a restore, not a
+  fresh load. `useEditorHistory.ts`'s own signature/behavior was **not** touched for this part — the
+  distinction is entirely owned by designer2's own wiring, keeping the shared hook's blast radius
+  on the untested legacy Theme/Layout editors at zero for this change.
+- **`CanvasViewport`**: confirmed by test (not assumption) that no additional change was needed —
+  once `restoreSnapshot` stops force-resetting the active scene, an undo/redo that doesn't touch it
+  leaves the scene-sync effect's key unchanged, so no reconstruction happens; `adapter.syncScene`
+  still runs and reconciles content in place, and a genuine scene-identity change (the fallback
+  case) still correctly triggers a full rebuild.
+- **History cap + no-op suppression** (`useEditorHistory.ts`, `history.store.ts`): added an
+  optional 4th `options.maxHistory` param (default 100, this milestone's own suggested budget) —
+  fully backward-compatible, the legacy editors' existing 3-arg call sites are unaffected. For
+  no-op suppression: a prior session's hook-level attempt (compare a captured "before" snapshot
+  against a fresh `getSnapshot()` call immediately after the mutator runs) was already known-broken
+  and reverted (`getSnapshot` closes over React-render-time state — re-reading it synchronously
+  post-mutation returns the same pre-mutation value). This time, `history.store.ts` wraps `commit`
+  one level up using `useDesignerStore.getState()` — a live external accessor, not a render-time
+  closure — comparing the `document` reference before/after the mutator runs; every designer2 store
+  mutation that actually changes something produces a new object reference by construction, so
+  reference equality is a correct, cheap "did nothing happen" signal. Added `discardCaptured()` to
+  the shared hook (additive, inert for legacy callers) so `history.store.ts` can drop a capture it
+  determined was a no-op without pushing it. Verified this doesn't hit the reverted bug's failure
+  mode with a real test (`history.store.test.ts`'s "pushes exactly one history entry for a real
+  mutation" — this would fail the same way the reverted fix did, if the same staleness bug were
+  present, since it exercises the real `commit` through real React re-renders).
+- **Batching**: audited, not assumed — confirmed `onElementsModified` (multi-select drag/rotate)
+  already wraps its per-element loop in one `commit()` call, not one per element. No gap, no change.
+- **Autosave coordination** (`useAutosave.ts`, `DesignerShell.tsx`): `useAutosave` now returns
+  `{status, cancelPending}`. `DesignerShell.handleSave` calls `cancelPending()` first — before its
+  own network call — so a stale autosave timer scheduled just before Save can never fire afterward
+  and resurrect a `DesignDraft` row Save's own transaction is about to delete (confirmed root
+  cause: the pre-M6 hook had no channel for `handleSave` to reach in and cancel its pending timers
+  at all). A monotonic per-hook-instance `requestSeq` rejects a stale out-of-order or
+  already-in-flight-when-cancelled response from clobbering a newer status. Offline handling: kept
+  the existing pre-flight `navigator.onLine` check, added a single-shot `online` event nudge (not a
+  polling retry loop) for "stopped editing while offline, connectivity returned with no further
+  edit to trigger a natural retry." "Flush accepted edits before Save" confirmed a non-issue, no
+  code needed — `document` in the store only ever reflects committed values (M5's `useEditSession`
+  keeps in-flight drag/typing in local component state), so `handleSave` reading `document` is
+  already correct by construction.
+- **Local draft recovery scoping** (`useAutosave.ts`, `page.tsx`): local-storage key/payload now
+  scoped by `organizationId` (`localDraftKey`, `LocalDraft` payload carries `organizationId`/
+  `documentId` redundantly so `readLocalDraft` can validate them defensively, not just imply them
+  from the key), with a best-effort cleanup of the pre-M6 unscoped key on every read so a stale
+  entry can't be resurrected by a future code path that forgets the new scoping. `page.tsx`'s
+  recovery check gained a pulled-out, directly-testable `resolveLocalDraftRecovery` (freshness +
+  `DesignDocumentSchema.safeParse` shape validation) — a malformed/stale-shape payload is safely
+  skipped, never applied or thrown, without needing to mount the page's full routing/auth/dynamic-
+  import wiring in a test. `orgId` is threaded from `useAuth()` (`page.tsx`) down through a new
+  `DesignerShell` prop, matching the existing `isSuperAdmin` convention rather than having
+  `DesignerShell` call `useAuth()` directly (which would have broken `MediaInsertion.test.tsx`,
+  which mounts `DesignerShell` without an `AuthProvider`).
+- **Server-side atomic revision guard** (`designs.service.ts` `update()`): the pre-M6 check
+  compared `dto.revision` against a value read by a separate, earlier `findOne` query, then did an
+  unconditional `designAsset.update({where:{id}})` — confirmed exploitable: two concurrent requests
+  reading the same revision both pass the check and both write, silently double-incrementing
+  revision with no 409 to either caller. Replaced with a conditional `updateMany({where:{id,
+  organizationId, revision: dto.revision}})` inside an **interactive** transaction (not the
+  previous array-form `$transaction([...])`, which doesn't roll back when `updateMany` matches zero
+  rows — that's not an error to Prisma) — `count === 0` explicitly throws `ConflictException`,
+  rolling back the whole transaction including the version-create and draft-delete. The version-
+  number read was moved inside the transaction, after the count check, so it's protected by the
+  same row lock `updateMany` takes and can't race a concurrent request's own version-number read
+  into colliding on `DesignAssetVersion`'s `@@unique([designAssetId, versionNumber])`. No Prisma
+  migration — same `revision` column, different query shape. `restoreVersion` intentionally stays
+  unconditional per its own existing comment (a deliberate user action, not a background-sync
+  race) — not touched.
+- **Template clone document-id regeneration** (`designs.service.ts` `createFromTemplate`):
+  confirmed real — the embedded `designJson.id` was copied verbatim from the template's published
+  version into every clone, so cloning the same template twice produced two `DesignAsset` rows
+  sharing one document id, colliding `DesignDraft`'s `(organizationId, documentId)` key and the
+  `localStorage` recovery key between two logically-independent designs. Fixed with a plain
+  structural spread (`{...source.designJson, id: `design_${crypto.randomUUID()}`}`) — deliberately
+  **not** routed through `validateDesignJson`, which would have additionally re-parsed/normalized
+  (and silently stripped any field not in the current schema from) the whole document; this
+  service's own existing comment on `source` already documents that template content is
+  deliberately not re-validated here, and this fix shouldn't change that. Nested `scenes[].id`/
+  `elements[].id` are not regenerated — confirmed no consumer compares them across documents. No
+  schema migration, no backfill of existing clones (only new clones going forward are fixed, per
+  this effort's "do not indiscriminately re-ID saved designs" rule) — flagged as a known, low-
+  exposure, unremediated pre-existing-data caveat.
+- **Server-side draft race protection: deliberately deferred, no schema migration.** The plan's
+  "draft races" root cause is addressed by the autosave cancel-on-save fix (removes a client's own
+  stale-timer-after-its-own-Save case) and the clone-id fix (removes the main source of *different*
+  documents colliding on one `documentId`). The residual case — a PUT already in flight the instant
+  Save starts — isn't harmful even unmitigated: `DesignDraft` is explicitly non-authoritative
+  recovery data, and Save's own transaction deletes it regardless. A sequence-number column + DTO/
+  API plumbing + legacy-recovery-default design for true multi-tab draft ordering was judged a
+  materially larger, riskier change for a benefit already mostly captured — not built. If product
+  evidence later shows real multi-tab draft collisions, the documented future shape is a
+  `sequence Int @default(0)` column (existing rows default to always-overwritable, a safe legacy
+  path with no migration complexity beyond Prisma's own default-value handling).
+- Tests: dashboard suite grew from 142 to 175 (33 new — `useEditorHistory.test.ts` cap/discard/
+  legacy-calling-shape smoke tests, `designer.store.test.ts` restore/fallback/narrowing,
+  `history.store.test.ts` no-op suppression and same-scene undo, two new `CanvasViewport.test.tsx`
+  cases for the reconstruction-avoidance behavior, `useAutosave.test.ts` (cancel-on-save, stale-ack
+  rejection, offline/online, org-scoped local drafts, tenant-switch), and a new `page.test.tsx` for
+  `resolveLocalDraftRecovery`). API suite grew from 284 to 286 (2 new — the true concurrent-update
+  409/single-version-row test in `designs.service.spec.ts`, the clone-id-uniqueness test in
+  `templates.service.spec.ts`; the existing revision-conflict and Template-policy mock harnesses
+  were upgraded to support Prisma's interactive-transaction callback form, not just the array
+  form). Full `tsc --noEmit`, `eslint` (0 errors), `next build`, and `nest build` all clean on both
+  apps.
+- Not deployed as part of this milestone — implementation and verification only, per this effort's
+  established pattern of a separate deploy decision.

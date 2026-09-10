@@ -10,6 +10,16 @@ interface DesignerState {
   clipboard: DesignElement[];
 
   loadDocument: (doc: DesignDocument) => void;
+  // designer_modernization_plan.md M6 — the undo/redo and VersionsPanel-restore counterpart to
+  // `loadDocument`: unlike a genuine first load (template fetch, draft recovery, blank doc — where
+  // there is no "current scene" worth preserving), a restore keeps the current `activeSceneId`/
+  // `selectedElementIds` when they still exist in the restored document, only falling back to
+  // scene 0 / empty selection when they don't (e.g. the active scene or selected elements were
+  // themselves deleted by the undone/redone edit). Previously `loadDocument` was reused for this
+  // too, which unconditionally reset both on every undo/redo — forcing CanvasViewport to treat an
+  // undo that only touched the active scene as a scene switch (full clear + rebuild + restarted
+  // scene-enter animations).
+  restoreSnapshot: (doc: DesignDocument) => void;
   setSelection: (ids: string[]) => void;
   clearSelection: () => void;
   setZoom: (zoom: number) => void;
@@ -79,6 +89,15 @@ export const useDesignerStore = create<DesignerState>((set, get) => ({
   clipboard: [],
 
   loadDocument: (doc) => set({ document: doc, activeSceneId: doc.scenes[0]?.id ?? null, selectedElementIds: [] }),
+  restoreSnapshot: (doc) => set((state) => {
+    const activeSceneId =
+      state.activeSceneId && doc.scenes.some((s) => s.id === state.activeSceneId)
+        ? state.activeSceneId
+        : (doc.scenes[0]?.id ?? null);
+    const validElementIds = new Set(doc.scenes.find((s) => s.id === activeSceneId)?.elements.map((el) => el.id) ?? []);
+    const selectedElementIds = state.selectedElementIds.filter((id) => validElementIds.has(id));
+    return { document: doc, activeSceneId, selectedElementIds };
+  }),
   setSelection: (ids) => set({ selectedElementIds: ids }),
   clearSelection: () => set({ selectedElementIds: [] }),
   setZoom: (zoom) => set({ zoom }),

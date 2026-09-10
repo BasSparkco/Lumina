@@ -3,12 +3,25 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { buildBlankDesignDocument, DesignDocumentSchema } from '@lumina/design-schema';
+import { buildBlankDesignDocument, DesignDocumentSchema, type DesignDocument } from '@lumina/design-schema';
 import { useDesignerStore } from '@/features/designer2/state/designer.store';
-import { readLocalDraft } from '@/features/designer2/hooks/useAutosave';
+import { readLocalDraft, type LocalDraft } from '@/features/designer2/hooks/useAutosave';
+import { useAuth } from '@/context/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useRouteGuard } from '@/hooks/useRouteGuard';
 import { adminTemplatesApi, designDraftsApi, designsApi } from '@/lib/api';
+
+// designer_modernization_plan.md M6 — the actual "should this local draft be applied" decision,
+// pulled out as a pure function so it's directly testable without mounting this page's full
+// effect/routing/auth wiring. `local` is already org/documentId-validated by `readLocalDraft`
+// itself; this only adds the freshness check and a schema-shape validation — a malformed or
+// pre-migration-format payload (the "stale recovery JSON" case) is safely skipped, never applied
+// or thrown.
+export function resolveLocalDraftRecovery(local: LocalDraft | null, design: { updatedAt: string }): DesignDocument | null {
+  if (!local || !(new Date(local.savedAt) > new Date(design.updatedAt))) return null;
+  const parsed = DesignDocumentSchema.safeParse(local.document);
+  return parsed.success ? parsed.data : null;
+}
 
 // Fabric touches window/document at construction time — the whole shell is meaningless (and
 // unsafe) to render during SSR.
@@ -36,6 +49,8 @@ function Designer2PageInner() {
   const templateIdParam = searchParams.get('templateId');
   const designIdParam = searchParams.get('designId');
   const { isSuperAdmin } = usePermissions();
+  const { user } = useAuth();
+  const orgId = user?.orgId ?? null;
   const canRender = useRouteGuard(!templateIdParam || isSuperAdmin, 'designer2');
   const loadDocument = useDesignerStore((s) => s.loadDocument);
   // Tracks which source (a specific templateId/designId, or the sentinel 'blank') has already
@@ -89,9 +104,13 @@ function Designer2PageInner() {
           // prefer a draft over the saved content if one exists and is actually newer. Local
           // first (no network round-trip needed to know it exists), backend as a fallback for
           // "crashed on a different device/browser."
-          const local = readLocalDraft(design.designJson.id);
-          if (local && new Date(local.savedAt) > new Date(design.updatedAt)) {
-            loadDocument(local.document);
+          // designer_modernization_plan.md M6 — org-scoped (readLocalDraft validates the payload's
+          // own identity fields against what was asked for — the "tenant switch" protection) and
+          // schema-validated (resolveLocalDraftRecovery — the "stale recovery JSON" protection).
+          const local = orgId ? readLocalDraft(orgId, design.designJson.id) : null;
+          const recovered = resolveLocalDraftRecovery(local, design);
+          if (recovered) {
+            loadDocument(recovered);
             return;
           }
           const draft = await designDraftsApi.get(design.designJson.id).catch(() => null);
@@ -106,7 +125,7 @@ function Designer2PageInner() {
     }
 
     loadDocument(buildBlankDesignDocument('Untitled Design'));
-  }, [canRender, templateIdParam, designIdParam, loadDocument]);
+  }, [canRender, templateIdParam, designIdParam, loadDocument, orgId]);
 
   // designer.md Phase 10 — the first successful save (create) gets this design a real id for the
   // first time; reflect it in the URL (replace, not push — a blank editor turning into a saved
@@ -151,6 +170,7 @@ function Designer2PageInner() {
         onDesignSaved={handleDesignSaved}
         isSuperAdmin={isSuperAdmin}
         onTemplateSaved={handleTemplateSaved}
+        orgId={orgId}
       />
     </div>
   );

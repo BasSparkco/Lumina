@@ -114,38 +114,71 @@ describe('DesignsService — stale revision conflict', () => {
   const DESIGN_ID = 'design_1';
   const blankDoc = buildBlankDesignDocument('Test Design');
 
-  function makeService() {
+  // M6 — `update()` now guards the write itself with a conditional `updateMany({where:{revision}}))`
+  // inside an *interactive* transaction (`$transaction(async (tx) => ...)`), not a separate
+  // app-level revision compare followed by an unconditional `update`. The mock `$transaction` here
+  // supports both the pre-M6 array form (still used elsewhere in this service) and the callback
+  // form, invoking the callback with `prisma` itself as `tx` — real Prisma's `tx` client has the
+  // same shape, and reusing the same jest.fn()s means assertions against `prisma.designAsset.*`
+  // still observe calls made via `tx.designAsset.*` inside the service.
+  function makeService(revision = 5) {
     const prisma = {
       designAsset: {
-        findFirst: jest.fn().mockResolvedValue({ id: DESIGN_ID, organizationId: MY_ORG, revision: 5, name: 'Test', deletedAt: null }),
-        update: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: DESIGN_ID, organizationId: MY_ORG, revision, name: 'Test', deletedAt: null }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: DESIGN_ID, revision: revision + 1 }),
       },
       designAssetVersion: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
       designDraft: { deleteMany: jest.fn() },
       asset: { findMany: jest.fn().mockResolvedValue([]) },
-      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
+      $transaction: jest.fn((arg: unknown) =>
+        typeof arg === 'function' ? (arg as (tx: unknown) => Promise<unknown>)(prisma) : Promise.all(arg as Promise<unknown>[])),
     } as unknown as PrismaService;
     const orgScoped = new OrgScopedService();
     return { service: new DesignsService(prisma, orgScoped), prisma };
   }
 
-  it('update rejects a stale client revision without writing', async () => {
-    const { service, prisma } = makeService();
+  it('update rejects a stale client revision without writing a version or deleting the draft', async () => {
+    const { service, prisma } = makeService(5);
+    (prisma.designAsset.updateMany as jest.Mock).mockResolvedValue({ count: 0 }); // stale — no row matched
 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 4, designJson: blankDoc }),
     ).rejects.toThrow(ConflictException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAssetVersion.create).not.toHaveBeenCalled();
+    expect(prisma.designDraft.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('update succeeds and creates a version when the revision matches', async () => {
-    const { service, prisma } = makeService();
-    (prisma.designAsset.update as jest.Mock).mockResolvedValue({ id: DESIGN_ID, revision: 6 });
+  it('update succeeds, guards the write with the client\'s revision, and creates a version when it matches', async () => {
+    const { service, prisma } = makeService(5);
 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 5, designJson: blankDoc }),
     ).resolves.toBeDefined();
+    expect(prisma.designAsset.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: DESIGN_ID, organizationId: MY_ORG, revision: 5 }) }),
+    );
     expect(prisma.designAssetVersion.create).toHaveBeenCalled();
+  });
+
+  // M6 — the actual concurrency guarantee: two overlapping requests that both read the same
+  // pre-write revision (simulated here by both calling update() against a service instance whose
+  // mocked `updateMany` reports a match only the *first* time) — the second must be rejected with a
+  // real 409, not silently lose the race with no error, and only one DesignAssetVersion row must
+  // be created for the two attempts (the "two simultaneous revisions" / "rapid consecutive saves"
+  // required test scenario).
+  it('rejects the loser of two concurrent updates sharing the same stale revision, creating exactly one version', async () => {
+    const { service, prisma } = makeService(5);
+    (prisma.designAsset.updateMany as jest.Mock)
+      .mockResolvedValueOnce({ count: 1 }) // first request: matches, revision 5 -> 6
+      .mockResolvedValueOnce({ count: 0 }); // second request: row is now revision 6, its own WHERE revision:5 matches nothing
+
+    const first = service.update(MY_ORG, DESIGN_ID, { revision: 5, designJson: blankDoc });
+    const second = service.update(MY_ORG, DESIGN_ID, { revision: 5, designJson: blankDoc });
+
+    await expect(first).resolves.toBeDefined();
+    await expect(second).rejects.toThrow(ConflictException);
+    expect(prisma.designAssetVersion.create).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -185,7 +218,8 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
           id: DESIGN_ID, organizationId: MY_ORG, revision: 1, name: 'Test', deletedAt: null,
           sourceTemplateId: TEMPLATE_ID, sourceTemplateVersion: TEMPLATE_VERSION,
         }),
-        update: jest.fn().mockResolvedValue({ id: DESIGN_ID, revision: 2 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: DESIGN_ID, revision: 2 }),
       },
       designTemplateVersion: {
         findUnique: jest.fn().mockResolvedValue({ designJson: sourceDesignJson }),
@@ -193,7 +227,8 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
       designAssetVersion: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
       designDraft: { deleteMany: jest.fn() },
       asset: { findMany: jest.fn().mockResolvedValue([]) },
-      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops as Promise<unknown>[])),
+      $transaction: jest.fn((arg: unknown) =>
+        typeof arg === 'function' ? (arg as (tx: unknown) => Promise<unknown>)(prisma) : Promise.all(arg as Promise<unknown>[])),
     } as unknown as PrismaService;
     const orgScoped = new OrgScopedService();
     return { service: new DesignsService(prisma, orgScoped), prisma };
@@ -206,7 +241,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects changing the text content of a contentEditable:false element', async () => {
@@ -216,7 +251,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects changing the fill color of a styleEditable:false element', async () => {
@@ -226,7 +261,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects flipping templatePolicy.contentEditable from false to true (an unlock attempt)', async () => {
@@ -236,7 +271,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects deleting a deletable:false element', async () => {
@@ -246,7 +281,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects swapping a locked element to a different type under the same id', async () => {
@@ -262,7 +297,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: attempt }),
     ).rejects.toThrow(ForbiddenException);
-    expect(prisma.designAsset.update).not.toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).not.toHaveBeenCalled();
   });
 
   it('allows an unchanged locked element through (no false positive on a legitimate no-op save)', async () => {
@@ -272,7 +307,7 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: unchanged }),
     ).resolves.toBeDefined();
-    expect(prisma.designAsset.update).toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).toHaveBeenCalled();
   });
 
   it('allows freely editing a customer\'s own element alongside an untouched locked one', async () => {
@@ -289,6 +324,6 @@ describe('DesignsService — server-side Template layer policy enforcement', () 
     await expect(
       service.update(MY_ORG, DESIGN_ID, { revision: 1, designJson: edited }),
     ).resolves.toBeDefined();
-    expect(prisma.designAsset.update).toHaveBeenCalled();
+    expect(prisma.designAsset.updateMany).toHaveBeenCalled();
   });
 });

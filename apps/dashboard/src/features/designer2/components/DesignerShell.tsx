@@ -41,6 +41,12 @@ interface DesignerShellProps {
   // existing behavior. See handleSave's third branch below.
   isSuperAdmin?: boolean;
   onTemplateSaved?: (result: { id: string; name: string }) => void;
+  // designer_modernization_plan.md M6 — the current org, used to scope autosave's local recovery
+  // storage so it can never leak across tenants (or across two Template clones that happen to
+  // share an embedded document id). `null`/undefined while auth is still resolving; autosave's
+  // local-write path no-ops until it's available (the backend draft path doesn't need it — the
+  // server derives org from the authenticated request).
+  orgId?: string | null;
 }
 
 // Top-level layout, per designer.md §22's suggested UI:
@@ -57,10 +63,11 @@ export function DesignerShell({
   onDesignSaved,
   isSuperAdmin,
   onTemplateSaved,
+  orgId,
 }: DesignerShellProps) {
   const locale = useLocale();
   const document = useDesignerStore((s) => s.document);
-  const loadDocument = useDesignerStore((s) => s.loadDocument);
+  const restoreSnapshot = useDesignerStore((s) => s.restoreSnapshot);
   const renameDocument = useDesignerStore((s) => s.renameDocument);
   const activeSceneId = useDesignerStore((s) => s.activeSceneId);
   const zoom = useDesignerStore((s) => s.zoom);
@@ -83,7 +90,7 @@ export function DesignerShell({
   // designer.md §26 — Template authoring keeps its own simpler explicit-save-only flow (Phase 5);
   // autosave drafts are a plain-designer2 concern, so the hook gets `null` in Template mode and
   // its effect never fires.
-  const saveStatus = useAutosave(!templateId ? document : null);
+  const autosave = useAutosave(!templateId ? document : null, orgId ?? null);
   // designer.md Phase 6 — a Designer-only lightweight playback loop (not the shared design-runtime
   // Player, see SceneStrip's comment / designer.md's Phase 6 amendment). Cycles scenes via the same
   // Fabric adapter already used for editing, respecting each scene's durationMs, looping.
@@ -169,6 +176,11 @@ export function DesignerShell({
   // and was never telling the user this.
   async function handleSave() {
     if (!document) return;
+    // designer_modernization_plan.md M6 — cancels any pending local/backend autosave timer (and
+    // voids an already-in-flight one) before this save's own network call starts, so a stale
+    // autosave scheduled just before Save can never fire afterward and resurrect a DesignDraft row
+    // this save's own transaction is about to delete.
+    autosave.cancelPending();
     setSaving(true);
     setSaveError(null);
     try {
@@ -177,17 +189,17 @@ export function DesignerShell({
         flashSaveResult({ kind: 'template', name: updated.name, href: `/${locale}/admin/templates` });
       } else if (designId) {
         const updated = await designsApi.update(designId, { designJson: document, revision: designRevision ?? 1, name: document.name });
-        clearLocalDraft(document.id);
+        if (orgId) clearLocalDraft(orgId, document.id);
         onDesignSaved?.({ id: updated.id, revision: updated.revision });
         flashSaveResult({ kind: 'design', name: updated.name, href: `/${locale}/assets?tab=designs` });
       } else if (isSuperAdmin && saveAsTemplate) {
         const created = await adminTemplatesApi.create({ name: document.name, designJson: document });
-        clearLocalDraft(document.id);
+        if (orgId) clearLocalDraft(orgId, document.id);
         onTemplateSaved?.({ id: created.id, name: created.name });
         flashSaveResult({ kind: 'template', name: created.name, href: `/${locale}/admin/templates` });
       } else {
         const created = await designsApi.create({ name: document.name, designJson: document });
-        clearLocalDraft(document.id);
+        if (orgId) clearLocalDraft(orgId, document.id);
         onDesignSaved?.({ id: created.id, revision: created.revision });
         flashSaveResult({ kind: 'design', name: created.name, href: `/${locale}/assets?tab=designs` });
       }
@@ -200,11 +212,13 @@ export function DesignerShell({
 
   // designer.md §26 "Restored version becomes a new current version" — VersionsPanel already
   // performed the restore server-side by the time this fires; this just pulls the now-current
-  // content back into the editor and syncs the revision page.tsx is tracking.
+  // content back into the editor and syncs the revision page.tsx is tracking. `restoreSnapshot`
+  // (M6), not `loadDocument` — the user had an active scene/selection worth keeping when they
+  // clicked Restore, so this should behave like undo/redo's restore, not a fresh document load.
   async function handleRestored() {
     if (!designId) return;
     const fresh = await designsApi.get(designId);
-    loadDocument(fresh.designJson);
+    restoreSnapshot(fresh.designJson);
     onDesignSaved?.({ id: fresh.id, revision: fresh.revision });
   }
 
@@ -307,7 +321,7 @@ export function DesignerShell({
         onSave={document ? () => void handleSave() : undefined}
         saving={saving}
         saveError={saveError}
-        saveStatus={saveStatus}
+        saveStatus={autosave.status}
         saveResult={saveResult}
         saveTargetChoice={
           isSuperAdmin && !templateId && !designId ? { value: saveAsTemplate ? 'template' : 'design', onChange: (v) => setSaveAsTemplate(v === 'template') } : null
