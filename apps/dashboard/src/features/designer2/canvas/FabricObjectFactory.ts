@@ -28,6 +28,7 @@ import QRCode from 'qrcode';
 import type { DesignElement, ImageElement, QrElement, VideoElement } from '@lumina/design-schema';
 import { fontStack } from '@lumina/types';
 import type { DesignerFabricObject } from './FabricEventBridge';
+import { waitForFont } from '../lib/fontReady';
 
 export type ResolveAssetUrl = (assetId: string) => string | undefined;
 
@@ -120,7 +121,7 @@ function createShapeObject(element: Extract<DesignElement, { type: 'shape' }>): 
 // renders images as real `<img>` elements per designer.md §23.2 — vibrance/temperature/tint/
 // exposure/duotone have no native fabric.filters equivalent and are skipped here rather than
 // approximated further. The persisted DesignElement always keeps the exact values regardless.
-function buildPreviewFilters(adjustments: ImageElement['adjustments']): filters.BaseFilter<string>[] {
+export function buildPreviewFilters(adjustments: ImageElement['adjustments']): filters.BaseFilter<string>[] {
   if (!adjustments) return [];
   const result: filters.BaseFilter<string>[] = [];
   if (adjustments.brightness) result.push(new filters.Brightness({ brightness: adjustments.brightness / 100 }));
@@ -138,7 +139,7 @@ function buildPreviewFilters(adjustments: ImageElement['adjustments']): filters.
 // Returns the crop pan in box-pixel units so the caller can build the *group's* clipPath from it.
 // The image itself is intentionally left unclipped here — see buildImageClipPath's comment for why
 // clipping `img` directly is wrong once it's wrapped in createImageObject's fixed-size Group.
-function positionImageInBox(img: FabricImage, element: ImageElement): { offsetX: number; offsetY: number } {
+export function positionImageInBox(img: FabricImage, element: ImageElement): { offsetX: number; offsetY: number } {
   const naturalW = img.width || element.width;
   const naturalH = img.height || element.height;
   const { width, height, fit, cropZoom, cropOffsetX, cropOffsetY } = element;
@@ -179,7 +180,7 @@ function positionImageInBox(img: FabricImage, element: ImageElement): { offsetX:
 // blank" bug. Attaching the clipPath to the *Group* instead avoids this: the group is never scaled
 // (only positioned), so a Rect in plain box-pixel units clips correctly regardless of how much the
 // inner image had to be scaled to satisfy contain/cover/fill.
-function buildImageClipPath(element: ImageElement, offsetX: number, offsetY: number): Rect {
+export function buildImageClipPath(element: ImageElement, offsetX: number, offsetY: number): Rect {
   return new Rect({
     width: element.width,
     height: element.height,
@@ -190,6 +191,27 @@ function buildImageClipPath(element: ImageElement, offsetX: number, offsetY: num
     left: offsetX,
     top: offsetY,
   });
+}
+
+// designer_modernization_plan.md M5 — reapplies an image element's *style* fields (fit/crop/flip/
+// adjustments/borderRadius) onto an already-installed Group in place, using the exact same math
+// createImageObject ran at construction time. Called from FabricCanvasAdapter's live-preview path
+// (updateElement) and its syncScene commit-settle path, so the two can never visually disagree,
+// and so a crop/fit/adjustment-only edit never has to destroy and recreate the Fabric object (the
+// M5 root cause — see FabricCanvasAdapter's narrowed image `contentKey`). Assumes `group` was
+// built by createImageObject (i.e. `contentObject` is tagged and is a FabricImage) — never called
+// for a placeholder box, which has no such tag.
+export function applyImageStylePatch(group: Group, element: ImageElement): void {
+  const img = (group as DesignerFabricObject).contentObject as FabricImage | undefined;
+  if (!img) return;
+  img.flipX = Boolean(element.flipX);
+  img.flipY = Boolean(element.flipY);
+  const { offsetX, offsetY } = positionImageInBox(img, element);
+  img.filters = buildPreviewFilters(element.adjustments);
+  img.applyFilters();
+  group.clipPath = buildImageClipPath(element, offsetX, offsetY);
+  img.setCoords();
+  group.setCoords();
 }
 
 async function createImageObject(element: ImageElement, resolveAssetUrl: ResolveAssetUrl, signal?: AbortSignal): Promise<FabricObject> {
@@ -226,6 +248,7 @@ async function createImageObject(element: ImageElement, resolveAssetUrl: Resolve
   // See buildImageClipPath's comment — the crop/cover window is a Group-level clipPath, not an
   // img-level one, so it isn't affected by the image's own contain/cover scale.
   group.clipPath = buildImageClipPath(element, offsetX, offsetY);
+  (group as DesignerFabricObject).contentObject = img;
   return group;
 }
 
@@ -305,6 +328,11 @@ export async function createFabricObject(element: DesignElement, resolveAssetUrl
           charSpacing: element.charSpacing,
         }),
       );
+      // designer_modernization_plan.md M5 — wait for the real webfont to be usable before Fabric
+      // measures this Textbox's wrap width/height, then re-measure. Bounded/best-effort (see
+      // fontReady.ts) — never blocks the object from installing if the font is slow or missing.
+      await waitForFont(fontStack(element.fontFamily));
+      (obj as Textbox).initDimensions();
       break;
     case 'image':
       obj = await createImageObject(element, resolveAssetUrl, signal);

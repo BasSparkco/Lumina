@@ -1,31 +1,26 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@lumina/db';
-import { buildBlankDesignDocument, DesignDocumentSchema, type DesignDocument, type DesignElement } from '@lumina/design-schema';
+import {
+  buildBlankDesignDocument,
+  CONTENT_PROPS_BY_TYPE,
+  DesignDocumentSchema,
+  STYLE_PROPS_BY_TYPE,
+  type DesignDocument,
+  type DesignElement,
+} from '@lumina/design-schema';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrgScopedService } from '../../common/org-scoped.service';
 import type { DesignDto } from './dto/design.dto';
 
 // M4 server-side policy enforcement — the client-side Properties panel/canvas only *hides*
 // controls for a locked element; nothing stopped a forged PATCH /designs/:id request (or a bug
-// in the client) from changing a Template-locked layer's content, style or geometry anyway. This
-// partitions each element type's own fields (from packages/design-schema/src/element.schema.ts)
-// into "content" (what is shown) vs "style" (how it looks), matching TemplateLayerPolicy's own
-// two axes — geometry (x/y/width/height/rotation) is separately gated by movable/resizable,
-// which every element already carries regardless of type.
-const CONTENT_PROPS_BY_TYPE: Record<DesignElement['type'], readonly string[]> = {
-  text: ['text'],
-  image: ['assetId'],
-  shape: ['shape'],
-  video: ['assetId', 'posterAssetId'],
-  qr: ['value'],
-};
-const STYLE_PROPS_BY_TYPE: Record<DesignElement['type'], readonly string[]> = {
-  text: ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fill', 'textAlign', 'direction', 'lineHeight', 'charSpacing'],
-  image: ['cropZoom', 'cropOffsetX', 'cropOffsetY', 'fit', 'adjustments', 'borderRadius', 'flipX', 'flipY'],
-  shape: ['fill', 'stroke', 'strokeWidth', 'radius'],
-  video: ['startOffsetMs', 'endOffsetMs', 'muted', 'volume', 'loop', 'fit', 'autoplay'],
-  qr: ['foregroundColor', 'backgroundColor', 'errorCorrection'],
-};
+// in the client) from changing a Template-locked layer's content, style or geometry anyway.
+// CONTENT_PROPS_BY_TYPE/STYLE_PROPS_BY_TYPE (designer_modernization_plan.md M5 — moved to
+// @lumina/design-schema so the dashboard's own recreate-vs-patch and UI-gating decisions can't
+// silently drift from this enforcement) partition each element type's own fields into "content"
+// (what is shown) vs "style" (how it looks), matching TemplateLayerPolicy's own two axes —
+// geometry (x/y/width/height/rotation) is separately gated by movable/resizable, which every
+// element already carries regardless of type.
 
 function numbersEqual(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.01; // sub-pixel — tolerates editor round-trip float noise, not a real edit

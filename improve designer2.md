@@ -13,11 +13,19 @@ section just orients a fresh session fast; the plan doc is the source of truth.
 - **M0 (audit), M1 (persistent sync), M2 (direct media insertion), M3
   (coordinate/rotation contract), M4 (layers/selection): all done and deployed
   to production.**
-- **M5 (complete property updates/text editing) through M8 (perf hardening):
-  not started.** M5 is the natural next milestone — see its task list in the
-  plan doc (typed per-element preview/apply, begin/preview/commit/cancel edit
-  sessions, `useLiveField.ts`, color-drag-is-one-commit, Escape rollback, font
-  loading before text measurement, etc.).
+- **M5 (complete property updates/text editing): implemented 2026-09-10, not
+  yet deployed.** Full task list done: adapter live-property mapping (color/
+  stroke/radius/fit/crop/adjustments/flip/video playback), image edits patch
+  in place instead of recreating the Fabric object, `useEditSession` begin/
+  preview/commit/cancel hook, color-drag-is-one-commit, Escape rollback,
+  bound-text read-only fix (was silently overwriting the authored token with
+  today's resolved value), font-ready text measurement, template-policy field
+  gating. See the plan doc's M5 implementation record for the full list,
+  including a regression caught and reverted mid-session (a hook-level no-op
+  history safety net that would have silently broken Undo for every editor
+  sharing that hook, not just designer2 — do not re-attempt that exact
+  approach; the record explains why).
+- **M6 (history/save/recovery) through M8 (perf hardening): not started.**
 
 ## What to tell a new Claude session picking this up
 

@@ -7,6 +7,7 @@ export * from './design.schema';
 export * from './player-contract';
 export * from './runtime/animations';
 export * from './runtime/variables';
+export * from './templatePolicyFields';
 
 // Explicit re-exports of runtime values (schemas), same reasoning as packages/types/src/index.ts:
 // `export *` alone isn't statically analyzable by every bundler's CJS/ESM interop.

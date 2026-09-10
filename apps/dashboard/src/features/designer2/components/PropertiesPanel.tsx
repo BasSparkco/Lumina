@@ -25,7 +25,7 @@ import { AdjustmentsEditor } from '@/components/AdjustmentsEditor';
 import { assetsApi } from '@/lib/api';
 import { useConfirmBeforeDelete } from '@/hooks/useConfirmBeforeDelete';
 import type { FabricCanvasAdapter } from '../canvas/FabricCanvasAdapter';
-import { useLiveField } from '../hooks/useLiveField';
+import { useEditSession, useLiveField } from '../hooks/useLiveField';
 import { useDesignerStore } from '../state/designer.store';
 
 type AnimationStep = NonNullable<ElementAnimation['enter']>;
@@ -292,26 +292,55 @@ function NumberField({
         className={inputClass}
         disabled={disabled}
         value={Math.round(field.value * 100) / 100}
+        onFocus={field.onFocus}
         onChange={(e) => field.onChange(Number(e.target.value))}
         onBlur={field.onBlur}
+        onKeyDown={field.onKeyDown}
       />
     </Field>
   );
 }
 
-function ColorField({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
+// designer_modernization_plan.md M5 — a native `<input type="color">` fires `onChange` on every
+// tick while its OS picker is being dragged, not just on release; routing that straight into
+// `onCommit` (the pre-M5 behavior) pushed one full history snapshot per tick during a single color
+// drag. `useEditSession` splits that into a per-tick adapter-only `preview` and exactly one
+// `commit` on blur (picker close/focus-leave) — the same "commit on release" convention every
+// other field in this panel already uses.
+function ColorField({
+  label,
+  value,
+  onLive,
+  onCommit,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onLive: (v: string) => void;
+  onCommit: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const session = useEditSession(value, { onPreview: onLive, onCommit });
   return (
     <Field label={label}>
-      <input type="color" className="h-7 w-full rounded-md border border-[var(--deck-glass-border)]" value={value} onChange={(e) => onCommit(e.target.value)} />
+      <input
+        type="color"
+        className="h-7 w-full rounded-md border border-[var(--deck-glass-border)] disabled:opacity-40"
+        disabled={disabled}
+        value={session.value}
+        onFocus={session.begin}
+        onChange={(e) => session.preview(e.target.value)}
+        onBlur={() => session.commit()}
+      />
     </Field>
   );
 }
 
-function ToggleField({ label, checked, onCommit }: { label: string; checked: boolean; onCommit: (v: boolean) => void }) {
+function ToggleField({ label, checked, onCommit, disabled }: { label: string; checked: boolean; onCommit: (v: boolean) => void; disabled?: boolean }) {
   return (
     <label className="flex items-center justify-between text-xs text-[var(--deck-text-mid)]">
       {label}
-      <input type="checkbox" checked={checked} onChange={(e) => onCommit(e.target.checked)} className="h-3.5 w-3.5" />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onCommit(e.target.checked)} className="h-3.5 w-3.5 disabled:opacity-40" />
     </label>
   );
 }
@@ -418,6 +447,15 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
   const element = selectedElements[0]!;
   const liveUpdate = (patch: Partial<DesignElement>) => adapter?.updateElement(element.id, patch);
   const commitUpdate = (patch: Partial<DesignElement>) => commit(() => updateElement(element.id, patch));
+  // designer_modernization_plan.md M5 — mirrors @lumina/design-schema's CONTENT_PROPS_BY_TYPE/
+  // STYLE_PROPS_BY_TYPE grouping (also the source of designs.service.ts's server-side enforcement
+  // and FabricCanvasAdapter's image contentKey narrowing) structurally, by JSX section below,
+  // rather than a per-field runtime lookup — a Template author (isTemplateMode) always sees every
+  // field enabled, since these flags exist for *them* to set, not to restrict themselves.
+  const contentLocked = !isTemplateMode && element.templatePolicy?.contentEditable === false;
+  const styleLocked = !isTemplateMode && element.templatePolicy?.styleEditable === false;
+  const hasTextBinding = element.type === 'text' && (element.dynamicBindings?.some((b) => b.property === 'text') ?? false);
+  const hasValueBinding = element.type === 'qr' && (element.dynamicBindings?.some((b) => b.property === 'value') ?? false);
 
   return (
     <Panel key={element.id}>
@@ -426,7 +464,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           type="text"
           className={inputClass}
           defaultValue={element.name}
-          onBlur={(e) => commitUpdate({ name: e.target.value })}
+          onBlur={(e) => { if (e.target.value !== element.name) commitUpdate({ name: e.target.value }); }}
         />
       </Field>
 
@@ -502,26 +540,33 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
             <textarea
               className={inputClass}
               rows={2}
+              disabled={contentLocked || hasTextBinding}
               defaultValue={element.text}
-              onBlur={(e) => commitUpdate({ text: e.target.value })}
+              onBlur={(e) => { if (e.target.value !== element.text) commitUpdate({ text: e.target.value }); }}
             />
           </Field>
+          {hasTextBinding && (
+            // Outside the <Field>'s <label> deliberately — testing-library's implicit-label match
+            // reads a wrapping <label>'s full text content, so a hint nested inside it would
+            // silently break `getByLabelText('Text')` (caught while writing this test).
+            <p className="text-[11px] text-[var(--deck-text-low)]">Bound to a dynamic variable — edit its fallback below.</p>
+          )}
           <Field label="Font">
-            <FontPicker value={element.fontFamily} onChange={(id) => commitUpdate({ fontFamily: id })} />
+            <FontPicker value={element.fontFamily} disabled={styleLocked} onChange={(id) => commitUpdate({ fontFamily: id })} />
           </Field>
           <div className="grid grid-cols-2 gap-2">
-            <NumberField label="Size" value={element.fontSize} onLive={(v) => liveUpdate({ fontSize: v })} onCommit={(v) => commitUpdate({ fontSize: v })} />
-            <ColorField label="Color" value={element.fill} onCommit={(v) => commitUpdate({ fill: v })} />
+            <NumberField label="Size" value={element.fontSize} disabled={styleLocked} onLive={(v) => liveUpdate({ fontSize: v })} onCommit={(v) => commitUpdate({ fontSize: v })} />
+            <ColorField label="Color" value={element.fill} disabled={styleLocked} onLive={(v) => liveUpdate({ fill: v })} onCommit={(v) => commitUpdate({ fill: v })} />
           </div>
           <Field label="Align">
-            <select className={inputClass} value={element.textAlign} onChange={(e) => commitUpdate({ textAlign: e.target.value as 'left' | 'center' | 'right' })}>
+            <select className={inputClass} disabled={styleLocked} value={element.textAlign} onChange={(e) => commitUpdate({ textAlign: e.target.value as 'left' | 'center' | 'right' })}>
               <option value="left">Left</option>
               <option value="center">Center</option>
               <option value="right">Right</option>
             </select>
           </Field>
           <Field label="Direction">
-            <select className={inputClass} value={element.direction} onChange={(e) => commitUpdate({ direction: e.target.value as 'ltr' | 'rtl' })}>
+            <select className={inputClass} disabled={styleLocked} value={element.direction} onChange={(e) => commitUpdate({ direction: e.target.value as 'ltr' | 'rtl' })}>
               <option value="ltr">LTR</option>
               <option value="rtl">RTL</option>
             </select>
@@ -532,11 +577,11 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
 
       {element.type === 'shape' && (
         <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
-          <ColorField label="Fill" value={element.fill ?? '#6366f1'} onCommit={(v) => commitUpdate({ fill: v })} />
-          <ColorField label="Stroke" value={element.stroke ?? '#000000'} onCommit={(v) => commitUpdate({ stroke: v })} />
-          <NumberField label="Stroke Width" value={element.strokeWidth ?? 0} onLive={(v) => liveUpdate({ strokeWidth: v })} onCommit={(v) => commitUpdate({ strokeWidth: v })} />
+          <ColorField label="Fill" value={element.fill ?? '#6366f1'} disabled={styleLocked} onLive={(v) => liveUpdate({ fill: v })} onCommit={(v) => commitUpdate({ fill: v })} />
+          <ColorField label="Stroke" value={element.stroke ?? '#000000'} disabled={styleLocked} onLive={(v) => liveUpdate({ stroke: v })} onCommit={(v) => commitUpdate({ stroke: v })} />
+          <NumberField label="Stroke Width" value={element.strokeWidth ?? 0} disabled={styleLocked} onLive={(v) => liveUpdate({ strokeWidth: v })} onCommit={(v) => commitUpdate({ strokeWidth: v })} />
           {element.shape === 'rounded-rectangle' && (
-            <NumberField label="Corner Radius" value={element.radius ?? 0} onLive={(v) => liveUpdate({ radius: v })} onCommit={(v) => commitUpdate({ radius: v })} />
+            <NumberField label="Corner Radius" value={element.radius ?? 0} disabled={styleLocked} onLive={(v) => liveUpdate({ radius: v })} onCommit={(v) => commitUpdate({ radius: v })} />
           )}
         </div>
       )}
@@ -546,13 +591,14 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           <Field label="Image">
             <ImagePicker
               value={element.assetId ?? null}
+              disabled={contentLocked}
               onChange={(assetId) => commitUpdate({ assetId: assetId ?? undefined })}
               placeholder="No image selected"
               labels={IMAGE_PICKER_LABELS}
             />
           </Field>
           <Field label="Fit">
-            <select className={inputClass} value={element.fit} onChange={(e) => commitUpdate({ fit: e.target.value as 'contain' | 'cover' | 'fill' })}>
+            <select className={inputClass} disabled={styleLocked} value={element.fit} onChange={(e) => commitUpdate({ fit: e.target.value as 'contain' | 'cover' | 'fill' })}>
               <option value="contain">Contain</option>
               <option value="cover">Cover</option>
               <option value="fill">Fill</option>
@@ -560,13 +606,15 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           </Field>
           <div className="flex gap-2">
             <button
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs ${element.flipX ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'}`}
+              disabled={styleLocked}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs disabled:opacity-40 ${element.flipX ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'}`}
               onClick={() => commitUpdate({ flipX: !element.flipX })}
             >
               <FlipHorizontal className="h-3.5 w-3.5" /> Flip X
             </button>
             <button
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs ${element.flipY ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'}`}
+              disabled={styleLocked}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs disabled:opacity-40 ${element.flipY ? 'border-[var(--deck-accent)] text-[var(--deck-accent)]' : 'border-[var(--deck-glass-border)] text-[var(--deck-text-mid)]'}`}
               onClick={() => commitUpdate({ flipY: !element.flipY })}
             >
               <FlipVertical className="h-3.5 w-3.5" /> Flip Y
@@ -574,14 +622,14 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           </div>
           <div className="flex gap-2">
             <button
-              disabled={!element.assetId}
+              disabled={!element.assetId || styleLocked}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--deck-glass-border)] py-1.5 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
               onClick={() => setCropOpen(true)}
             >
               <CropIcon className="h-3.5 w-3.5" /> Crop
             </button>
             <button
-              disabled={!element.assetId}
+              disabled={!element.assetId || styleLocked}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-[var(--deck-glass-border)] py-1.5 text-xs text-[var(--deck-text-mid)] hover:bg-[var(--deck-glass-fill-strong)] disabled:opacity-40"
               onClick={() => setAdjustOpen(true)}
             >
@@ -607,11 +655,14 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
                   }}
                   onClose={() => setCropOpen(false)}
                   onSave={(crop) => {
-                    commitUpdate({
+                    const next = {
                       cropZoom: crop.cropZoom ?? undefined,
                       cropOffsetX: crop.cropOffsetX ?? undefined,
                       cropOffsetY: crop.cropOffsetY ?? undefined,
-                    });
+                    };
+                    if (next.cropZoom !== element.cropZoom || next.cropOffsetX !== element.cropOffsetX || next.cropOffsetY !== element.cropOffsetY) {
+                      commitUpdate(next);
+                    }
                     setCropOpen(false);
                   }}
                 />
@@ -625,7 +676,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
               initial={element.adjustments}
               onClose={() => setAdjustOpen(false)}
               onSave={(adjustments) => {
-                commitUpdate({ adjustments });
+                if (JSON.stringify(adjustments) !== JSON.stringify(element.adjustments)) commitUpdate({ adjustments });
                 setAdjustOpen(false);
               }}
             />
@@ -636,11 +687,20 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
       {element.type === 'qr' && (
         <div className="space-y-2 border-t border-[var(--deck-glass-border-soft)] pt-3">
           <Field label="Value">
-            <input type="text" className={inputClass} defaultValue={element.value ?? ''} onBlur={(e) => commitUpdate({ value: e.target.value })} />
+            <input
+              type="text"
+              className={inputClass}
+              disabled={contentLocked || hasValueBinding}
+              defaultValue={element.value ?? ''}
+              onBlur={(e) => { if (e.target.value !== (element.value ?? '')) commitUpdate({ value: e.target.value }); }}
+            />
           </Field>
+          {hasValueBinding && (
+            <p className="text-[11px] text-[var(--deck-text-low)]">Bound to a dynamic variable — edit its fallback below.</p>
+          )}
           <div className="grid grid-cols-2 gap-2">
-            <ColorField label="Foreground" value={element.foregroundColor} onCommit={(v) => commitUpdate({ foregroundColor: v })} />
-            <ColorField label="Background" value={element.backgroundColor} onCommit={(v) => commitUpdate({ backgroundColor: v })} />
+            <ColorField label="Foreground" value={element.foregroundColor} disabled={styleLocked} onLive={(v) => liveUpdate({ foregroundColor: v })} onCommit={(v) => commitUpdate({ foregroundColor: v })} />
+            <ColorField label="Background" value={element.backgroundColor} disabled={styleLocked} onLive={(v) => liveUpdate({ backgroundColor: v })} onCommit={(v) => commitUpdate({ backgroundColor: v })} />
           </div>
           <DynamicBindingField property="value" bindings={element.dynamicBindings} onCommit={(next) => commitUpdate({ dynamicBindings: next })} />
         </div>
@@ -651,6 +711,7 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           <Field label="Video">
             <VideoPicker
               value={element.assetId ?? null}
+              disabled={contentLocked}
               onChange={(assetId) => commitUpdate({ assetId: assetId ?? undefined })}
               placeholder="No video selected"
               labels={VIDEO_PICKER_LABELS}
@@ -659,51 +720,46 @@ export function PropertiesPanel({ adapter, commit, isTemplateMode }: PropertiesP
           <Field label="Poster (optional)">
             <ImagePicker
               value={element.posterAssetId ?? null}
+              disabled={contentLocked}
               onChange={(assetId) => commitUpdate({ posterAssetId: assetId ?? undefined })}
               placeholder="No poster selected"
               labels={IMAGE_PICKER_LABELS}
             />
           </Field>
           <Field label="Fit">
-            <select className={inputClass} value={element.fit} onChange={(e) => commitUpdate({ fit: e.target.value as 'contain' | 'cover' | 'fill' })}>
+            <select className={inputClass} disabled={styleLocked} value={element.fit} onChange={(e) => commitUpdate({ fit: e.target.value as 'contain' | 'cover' | 'fill' })}>
               <option value="contain">Contain</option>
               <option value="cover">Cover</option>
               <option value="fill">Fill</option>
             </select>
           </Field>
           <div className="space-y-1.5">
-            <ToggleField label="Autoplay" checked={element.autoplay} onCommit={(v) => commitUpdate({ autoplay: v })} />
-            <ToggleField label="Loop" checked={element.loop} onCommit={(v) => commitUpdate({ loop: v })} />
-            <ToggleField label="Muted" checked={element.muted} onCommit={(v) => commitUpdate({ muted: v })} />
+            <ToggleField label="Autoplay" checked={element.autoplay} disabled={styleLocked} onCommit={(v) => commitUpdate({ autoplay: v })} />
+            <ToggleField label="Loop" checked={element.loop} disabled={styleLocked} onCommit={(v) => commitUpdate({ loop: v })} />
+            <ToggleField label="Muted" checked={element.muted} disabled={styleLocked} onCommit={(v) => commitUpdate({ muted: v })} />
           </div>
           <NumberField
             label="Volume"
             value={element.volume}
+            disabled={styleLocked}
             onLive={(v) => liveUpdate({ volume: Math.min(1, Math.max(0, v)) })}
             onCommit={(v) => commitUpdate({ volume: Math.min(1, Math.max(0, v)) })}
           />
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Start (sec)">
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                defaultValue={element.startOffsetMs / 1000}
-                onBlur={(e) => commitUpdate({ startOffsetMs: Math.max(0, Math.round(Number(e.target.value) * 1000)) })}
-              />
-            </Field>
-            <Field label="End (sec, blank = full)">
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                defaultValue={element.endOffsetMs !== undefined ? element.endOffsetMs / 1000 : ''}
-                onBlur={(e) => {
-                  const v = Number(e.target.value);
-                  commitUpdate({ endOffsetMs: e.target.value !== '' && v > 0 ? Math.round(v * 1000) : undefined });
-                }}
-              />
-            </Field>
+            <NumberField
+              label="Start (sec)"
+              value={element.startOffsetMs / 1000}
+              disabled={styleLocked}
+              onLive={(v) => liveUpdate({ startOffsetMs: Math.max(0, Math.round(v * 1000)) })}
+              onCommit={(v) => commitUpdate({ startOffsetMs: Math.max(0, Math.round(v * 1000)) })}
+            />
+            <NumberField
+              label="End (sec, 0 = full)"
+              value={element.endOffsetMs !== undefined ? element.endOffsetMs / 1000 : 0}
+              disabled={styleLocked}
+              onLive={(v) => liveUpdate({ endOffsetMs: v > 0 ? Math.round(v * 1000) : undefined })}
+              onCommit={(v) => commitUpdate({ endOffsetMs: v > 0 ? Math.round(v * 1000) : undefined })}
+            />
           </div>
         </div>
       )}

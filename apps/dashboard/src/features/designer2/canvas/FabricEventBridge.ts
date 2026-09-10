@@ -7,7 +7,10 @@ import { ActiveSelection, Textbox, type Canvas, type FabricObject, type TPointer
 import { computeAlignTargets, snapDragAxis, type Box } from '@/lib/canvasSnap';
 import { readElementGeometry, type ElementGeometry } from './geometryContract';
 
-export type DesignerFabricObject = FabricObject & { elementId?: string };
+// `contentObject` (M5) — set only on an image element's wrapper Group (FabricObjectFactory's
+// createImageObject) so FabricCanvasAdapter's live/commit style-patch path can reach the inner
+// FabricImage without guessing at `Group._objects[0]`, an implementation-coupled shortcut.
+export type DesignerFabricObject = FabricObject & { elementId?: string; contentObject?: FabricObject };
 
 export type ElementGeometryPatch = ElementGeometry;
 

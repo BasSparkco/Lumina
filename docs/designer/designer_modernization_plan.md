@@ -9,7 +9,8 @@ Reviewed: 2026-09-09. Scope: the current working tree, including the recent inli
 - **M2 — direct media insertion: implemented (2026-09-09).**
 - **M3 — coordinate/rotation contract: substantially implemented (2026-09-09).** The x/y-rotation boundary, multi-select batching, text corner-scale normalization, skew/flip decision, and zoom-invariance tests are done; production's designs were checked directly (8 designs, 22 elements, 0 templates) and contain zero rotated elements, so the legacy-frame normalization task is currently moot — nothing to migrate. Only DPR/retina pixel-rendering tests (need a real browser canvas rasterizer, not achievable in jsdom) remain open. See the implementation records below.
 - **M4 — layers/selection: complete (2026-09-10).** Two confirmed bugs fixed (selection-delta reporting, hidden/locked canvas selection), server-side Template policy enforcement in `apps/api` (deployed), and Layers-panel action discoverability (rename/visibility/lock/duplicate/delete/reorder/keyboard DnD) all shipped.
-- **M5–M8: planned.**
+- **M5 — property updates/text editing: implemented (2026-09-10), not deployed.** Full live-property adapter mapping, image style edits patch in place instead of recreating the Fabric object, `useEditSession` begin/preview/commit/cancel hook, color-drag/no-op history fixes, bound-text read-only fix, font-ready measurement, template-policy field gating. See the implementation record below — including a caught-in-development regression (a hook-level no-op safety net that would have broken Undo everywhere) that was reverted rather than shipped.
+- **M6–M8: planned.**
 - **Approach A, with the synchronization foundation refactored first.** Keep Fabric, the adapter boundary, Zustand, Lumina Design JSON, tenant Asset storage, published Template snapshots, and the DOM Player. Replace whole-scene reconstruction during ordinary editing. Do not replace the editor framework or persistence model.
 - The initial M0 review stopped at the milestone plan as requested by [improve designer2.md §28](../../improve%20designer2.md). The user subsequently authorized M1 and M2, then M3. Their implementation records are below; the rest of M3 is next, with permission constraints carried into every command from the outset.
 - `status.md` is a frozen archive; this document tracks modernization instead. Existing unrelated working-tree changes are outside this task.
@@ -197,7 +198,7 @@ Each milestone is a reviewable change set with its own passing checks. No global
 - Acceptance: all requested layer actions discoverable; canvas and panel show the same selection/order; customer actions cannot bypass source restrictions.
 - Compatibility: extend shared LayersPanel through optional props or a Designer2 wrapper so legacy editors retain behavior. Preserve Template source/version links; define non-retroactive policy handling for existing customized designs before enforcing new restrictions.
 
-### M5 — Complete property updates and text editing
+### M5 — Complete property updates and text editing (implemented 2026-09-10, not deployed)
 
 - Problem/root cause: partial adapter mapping, defaultValue staleness, generic geometry writes that do not refit child media, color history flooding.
 - Files: properties, `useLiveField.ts`, adapter/factory update helpers, inline textarea, variable resolution.
@@ -580,3 +581,115 @@ them were reachable directly from a Layers-panel row — exactly the audit's com
   every other mutation path in this feature). Full suite: 110 passing (up from 102).
   `tsc --noEmit`, `eslint` (0 errors), and `next build` all clean.
 - This closes out M4's stated task list in full. Not deployed yet.
+
+
+## M5 implementation record — Complete property updates and text editing — 2026-09-10
+
+Closes M5's stated task list: full adapter mapping for live property preview, an edit-session
+hook with begin/preview/commit/cancel semantics, image style edits that no longer recreate the
+Fabric object, the bound-text inline-editor overwrite bug, and font-ready text measurement.
+
+- **`FabricCanvasAdapter.updateElement`** (`canvas/FabricCanvasAdapter.ts`) was previously a
+  partial mapping — only x/y/width/height/rotation/opacity/visible/text-`fontSize` were genuinely
+  live; the Properties panel already called it for `strokeWidth`/`radius`/`volume`, which silently
+  no-opped. Added four shared style-patch methods (`applyShapeStylePatch`, `applyTextStylePatch`,
+  `applyImageStylePatch`, `applyVideoLivePatch`), each called from **both** `updateElement` (live
+  preview) and `syncScene`'s commit-settle path, so live preview and committed appearance can
+  never visually disagree — the two paths no longer duplicate slightly-different inline logic
+  (this also fixed a latent default-value mismatch: shape `strokeWidth`'s update-time fallback was
+  `?? 1` while its creation-time fallback was `?? 0`).
+- **Image content-key narrowing** (the root cause behind "generic geometry writes that do not
+  refit child media"): `syncScene`'s `contentKey` for `image` previously included every style
+  field (`fit`/`cropZoom`/`cropOffsetX`/`cropOffsetY`/`adjustments`/`borderRadius`/`flipX`/
+  `flipY`), so any crop/fit/adjustment-only edit forced a full Fabric `Group` recreation even
+  though the asset itself never changed — narrowed to `{type, assetId}` only, matching the
+  content/style partition `designs.service.ts` already enforces server-side. A new
+  `FabricObjectFactory.applyImageStylePatch` (reusing the already-exported `positionImageInBox`/
+  `buildImageClipPath`/`buildPreviewFilters` pure helpers, unchanged) patches the existing Group's
+  inner `FabricImage` and clipPath in place; a `contentObject` tag (`FabricEventBridge.ts`'s
+  `DesignerFabricObject`) set at creation time lets the adapter reach it without reaching into
+  `Group._objects[0]`. Narrowing only changes the editor's own reconciliation strategy, not what's
+  read from or written to saved JSON, so no migration is needed for existing saved designs — same
+  reasoning M3's coordinate-contract change already used. QR is deliberately excluded from
+  in-place patching (its color change requires an async re-encode via the `qrcode` library, not a
+  synchronous Fabric mutation); documented as a scope limit, not silently dropped.
+- **Extracted `CONTENT_PROPS_BY_TYPE`/`STYLE_PROPS_BY_TYPE`** out of `designs.service.ts` into a
+  new shared module, `packages/design-schema/src/templatePolicyFields.ts` (re-exported from the
+  package root) — this table now drives server enforcement (unchanged behavior, just relocated),
+  the adapter's narrowed image `contentKey`, and the Properties panel's template-policy field
+  gating below, closing a real drift risk between the three.
+- **`useLiveField.ts`** gained `useEditSession<T>`, a generic begin/preview/commit/cancel engine
+  (baseline/dirty tracking, `isEqual`/`isValid` hooks); the original `useLiveField` is now a thin
+  backward-compatible wrapper over it, so `NumberField`'s call site only needed `onFocus`/
+  `onKeyDown` added, not a rewrite. `commit()` no-op-suppresses at the field level: a call with
+  nothing changed since `begin()`, or a value typed then reverted to its original, never reaches
+  `onCommit` — this and `ColorField`'s rewrite (native `<input type="color">` fires `onChange` on
+  every drag tick; it now only calls `onCommit` on `blur`, via `useEditSession` directly) are the
+  actual fix for "continuous color drag is one commit."
+- **`PropertiesPanel.tsx`**: `ColorField` rewritten as above; every `NumberField`/`ColorField`
+  gained `disabled` wired to a `contentLocked`/`styleLocked` pair computed from
+  `element.templatePolicy` (mirroring `@lumina/design-schema`'s shared table structurally, by JSX
+  section, rather than a per-field runtime lookup — outside `isTemplateMode`, where every field
+  stays enabled since the flags exist for the template author to set, not to restrict themselves);
+  Name/Text/QR-Value blur handlers gained an inline `value !== current` no-op guard; Crop/Adjust
+  modal `onSave` gained the same guard; video Start/End switched from plain blur-commit
+  `<input type=number>` to `NumberField` (seconds↔ms conversion at the call boundary, matching
+  every other numeric field, and now genuinely live via `applyVideoLivePatch`).
+- **Bound-text overwrite bug** (`editText`, confirmed root cause: `CanvasViewport`'s resolved
+  scene was the only scene ever handed to the adapter, so its `textElements` cache — and therefore
+  the inline canvas editor — only ever saw the *resolved* value; double-clicking a
+  `{{variable}}`-bound element pre-filled today's resolved string, and any save committed it back
+  as a literal, over the authored token). `CanvasAdapter.syncScene` gained an optional second
+  `rawScene` parameter (defaults to `scene` itself, so every existing call/test without bindings
+  is unaffected); a parallel `rawTextElements` cache is populated alongside `textElements`
+  everywhere the latter is. Per the confirmed product decision, a text/QR element with a `text`/
+  `value` dynamic binding is now **read-only** on both surfaces — the canvas double-click no-ops
+  entirely, and the Properties panel's Text/Value field is `disabled` with a hint pointing at the
+  existing Variable/Fallback fields — rather than allowing an edit that silently detaches the
+  binding.
+- **Font-ready measurement**: new `lib/fontReady.ts` (`waitForFont`, bounded/best-effort, never
+  hangs past 2s — jsdom has no `document.fonts` at all, so this degrades to an immediate resolve
+  in every existing test). `FabricObjectFactory.createFabricObject`'s text branch now awaits it
+  before `initDimensions()`, so a freshly-created object is measured against the real webfont, not
+  a fallback, before first paint. A live font-family change (`applyTextStylePatch`) applies the
+  patch immediately, then fires a bounded, object-identity-guarded re-measure once the font
+  actually resolves — never touches the store/history, a silent geometry correction only.
+- **A real regression caught mid-session, not by inspection**: the plan called for a second,
+  hook-level no-op safety net in `useEditorHistory.ts` (compare a pre-mutation snapshot against a
+  fresh `getSnapshot()` call right after the mutator runs). Implemented, then
+  `MediaInsertion.test.tsx`'s existing "undo removes the just-inserted element" assertion started
+  failing — because `getSnapshot` closes over React state (Zustand-selected `document` here;
+  local `useState` values in the Theme/Layout editors) that is only current as of the last render.
+  Calling it again synchronously right after the mutator (before React re-renders) returns the
+  *same pre-mutation* value, so the before/after compare was trivially "equal" for every commit,
+  not just no-ops — it would have silently broken Undo for every editor sharing this hook, in
+  production. Reverted; the no-op guarantee lives entirely in the per-field guards above, which
+  compare purely in-memory values with no external re-read and don't have this hazard. Documented
+  inline in `useEditorHistory.ts` so a future session doesn't re-attempt the same fix the same way.
+- Tests: 32 new — `hooks/__tests__/useLiveField.test.ts` (10: external-value sync while dirty/not,
+  preview-never-commits, commit-fires-once, no-op-blur, typed-then-reverted, Escape/cancel,
+  isValid rejection, plus the `useLiveField` wrapper's own onChange/onBlur/no-op/Escape cases);
+  `components/__tests__/PropertiesPanel.test.tsx` (12: NumberField and ColorField live-preview +
+  single commit, no-op blur on Number/Name fields, Escape reverts without committing, Flip
+  X/Fit-select each commit once, template-policy content/style gating both directions and the
+  template-authoring-mode bypass, bound Text/QR-Value fields disabled-with-hint, an unbound Text
+  field stays fully editable); `canvas/__tests__/FabricCanvasAdapter.test.ts` grew from 24 to 34
+  (shape/text/image/video live patches with zero extra `createFabricObject` calls, image
+  `contentKey` narrowing's both branches, video DOM identity preserved through a `syncScene`-level
+  property change, bound-text read-only vs. unbound-raw-prefill, font-wait-before-install and
+  live-font-family re-measure). Full dashboard suite: 142 passing (up from 110), all in
+  `tsc --noEmit`/`eslint`-clean files. Full API suite unaffected: 284 passing, unchanged
+  (`designs.service.spec.ts`/`templates.service.spec.ts` re-verified directly after the
+  `CONTENT_PROPS_BY_TYPE`/`STYLE_PROPS_BY_TYPE` extraction). `pnpm --filter @lumina/design-schema
+  build` run to refresh `dist/` (Next.js resolves this package via its built output, not source,
+  since it isn't in dashboard's `transpilePackages`) — required after any change to this package
+  before a dev/prod dashboard build picks it up.
+- Not done, deliberately deferred per confirmed product scope: visually locking the Movable/
+  Resizable/Deletable toggles themselves when template-governed (server already rejects the save;
+  doing this client-side needs a new source-template-policy fetch the client doesn't have today,
+  and a naive heuristic risks false-blocking a customer's own legitimate self-lock — a real
+  scope/UX tradeoff, not an oversight). QR live color preview (documented above). The
+  `Object.hasOwn(patch, 'posterAssetId')`-style "key present vs. undefined value" distinction is
+  only needed/used for video posters today; no other optional field currently needs it.
+- No production implementation deployed as part of this milestone — see the deployment doc for
+  when M5 actually ships.

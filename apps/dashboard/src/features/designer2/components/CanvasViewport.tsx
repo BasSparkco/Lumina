@@ -275,7 +275,10 @@ export function CanvasViewport({ commit, onAdapterReady, onResetViewReady, panTo
     const resolvedVariables: VariableMap = { ...(orgSettings ? { 'business.name': orgSettings.name } : {}), ...variables };
     const resolvedScene = { ...activeScene, elements: activeScene.elements.map((el) => resolveElementBindings(el, resolvedVariables)) };
     let cancelled = false;
-    void adapter.syncScene(resolvedScene).then((applied) => {
+    // `activeScene` (the raw, unresolved scene) is threaded through as `rawScene` — M5 — so the
+    // adapter's inline canvas text editor can read the authored token/fallback for a bound text
+    // element instead of today's resolved value (see FabricCanvasAdapter's rawTextElements).
+    void adapter.syncScene(resolvedScene, activeScene).then((applied) => {
       if (cancelled || !applied) return;
       setCanvasError(null);
       adapter.selectElements(useDesignerStore.getState().selectedElementIds);

@@ -1,10 +1,22 @@
 /** Persistent Fabric projection of the Lumina scene. Ordinary edits reconcile by element ID. */
-import { ActiveSelection, runningAnimations, Textbox, type FabricObject } from 'fabric';
+import { ActiveSelection, Group, runningAnimations, Textbox, type FabricObject } from 'fabric';
 import { applyElementPosition, fabricPositionForElement, readElementGeometry } from './geometryContract';
-import { ANIMATION_MOTION, resolveEasing, type AnimationMotion, type DesignElement, type DesignScene, type ElementAnimation, type VideoElement } from '@lumina/design-schema';
+import {
+  ANIMATION_MOTION,
+  resolveEasing,
+  type AnimationMotion,
+  type DesignElement,
+  type DesignScene,
+  type ElementAnimation,
+  type ImageElement,
+  type ShapeElement,
+  type TextElement,
+  type VideoElement,
+} from '@lumina/design-schema';
 import { LayeredCanvas } from './LayeredCanvas';
 import { fontStack } from '@lumina/types';
-import { createFabricObject, type ResolveAssetUrl } from './FabricObjectFactory';
+import { createFabricObject, applyImageStylePatch as patchImageStyle, type ResolveAssetUrl } from './FabricObjectFactory';
+import { waitForFont } from '../lib/fontReady';
 import {
   bindContextMenuEvents,
   bindDoubleClickEvents,
@@ -24,7 +36,11 @@ type EmphasisStep = NonNullable<ElementAnimation['emphasis']>;
 
 export interface CanvasAdapter {
   loadScene(scene: DesignScene): Promise<void>;
-  syncScene(scene: DesignScene): Promise<boolean>;
+  // `rawScene` (M5) — the unresolved (pre-variable-substitution) counterpart of `scene`, used only
+  // to keep an authored-text cache for the inline canvas editor (see `editText`/`rawTextElements`)
+  // so it never pre-fills or commits a resolved binding value over the authored token/fallback.
+  // Defaults to `scene` itself, so every existing caller/test with no bindings is unaffected.
+  syncScene(scene: DesignScene, rawScene?: DesignScene): Promise<boolean>;
   clear(): void;
 
   addElement(element: DesignElement): Promise<void>;
@@ -124,6 +140,12 @@ export class FabricCanvasAdapter implements CanvasAdapter {
   private videoOverlays = new Map<string, HTMLVideoElement>();
   private paintedLayers: HTMLCanvasElement[] = [];
   private textElements = new Map<string, Extract<DesignElement, { type: 'text' }>>();
+  // M5 — the unresolved (authored) counterpart of `textElements`, sourced from `syncScene`'s
+  // optional `rawScene` param. `editText` reads from here (not `textElements`, which holds
+  // variable-*resolved* values) so double-clicking a bound text element never pre-fills or commits
+  // today's resolved value over the authored token/fallback. Falls back to the resolved element
+  // itself for plain (unbound) text, where the two are identical anyway.
+  private rawTextElements = new Map<string, Extract<DesignElement, { type: 'text' }>>();
   private textEditor: HTMLTextAreaElement | null = null;
   private finishTextEditing: ((save: boolean) => void) | null = null;
   private unbindAfterRender: () => void;
@@ -182,13 +204,14 @@ export class FabricCanvasAdapter implements CanvasAdapter {
 
   // Prepare async resources before mutating the visible scene. Only the latest request may
   // install its results; discarded image/QR decodes must release their Fabric caches too.
-  async syncScene(scene: DesignScene): Promise<boolean> {
+  async syncScene(scene: DesignScene, rawScene: DesignScene = scene): Promise<boolean> {
     if (this.disposed) return false;
     const generation = ++this.generation;
     this.pendingSync?.abort();
     const controller = new AbortController();
     this.pendingSync = controller;
     const ordered = [...scene.elements].sort((a, b) => a.zIndex - b.zIndex);
+    const rawById = new Map(rawScene.elements.map((el) => [el.id, el]));
     const resourceFor = (el: DesignElement) =>
       (el.type === 'image' || el.type === 'video') && el.assetId
         ? this.callbacks.resolveAssetUrl(el.assetId) ?? '' : '';
@@ -199,9 +222,17 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       // These fields are handled in-place or have no visual representation.
       void [x, y, width, height, rotation, opacity, visible, zIndex, name, selectable,
         movable, resizable, deletable, editable, animation, templatePolicy];
+      // designer_modernization_plan.md M5 — image narrowed to `{type, assetId}`, mirroring
+      // designs.service.ts's own CONTENT_PROPS_BY_TYPE.image: fit/crop/adjustments/flip/
+      // borderRadius are *style*, not content, and now patch in place via applyImageStylePatch
+      // below instead of forcing a full Fabric object recreate on every crop/adjust edit (the M5
+      // root cause). Narrowing only changes this editor's own reconciliation strategy — nothing
+      // about what's read from or written to saved JSON — so no migration is needed for existing
+      // saved designs (same reasoning M3's coordinate-contract change already used).
       return JSON.stringify(el.type === 'video' ? { type: el.type, assetId: el.assetId }
         : el.type === 'text' ? { type: el.type }
-        : el.type === 'shape' ? { type: el.type, shape: el.shape } : content);
+        : el.type === 'shape' ? { type: el.type, shape: el.shape }
+        : el.type === 'image' ? { type: el.type, assetId: el.assetId } : content);
     };
     const results = await Promise.allSettled(ordered.map(async (element) => {
       const resource = resourceFor(element);
@@ -224,7 +255,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       for (const [index, { element, resource, object }] of prepared.entries()) {
         if (object) {
           this.removeElement(element.id);
-          this.installElement(element, object);
+          this.installElement(element, object, rawById.get(element.id));
         } else {
           const previous = this.applied.get(element.id)!.element;
           const obj = this.objects.get(element.id)!;
@@ -249,46 +280,29 @@ export class FabricCanvasAdapter implements CanvasAdapter {
           this.restingScale.set(element.id, { x: obj.scaleX, y: obj.scaleY });
           if (element.type === 'text' && obj instanceof Textbox) {
             this.textElements.set(element.id, element);
-            const before = previous.type === 'text' ? previous : null;
-            if (before && (before.text !== element.text || before.fontFamily !== element.fontFamily ||
-              before.fontSize !== element.fontSize || before.fontWeight !== element.fontWeight ||
-              before.fontStyle !== element.fontStyle || before.textAlign !== element.textAlign ||
-              before.lineHeight !== element.lineHeight || before.charSpacing !== element.charSpacing)) {
-              obj.set({ text: element.text, fontFamily: fontStack(element.fontFamily),
-                fontSize: element.fontSize, fontWeight: element.fontWeight,
-                fontStyle: element.fontStyle ?? 'normal', textAlign: element.textAlign,
-                lineHeight: element.lineHeight ?? 1.16, charSpacing: element.charSpacing ?? 0 });
-            }
-            const overlay = this.textOverlays.get(element.id)!;
-            this.styleTextOverlay(overlay, element);
+            const raw = rawById.get(element.id);
+            this.rawTextElements.set(element.id, raw?.type === 'text' ? raw : element);
+            // Full element passed as the "patch" — every text-style field is re-applied on every
+            // commit rather than diffed against `previous`. That trades a few redundant (but
+            // idempotent) Fabric `.set()` calls per commit for one shared code path with the live
+            // preview below (applyTextStylePatch) — commits aren't a per-frame hot path, so the
+            // cost is negligible.
+            this.applyTextStylePatch(element.id, obj, element);
           }
-          if (element.type === 'shape') {
-            if (previous.type === 'shape') {
-              if (element.fill !== previous.fill) obj.set('fill', element.fill ?? 'transparent');
-              if (element.stroke !== previous.stroke) obj.set('stroke', element.stroke ?? null);
-              if (element.strokeWidth !== previous.strokeWidth) obj.set('strokeWidth', element.strokeWidth ?? 1);
-              if (element.shape === 'rounded-rectangle' && element.radius !== previous.radius) {
-                obj.set({ rx: element.radius ?? 12, ry: element.radius ?? 12 });
-              }
-            }
+          if (element.type === 'shape' && previous.type === 'shape') {
+            this.applyShapeStylePatch(obj, element);
+          }
+          if (element.type === 'image' && obj instanceof Group) {
+            this.applyImageStylePatch(element.id, obj, element);
           }
           obj.setCoords();
-          const video = this.videoOverlays.get(element.id);
-          if (element.type === 'video' && video) {
-            video.muted = element.muted;
-            video.volume = element.volume;
-            video.loop = element.loop;
-            video.autoplay = element.autoplay;
-            video.style.objectFit = element.fit;
-            if (previous.type === 'video') {
-              if (!element.autoplay && previous.autoplay) video.pause();
-              if (element.startOffsetMs !== previous.startOffsetMs && video.readyState >= 1) {
-                video.currentTime = element.startOffsetMs / 1000;
-              }
-            }
-            const poster = element.posterAssetId ? this.callbacks.resolveAssetUrl(element.posterAssetId) : undefined;
-            if (poster) video.poster = poster;
-            else video.removeAttribute('poster');
+          if (element.type === 'video' && previous.type === 'video' && this.videoOverlays.has(element.id)) {
+            const videoPatch: Partial<VideoElement> = {
+              muted: element.muted, volume: element.volume, loop: element.loop,
+              autoplay: element.autoplay, fit: element.fit, posterAssetId: element.posterAssetId,
+            };
+            if (element.startOffsetMs !== previous.startOffsetMs) videoPatch.startOffsetMs = element.startOffsetMs;
+            this.applyVideoLivePatch(element.id, videoPatch);
           }
         }
         this.applied.set(element.id, { element, resource });
@@ -326,6 +340,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     this.applied.clear();
     this.finishTextEditing?.(false);
     this.textElements.clear();
+    this.rawTextElements.clear();
     for (const layer of this.paintedLayers) layer.remove();
     this.paintedLayers = [];
     // Immediate cleanup of any in-flight enter/emphasis tweens on rebuild — belt-and-suspenders
@@ -351,12 +366,13 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     this.installElement(element, obj);
   }
 
-  private installElement(element: DesignElement, obj: DesignerFabricObject): void {
+  private installElement(element: DesignElement, obj: DesignerFabricObject, rawElement?: DesignElement): void {
     this.objects.set(element.id, obj);
     this.restingScale.set(element.id, { x: obj.scaleX ?? 1, y: obj.scaleY ?? 1 });
     this.canvas.add(obj);
     if (element.type === 'text') {
       this.textElements.set(element.id, element);
+      this.rawTextElements.set(element.id, rawElement?.type === 'text' ? rawElement : element);
       this.textOverlays.set(element.id, this.createTextOverlay(element));
     }
     if (element.type === 'video' && element.assetId) this.videoOverlays.set(element.id, this.createVideoOverlay(element));
@@ -381,13 +397,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     if (patch.rotation !== undefined) next.angle = patch.rotation;
     if (patch.opacity !== undefined) next.opacity = patch.opacity;
     if (patch.visible !== undefined) next.visible = patch.visible;
-    // designer.md Phase 8 — fontSize wasn't mapped here before (a pre-existing gap:
-    // PropertiesPanel's font-size slider called this via its "live" path but nothing on the
-    // Fabric object ever changed until the next full commit-triggered rebuild). Needed now for
-    // real: the text overlay's own font-size sync reads this object's live `fontSize`.
-    const fontSizePatch = (patch as Partial<Extract<DesignElement, { type: 'text' }>>).fontSize;
-    if (fontSizePatch !== undefined && obj instanceof Textbox) next.fontSize = fontSizePatch;
-    obj.set(next);
+    if (Object.keys(next).length > 0) obj.set(next);
     if (current) {
       applyElementPosition(obj, {
         x: patch.x ?? current.x,
@@ -396,8 +406,104 @@ export class FabricCanvasAdapter implements CanvasAdapter {
         height: patch.height ?? current.height,
       });
     }
+
+    // designer_modernization_plan.md M5 — the rest of the property surface (font/color/stroke/
+    // radius/fit/crop/adjustments/flip/video playback) dispatches to one shared style-patch method
+    // per element type, also used by syncScene's commit-settle path above, so live preview and
+    // committed appearance can never visually disagree. Dispatched by the *cached* (last-applied)
+    // element's type, not `patch.type` — a patch never carries `type`.
+    const cachedType = this.applied.get(id)?.element.type;
+    if (cachedType === 'text' && obj instanceof Textbox) {
+      this.applyTextStylePatch(id, obj, patch as Partial<TextElement>);
+    } else if (cachedType === 'shape') {
+      this.applyShapeStylePatch(obj, patch as Partial<ShapeElement>);
+    } else if (cachedType === 'image' && obj instanceof Group) {
+      this.applyImageStylePatch(id, obj, patch as Partial<ImageElement>);
+    } else if (cachedType === 'video') {
+      this.applyVideoLivePatch(id, patch as Partial<VideoElement>);
+    }
+
     obj.setCoords();
     this.canvas.requestRenderAll();
+  }
+
+  // --- M5 shared style-patch appliers — see updateElement/syncScene above for the two call sites.
+
+  private applyShapeStylePatch(obj: FabricObject, patch: Partial<ShapeElement>): void {
+    const next: Record<string, unknown> = {};
+    // `?? 0` matches FabricObjectFactory.createShapeObject's own creation-time default — the
+    // previous inline syncScene patch used `?? 1` here, a stale mismatch from before that object's
+    // strokeWidth default was fixed; consolidating onto one shared method corrects it.
+    if (patch.fill !== undefined) next.fill = patch.fill ?? 'transparent';
+    if (patch.stroke !== undefined) next.stroke = patch.stroke ?? null;
+    if (patch.strokeWidth !== undefined) next.strokeWidth = patch.strokeWidth ?? 0;
+    if (patch.radius !== undefined) { next.rx = patch.radius ?? 12; next.ry = patch.radius ?? 12; }
+    if (Object.keys(next).length > 0) obj.set(next);
+  }
+
+  private applyTextStylePatch(id: string, obj: Textbox, patch: Partial<TextElement>): void {
+    const next: Record<string, unknown> = {};
+    if (patch.text !== undefined) next.text = patch.text;
+    if (patch.fontSize !== undefined) next.fontSize = patch.fontSize;
+    if (patch.fontFamily !== undefined) next.fontFamily = fontStack(patch.fontFamily);
+    if (patch.fontWeight !== undefined) next.fontWeight = patch.fontWeight;
+    if (patch.fontStyle !== undefined) next.fontStyle = patch.fontStyle;
+    if (patch.textAlign !== undefined) next.textAlign = patch.textAlign;
+    if (patch.lineHeight !== undefined) next.lineHeight = patch.lineHeight;
+    if (patch.charSpacing !== undefined) next.charSpacing = patch.charSpacing;
+    if (Object.keys(next).length > 0) obj.set(next);
+
+    // The DOM overlay is the only place `fill`/`direction` are ever visible (the Fabric object
+    // itself stays permanently transparent — see FabricObjectFactory's Phase 8 comment), so it
+    // always needs the *merged* current element, not just the fields this particular patch touched.
+    const overlay = this.textOverlays.get(id);
+    const cached = this.applied.get(id)?.element;
+    if (overlay && cached?.type === 'text') {
+      this.styleTextOverlay(overlay, { ...cached, ...patch } as TextElement);
+    }
+
+    // M5 — re-measure once the real webfont is actually usable, so a live font-family preview
+    // doesn't leave the Fabric hit-box measured against a fallback font indefinitely. Never
+    // touches the store/history — a silent geometry correction, not a user-visible edit.
+    if (patch.fontFamily !== undefined) {
+      const family = fontStack(patch.fontFamily);
+      void waitForFont(family).then(() => {
+        if (this.objects.get(id) !== obj) return;
+        obj.initDimensions();
+        this.canvas.requestRenderAll();
+      });
+    }
+  }
+
+  private applyImageStylePatch(id: string, group: Group, patch: Partial<ImageElement>): void {
+    const cached = this.applied.get(id)?.element;
+    if (cached?.type !== 'image') return;
+    patchImageStyle(group, { ...cached, ...patch });
+  }
+
+  private applyVideoLivePatch(id: string, patch: Partial<VideoElement>): void {
+    const video = this.videoOverlays.get(id);
+    if (!video) return;
+    if (patch.volume !== undefined) video.volume = Math.min(1, Math.max(0, patch.volume));
+    if (patch.muted !== undefined) video.muted = patch.muted;
+    if (patch.loop !== undefined) video.loop = patch.loop;
+    if (patch.autoplay !== undefined) {
+      const wasAutoplay = video.autoplay;
+      video.autoplay = patch.autoplay;
+      if (!patch.autoplay && wasAutoplay) video.pause();
+    }
+    if (patch.fit !== undefined) video.style.objectFit = patch.fit;
+    // `Object.hasOwn` (not `!== undefined`) — `posterAssetId` is optional, so "no poster" is a
+    // meaningful `undefined` *value* on a present key, distinct from the key being absent because
+    // this particular patch never touched it (e.g. a live volume-only preview tick).
+    if (Object.hasOwn(patch, 'posterAssetId')) {
+      const poster = patch.posterAssetId ? this.callbacks.resolveAssetUrl(patch.posterAssetId) : undefined;
+      if (poster) video.poster = poster;
+      else video.removeAttribute('poster');
+    }
+    if (patch.startOffsetMs !== undefined && video.readyState >= 1) {
+      video.currentTime = patch.startOffsetMs / 1000;
+    }
   }
 
   removeElement(id: string): void {
@@ -412,6 +518,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     this.textOverlays.get(id)?.remove();
     this.textOverlays.delete(id);
     this.textElements.delete(id);
+    this.rawTextElements.delete(id);
     const video = this.videoOverlays.get(id);
     if (video) disposeVideoOverlay(video);
     this.videoOverlays.delete(id);
@@ -445,15 +552,21 @@ export class FabricCanvasAdapter implements CanvasAdapter {
 
   private editText(id: string): void {
     const element = this.textElements.get(id);
+    const raw = this.rawTextElements.get(id) ?? element;
     const overlay = this.textOverlays.get(id);
     const obj = this.objects.get(id);
-    if (!element || !overlay || !obj || !element.editable || !element.selectable) return;
+    if (!element || !raw || !overlay || !obj || !element.editable || !element.selectable) return;
+    // designer_modernization_plan.md M5 — a text element bound to a dynamic variable is read-only
+    // here: editing belongs to the explicit Variable/Fallback fields in the Properties panel
+    // (DynamicBindingField), not this generic inline editor, which previously pre-filled and could
+    // silently commit today's *resolved* value over the authored token/fallback.
+    if (raw.dynamicBindings?.some((binding) => binding.property === 'text')) return;
     this.finishTextEditing?.(true);
     this.selectElement(id);
     const editor = document.createElement('textarea');
     editor.dataset.elementId = id;
     editor.setAttribute('aria-label', element.name);
-    editor.value = element.text;
+    editor.value = raw.text;
     editor.dir = element.direction;
     editor.style.cssText = overlay.style.cssText;
     Object.assign(editor.style, {
@@ -472,7 +585,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
       const text = editor.value;
       editor.remove();
       overlay.style.visibility = '';
-      if (save && text !== element.text) this.callbacks.onTextChanged(id, text);
+      if (save && text !== raw.text) this.callbacks.onTextChanged(id, text);
     };
     this.finishTextEditing = finish;
     editor.addEventListener('blur', () => finish(true));
@@ -891,6 +1004,7 @@ export class FabricCanvasAdapter implements CanvasAdapter {
     for (const layer of this.paintedLayers) layer.remove();
     this.paintedLayers = [];
     this.textElements.clear();
+    this.rawTextElements.clear();
     this.unbindSelection();
     this.unbindModified();
     this.unbindLiveTransform();

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignElement, DesignScene } from '@lumina/design-schema';
-import { ActiveSelection, FabricImage, Group, Rect } from 'fabric';
+import { ActiveSelection, FabricImage, Group, Rect, Textbox } from 'fabric';
 import type { Asset } from '@/lib/api';
 import * as factory from '../FabricObjectFactory';
 import { FabricCanvasAdapter } from '../FabricCanvasAdapter';
@@ -482,5 +482,198 @@ describe('Designer2 selection reporting (M4)', () => {
 
     adapter.selectElements([hidden.id, visible.id]);
     expect(canvas.getActiveObjects()).toEqual([visibleObject]);
+  });
+});
+
+// M5 — live property updates (updateElement) and syncScene's commit-settle path must agree, and
+// neither may recreate the Fabric object for a style-only change (the M5 "partial adapter
+// mapping" / "generic geometry writes that do not refit child media" root causes).
+describe('Designer2 live property updates (M5)', () => {
+  const scene = (elements: DesignElement[]): DesignScene => ({
+    id: 'scene', name: 'Scene', durationMs: 10000, background: { type: 'color', color: '#000' }, elements,
+  });
+
+  it('updateElement patches shape fill/stroke/strokeWidth/radius live without recreating the object', async () => {
+    const { adapter } = setup();
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const shape = createShapeElement('rounded-rectangle', size, []);
+    await adapter.addElement(shape);
+    const object = await create.mock.results[0]!.value;
+    const calls = create.mock.calls.length;
+
+    adapter.updateElement(shape.id, { fill: '#ff0000', stroke: '#00ff00', strokeWidth: 5, radius: 20 });
+
+    expect(create).toHaveBeenCalledTimes(calls);
+    expect(object.fill).toBe('#ff0000');
+    expect(object.stroke).toBe('#00ff00');
+    expect(object.strokeWidth).toBe(5);
+    expect(object.rx).toBe(20);
+  });
+
+  it('updateElement patches text overlay color/alignment live, without recreating the object', async () => {
+    const { adapter, stack } = setup();
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const text = textElement();
+    await adapter.addElement(text);
+    await render();
+    const overlay = stack.querySelector('div')!;
+    const calls = create.mock.calls.length;
+
+    adapter.updateElement(text.id, { fill: '#00ff00', textAlign: 'center' });
+
+    expect(create).toHaveBeenCalledTimes(calls);
+    expect(stack.querySelector('div')).toBe(overlay);
+    expect(overlay.style.color).toBe('rgb(0, 255, 0)');
+    expect(overlay.style.textAlign).toBe('center');
+  });
+
+  it('updateElement patches an image Group\'s fit/crop/flip in place, same object, without recreating it', async () => {
+    const source = document.createElement('canvas');
+    source.width = 1200;
+    source.height = 600;
+    vi.spyOn(FabricImage, 'fromURL').mockResolvedValue(new FabricImage(source));
+    const { adapter } = setup(() => 'https://example.test/img.png');
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const image = createMediaElement(size, [], { asset: { id: 'img', name: 'Img', type: 'IMAGE' } as Asset, width: 1200, height: 600 });
+    await adapter.addElement(image);
+    const object = await create.mock.results[0]!.value as Group;
+    const inner = object.getObjects()[0] as FabricImage;
+    const calls = create.mock.calls.length;
+
+    adapter.updateElement(image.id, { flipX: true, fit: 'cover', cropZoom: 1.5 });
+
+    expect(create).toHaveBeenCalledTimes(calls);
+    expect(object.getObjects()[0]).toBe(inner); // same inner FabricImage instance
+    expect(inner.flipX).toBe(true);
+  });
+
+  it('updateElement patches video volume/muted/loop/fit on the live <video> node in place', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const { adapter, stack } = setup();
+    const video = { ...createVideoPlaceholderElement(size, []), assetId: 'video', autoplay: false };
+    await adapter.addElement(video);
+    await render();
+    const node = stack.querySelector('video')!;
+
+    adapter.updateElement(video.id, { volume: 0.4, muted: false, loop: false, fit: 'contain' });
+
+    expect(stack.querySelector('video')).toBe(node); // same DOM node — playback identity preserved
+    expect(node.volume).toBeCloseTo(0.4);
+    expect(node.muted).toBe(false);
+    expect(node.loop).toBe(false);
+    expect(node.style.objectFit).toBe('contain');
+  });
+
+  it('syncScene patches image fit/crop/adjustments in place (no recreate) but recreates on an actual assetId change', async () => {
+    const source = document.createElement('canvas');
+    source.width = 1200;
+    source.height = 600;
+    vi.spyOn(FabricImage, 'fromURL').mockResolvedValue(new FabricImage(source));
+    const { adapter } = setup((id) => (id === 'img' ? 'https://example.test/img.png' : 'https://example.test/img2.png'));
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const image = createMediaElement(size, [], { asset: { id: 'img', name: 'Img', type: 'IMAGE' } as Asset, width: 1200, height: 600 });
+    await adapter.syncScene(scene([image]));
+    const calls = create.mock.calls.length;
+
+    await adapter.syncScene(scene([{ ...image, fit: 'cover', cropZoom: 1.4 } as DesignElement]));
+    expect(create).toHaveBeenCalledTimes(calls); // style-only change — patched in place
+
+    await adapter.syncScene(scene([{ ...image, assetId: 'img2' } as DesignElement]));
+    expect(create).toHaveBeenCalledTimes(calls + 1); // resource actually changed — recreated
+  });
+
+  it('keeps video DOM identity through a syncScene-level fit/volume change with the same assetId', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const { adapter, stack } = setup();
+    const create = vi.spyOn(factory, 'createFabricObject');
+    const video = { ...createVideoPlaceholderElement(size, []), assetId: 'video', autoplay: false };
+    await adapter.syncScene(scene([video]));
+    const node = stack.querySelector('video')!;
+    const calls = create.mock.calls.length;
+
+    await adapter.syncScene(scene([{ ...video, fit: 'contain', volume: 0.2 } as DesignElement]));
+
+    expect(create).toHaveBeenCalledTimes(calls);
+    expect(stack.querySelector('video')).toBe(node);
+    expect(node.volume).toBeCloseTo(0.2);
+    expect(node.style.objectFit).toBe('contain');
+  });
+});
+
+// M5 — a text element bound to a dynamic variable must never let the canvas's generic inline
+// editor silently commit today's resolved value over the authored token/fallback.
+describe('Designer2 bound text is read-only inline (M5)', () => {
+  const scene = (elements: DesignElement[]): DesignScene => ({
+    id: 'scene', name: 'Scene', durationMs: 10000, background: { type: 'color', color: '#000' }, elements,
+  });
+
+  it('does not open the inline editor for a text element bound to a dynamic variable', async () => {
+    const { adapter, host, doubleClick, onTextChanged } = setup();
+    const raw = { ...textElement(), text: '{{offer.price}}', dynamicBindings: [{ property: 'text', variable: 'offer.price', fallback: '$5' }] };
+    const resolved = { ...raw, text: '$9.99' }; // today's resolved value — must never leak into the editor
+    await adapter.syncScene(scene([resolved]), scene([raw]));
+    await render();
+
+    doubleClick();
+
+    expect(host.querySelector('textarea')).toBeNull();
+    expect(onTextChanged).not.toHaveBeenCalled();
+  });
+
+  it('opens the inline editor pre-filled with the authored (raw) text, not the resolved value, for an unbound element', async () => {
+    const { adapter, host, doubleClick } = setup();
+    const raw = textElement();
+    const resolved = { ...raw, text: 'Resolved display text' } as DesignElement;
+    await adapter.syncScene(scene([resolved]), scene([raw]));
+    await render();
+
+    doubleClick();
+
+    expect(host.querySelector('textarea')!.value).toBe('مرحبا بالعالم');
+  });
+});
+
+// M5 — Fabric measures a Textbox's wrap width/height against whatever font is currently loaded;
+// jsdom has no real `document.fonts`, so these stub it directly to exercise the wait/re-measure
+// path (real glyph-metrics fidelity needs a real browser — M8 scope, same caveat the plan already
+// applies elsewhere).
+describe('Designer2 font-ready text measurement (M5)', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'fonts');
+  });
+
+  it('waits for the font to be ready before installing a freshly created text object', async () => {
+    let resolveReady!: () => void;
+    const ready = new Promise<void>((resolve) => { resolveReady = resolve; });
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { load: vi.fn(async () => []), ready },
+    });
+    const { adapter } = setup();
+    let settled = false;
+    const pending = adapter.addElement(textElement()).then(() => { settled = true; });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false); // still waiting on the font
+
+    resolveReady();
+    await pending;
+    expect(settled).toBe(true);
+  });
+
+  it('re-measures a live font-family change once the font resolves, with no store/history involvement', async () => {
+    const { adapter } = setup();
+    const text = textElement();
+    await adapter.addElement(text);
+    await render();
+    const initDimensions = vi.spyOn(Textbox.prototype, 'initDimensions');
+    initDimensions.mockClear();
+
+    adapter.updateElement(text.id, { fontFamily: 'inter' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(initDimensions).toHaveBeenCalled();
   });
 });

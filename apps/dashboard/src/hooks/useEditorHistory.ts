@@ -10,6 +10,19 @@ interface HistoryState<T> { past: T[]; future: T[]; }
 // `captureForHistory`/`commitCaptured` bracket a continuous edit (typing in a field, dragging a
 // slider) into a single undo step: captured once on focus/mousedown, consumed once on blur/release.
 // `commit` wraps a discrete action (add/delete, dropdown pick, drag/resize stop) in one shot.
+//
+// designer_modernization_plan.md M5 considered adding a no-op suppression here (compare the
+// captured "before" snapshot against a fresh `getSnapshot()` call right after `mutator()` runs,
+// skip the history push if unchanged) as a safety net behind each caller's own dedup. Deliberately
+// NOT done: `getSnapshot` closes over React state (both designer2's Zustand-selected `document`
+// and the Theme/Layout editors' local `useState` values) that is only current as of the last
+// render — calling it again synchronously right after `mutator()` (before React has re-rendered)
+// returns the *same pre-mutation* value, not the actual post-mutation state, so a same-tick
+// before/after compare is always trivially "equal" and would silently suppress every real commit,
+// not just no-ops (caught by MediaInsertion.test.tsx's undo assertion during M5 development).
+// No-op suppression instead lives at each call site that can cheaply know its own before/after
+// value without an external re-read — e.g. designer2's useEditSession (dirty-tracking + baseline
+// comparison, self-contained in local state) and PropertiesPanel's own inline blur-value checks.
 export function useEditorHistory<T>(sessionKey: unknown, getSnapshot: () => T, applySnapshot: (s: T) => void) {
   const [history, setHistory] = useState<HistoryState<T>>({ past: [], future: [] });
   const pendingCaptureRef = useRef<T | null>(null);
